@@ -1,0 +1,39 @@
+# Rust
+/target
+core/rust/target
+**/*.rs.bk
+
+# Go
+server/go/rope-server
+server/go/coverage.out
+*.exe
+
+# Databases and secrets
+*.db
+*.db-journal
+*.sqlite
+/var/
+setup-token.txt
+
+# Android
+.gradle/
+local.properties
+**/.cxx/
+**/build/
+*.iml
+.idea/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+apps/android/app/src/main/jniLibs/
+
+# OS / editor
+.DS_Store
+.vscode/
+*.swp
+*.swo
+.env
+.env.*
