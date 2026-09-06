@@ -10,6 +10,7 @@ import app.rope.android.data.MessageStatus
 import app.rope.android.data.ServerProfile
 import app.rope.android.net.ServerApi
 import app.rope.android.protocol.InviteCodec
+import app.rope.android.protocol.InviteLink as ParsedInvite
 import app.rope.android.provision.SshProvisioner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -133,7 +134,7 @@ class RopeRepository(private val app: Application) {
             try {
                 val parsed = try {
                     val rust = parseInviteUrl(url)
-                    app.rope.android.protocol.InviteLink(
+                    ParsedInvite(
                         rust.version.toInt(), rust.host, rust.port.toInt(), rust.serverId, rust.fingerprint, rust.token, rust.displayName,
                     )
                 } catch (_: Exception) {
