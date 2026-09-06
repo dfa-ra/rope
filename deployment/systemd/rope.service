@@ -1,0 +1,22 @@
+[Unit]
+Description=Rope relay server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rope
+Group=rope
+ExecStart=/opt/rope/bin/rope-server --config /etc/rope/config.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rope
+AmbientCapabilities=
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
