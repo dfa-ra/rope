@@ -73,7 +73,7 @@ fun RopeScaffold(
                 Screen.Chats -> ChatsPane(state, onOpenChat)
                 Screen.Chat -> ChatPane(state, onDraft, onSend)
                 Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
-                Screen.Status -> Text(state.statusText)
+                Screen.Status -> StatusPane(state.statusText) { onGo(Screen.Provision) }
                 Screen.Settings -> Text("Settings")
             }
         }
@@ -115,7 +115,24 @@ private fun ProvisionPane(
         },
         modifier = Modifier.fillMaxWidth(),
     ) { Text("Install and connect") }
+    Button(
+        onClick = {
+            onProvision(host, sshPort.toIntOrNull() ?: 22, user, password, key, listen.toIntOrNull() ?: 8443, url, name, true)
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text("Update server core (keep data)") }
+    Text("SSH нужен только для установки/обновления. После успеха пароль на сервер мессенджера не уходит.", style = MaterialTheme.typography.bodySmall)
     TextButton(onClick = onBack) { Text("Back") }
+}
+
+@Composable
+private fun StatusPane(statusText: String, onUpgrade: () -> Unit) {
+    Text(if (statusText.isBlank()) "Server status" else statusText)
+    Button(onClick = onUpgrade, modifier = Modifier.fillMaxWidth()) { Text("Update server core") }
+    Text(
+        "Обновление скачает свежий rope-server с GitHub Releases и заменит бинарник. data.db и TLS сохраняются.",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable

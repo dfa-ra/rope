@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix"
+        required: true
+        default: "0.1.0"
 
 permissions:
   contents: write
@@ -59,7 +65,12 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/rope.keystore
             ./gradlew assembleRelease \
@@ -88,6 +99,7 @@ jobs:
           sha256sum rope-server/* rope-android/* > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref_name }}
           generate_release_notes: true
           files: |
             rope-server/*
@@ -96,7 +108,8 @@ jobs:
           body: |
             Rope MVP release artifacts.
 
-            - `rope-server-linux-amd64` / `rope-server-linux-arm64` — VPS relay
-            - Android APK (signed if repository secrets are set; otherwise debug)
+            - `rope-server-linux-amd64` / `rope-server-linux-arm64` — скачивается телефоном при «Создать сервер»
+            - Android APK (debug, пока нет secrets `ANDROID_KEYSTORE_*`)
 
-            See `docs/dev-setup.md` for signing secrets.
+            Установка с телефона: Create server → SSH → приложение само ставит systemd-юнит.
+            Обновление ядра: Server → Update server core (SSH ещё раз, data.db сохраняется).
