@@ -1,3 +1,5 @@
 -keep class uniffi.rope_core.** { *; }
 -keep class com.sun.jna.** { *; }
 -dontwarn com.sun.jna.**
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**

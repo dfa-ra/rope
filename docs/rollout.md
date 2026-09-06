@@ -38,6 +38,8 @@
 
 SSH-пароль/ключ остаются только на телефоне организатора и не становятся кредлами мессенджера.
 
+На Android системный BouncyCastle не умеет X25519 (`NO X25519 for provider BC`). С `v0.1.2` приложение подменяет провайдер и при необходимости переходит на ECDH nistp256. Ставьте APK не ниже этой версии.
+
 ## Гость
 
 Организатор жмёт **Invite** → QR / `rope://join?...` (host, port, server id, fingerprint, token).  
@@ -59,9 +61,9 @@ sudo ./deployment/scripts/install.sh --binary ./rope-server --host YOUR.IP --por
 ## Как выпустить новую версию
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
-Либо Actions → **Release** → Run workflow → версия `0.1.1`.  
+Либо Actions → **Release** → Run workflow → версия `0.1.2`.  
 После зелёного job на странице Releases появятся новый APK и новые server binaries. Пользователи обновляют приложение вручную (APK) и ядро кнопкой в приложении.

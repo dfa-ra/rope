@@ -1,6 +1,7 @@
 package app.rope.android.provision
 
 import android.content.Context
+import net.schmizz.sshj.DefaultConfig
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
@@ -22,13 +23,12 @@ class SshProvisioner(
     private val fetcher: ReleaseFetcher = ReleaseFetcher(),
 ) {
     fun install(form: ProvisionForm): ProvisionResult {
+        CryptoInit.ensureModernBc()
         val localBin = File(context.cacheDir, "rope-server-linux")
         fetcher.downloadTo(form.binaryUrl, localBin, form.githubToken.ifBlank { null })
         localBin.setExecutable(true)
 
-        val ssh = SSHClient()
-        ssh.addHostKeyVerifier(PromiscuousVerifier())
-        ssh.connect(form.host, form.sshPort)
+        val ssh = connect(form.host, form.sshPort)
         try {
             when {
                 form.keyPem.isNotBlank() -> {
@@ -76,6 +76,43 @@ class SshProvisioner(
             ssh.disconnect()
             localBin.delete()
         }
+    }
+
+    private fun connect(host: String, port: Int): SSHClient {
+        return try {
+            open(host, port, disableCurve25519 = false)
+        } catch (e: Exception) {
+            if (!looksLikeMissingX25519(e)) throw e
+            open(host, port, disableCurve25519 = true)
+        }
+    }
+
+    private fun open(host: String, port: Int, disableCurve25519: Boolean): SSHClient {
+        val config = DefaultConfig()
+        if (disableCurve25519) {
+            val kept = config.keyExchangeFactories.filter { factory ->
+                !factory.name.contains("25519", ignoreCase = true)
+            }
+            config.keyExchangeFactories = kept
+        }
+        val ssh = SSHClient(config)
+        ssh.addHostKeyVerifier(PromiscuousVerifier())
+        ssh.connect(host, port)
+        return ssh
+    }
+
+    private fun looksLikeMissingX25519(e: Throwable): Boolean {
+        var cur: Throwable? = e
+        while (cur != null) {
+            val msg = cur.message.orEmpty()
+            if (msg.contains("X25519", ignoreCase = true) &&
+                (msg.contains("BC") || msg.contains("provider") || msg.contains("NoSuchAlgorithm"))
+            ) {
+                return true
+            }
+            cur = cur.cause
+        }
+        return false
     }
 
     private fun exec(ssh: SSHClient, command: String): String {
