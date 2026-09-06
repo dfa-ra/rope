@@ -39,10 +39,13 @@ func Default() Config {
 	}
 }
 
-func LoadOrInit(path string, init bool, allowHTTP bool, listen string) (Config, error) {
+func LoadOrInit(path string, init bool, allowHTTP bool, listen string, dataDir string) (Config, error) {
 	cfg := Default()
 	if listen != "" {
 		cfg.Listen = listen
+	}
+	if dataDir != "" {
+		cfg.DataDir = dataDir
 	}
 	cfg.AllowHTTP = allowHTTP
 	if _, err := os.Stat(path); err == nil {
@@ -56,6 +59,9 @@ func LoadOrInit(path string, init bool, allowHTTP bool, listen string) (Config, 
 		if listen != "" {
 			cfg.Listen = listen
 		}
+		if dataDir != "" {
+			cfg.DataDir = dataDir
+		}
 		if allowHTTP {
 			cfg.AllowHTTP = true
 		}
@@ -66,6 +72,9 @@ func LoadOrInit(path string, init bool, allowHTTP bool, listen string) (Config, 
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return cfg, err
+	}
+	if dataDir == "" && cfg.DataDir == Default().DataDir && filepath.Clean(filepath.Dir(path)) != "/etc/rope" {
+		cfg.DataDir = filepath.Join(filepath.Dir(path), "data")
 	}
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return cfg, err

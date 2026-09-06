@@ -13,12 +13,13 @@ import (
 func main() {
 	cfgPath := flag.String("config", "/etc/rope/config.json", "path to config.json")
 	listen := flag.String("listen", "", "override listen address")
+	dataDir := flag.String("data-dir", "", "override SQLite data directory")
 	initCfg := flag.Bool("init", false, "create config and data dir if missing")
 	allowHTTP := flag.Bool("allow-http", false, "listen without TLS (debug only)")
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "rope ", log.LstdFlags)
-	cfg, err := config.LoadOrInit(*cfgPath, *initCfg, *allowHTTP, *listen)
+	cfg, err := config.LoadOrInit(*cfgPath, *initCfg, *allowHTTP, *listen, *dataDir)
 	if err != nil {
 		logger.Fatal(err)
 	}
