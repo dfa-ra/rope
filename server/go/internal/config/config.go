@@ -1,0 +1,104 @@
+package config
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+const ProtocolVersion uint16 = 1
+const ServerVersion = "0.1.0"
+const HTTPDevFingerprintSeed = "rope-http-dev"
+
+type Config struct {
+	Listen             string `json:"listen"`
+	DataDir            string `json:"data_dir"`
+	TLSCert            string `json:"tls_cert"`
+	TLSKey             string `json:"tls_key"`
+	SetupToken         string `json:"setup_token"`
+	ServerID           string `json:"server_id"`
+	MailboxTTLSeconds  int    `json:"mailbox_ttl_seconds"`
+	MaxEnvelopeBytes   int    `json:"max_envelope_bytes"`
+	AllowHTTP          bool   `json:"allow_http"`
+	FingerprintOverride string `json:"fingerprint,omitempty"`
+}
+
+func Default() Config {
+	return Config{
+		Listen:            "0.0.0.0:8443",
+		DataDir:           "/var/lib/rope",
+		TLSCert:           "/etc/rope/tls/cert.pem",
+		TLSKey:            "/etc/rope/tls/key.pem",
+		MailboxTTLSeconds: 7 * 24 * 3600,
+		MaxEnvelopeBytes:  65536,
+	}
+}
+
+func LoadOrInit(path string, init bool, allowHTTP bool, listen string) (Config, error) {
+	cfg := Default()
+	if listen != "" {
+		cfg.Listen = listen
+	}
+	cfg.AllowHTTP = allowHTTP
+	if _, err := os.Stat(path); err == nil {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return cfg, err
+		}
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			return cfg, err
+		}
+		if listen != "" {
+			cfg.Listen = listen
+		}
+		if allowHTTP {
+			cfg.AllowHTTP = true
+		}
+		return cfg, nil
+	}
+	if !init {
+		return cfg, fmt.Errorf("config %s not found (pass --init to create)", path)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return cfg, err
+	}
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return cfg, err
+	}
+	cfg.ServerID = randomHex(16)
+	cfg.SetupToken = randomHex(24)
+	raw, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return cfg, err
+	}
+	if err := os.WriteFile(path, raw, 0o640); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func (c Config) DBPath() string {
+	return filepath.Join(c.DataDir, "data.db")
+}
+
+func (c Config) MailboxTTL() time.Duration {
+	return time.Duration(c.MailboxTTLSeconds) * time.Second
+}
+
+func HTTPDevFingerprint() string {
+	sum := sha256.Sum256([]byte(HTTPDevFingerprintSeed))
+	return hex.EncodeToString(sum[:])
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
