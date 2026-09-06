@@ -1,0 +1,3 @@
+-keep class uniffi.rope_core.** { *; }
+-keep class com.sun.jna.** { *; }
+-dontwarn com.sun.jna.**
