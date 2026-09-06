@@ -165,7 +165,7 @@ func TestInviteSingleUseAndExpiry(t *testing.T) {
 	bootstrap(t, hs, inv.Token, guest, "guest")
 	guest2 := newDevice(t)
 	body2, _ := json.Marshal(map[string]any{
-		"token": inv.Token, "public_identity": guest2.blob, "device_id": guest2.id,
+		"token": inv.Token, "display_name": "guest2", "public_identity": guest2.blob, "device_id": guest2.id,
 	})
 	resp, err = http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body2))
 	if err != nil {
@@ -189,7 +189,7 @@ func TestInviteSingleUseAndExpiry(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	late := newDevice(t)
 	body2, _ = json.Marshal(map[string]any{
-		"token": inv.Token, "public_identity": late.blob, "device_id": late.id,
+		"token": inv.Token, "display_name": "late", "public_identity": late.blob, "device_id": late.id,
 	})
 	resp, err = http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body2))
 	if err != nil {
@@ -205,7 +205,7 @@ func TestWrongSetupTokenRejected(t *testing.T) {
 	_, hs, _ := testServer(t)
 	d := newDevice(t)
 	body, _ := json.Marshal(map[string]any{
-		"token": "nope", "public_identity": d.blob, "device_id": d.id,
+		"token": "nope", "display_name": "nope", "public_identity": d.blob, "device_id": d.id,
 	})
 	resp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -279,17 +279,11 @@ func TestMailboxDeliverAndDeleteWithoutPlaintext(t *testing.T) {
 	if err := wsjson.Write(ctx, aliceWS, map[string]any{"type": "send", "envelope": env}); err != nil {
 		t.Fatal(err)
 	}
-	var queued wsOut
-	if err := wsjson.Read(ctx, aliceWS, &queued); err != nil {
-		t.Fatal(err)
-	}
+	queued := readSkipPresence(t, ctx, aliceWS)
 	if queued.Type != "queued" {
 		t.Fatalf("queued got %+v", queued)
 	}
-	var delivered wsOut
-	if err := wsjson.Read(ctx, bobWS, &delivered); err != nil {
-		t.Fatal(err)
-	}
+	delivered := readSkipPresence(t, ctx, bobWS)
 	if delivered.Type != "deliver" {
 		t.Fatalf("deliver got %+v", delivered)
 	}
@@ -306,10 +300,7 @@ func TestMailboxDeliverAndDeleteWithoutPlaintext(t *testing.T) {
 	if err := wsjson.Write(ctx, bobWS, map[string]any{"type": "ack", "message_id": delivered.MessageID}); err != nil {
 		t.Fatal(err)
 	}
-	var done wsOut
-	if err := wsjson.Read(ctx, aliceWS, &done); err != nil {
-		t.Fatal(err)
-	}
+	done := readSkipPresence(t, ctx, aliceWS)
 	if done.Type != "delivered" {
 		t.Fatalf("delivered got %+v", done)
 	}
@@ -346,10 +337,7 @@ func TestOfflineMailboxThenFlush(t *testing.T) {
 	if err := wsjson.Write(ctx, aliceWS, map[string]any{"type": "send", "envelope": env}); err != nil {
 		t.Fatal(err)
 	}
-	var queued wsOut
-	if err := wsjson.Read(ctx, aliceWS, &queued); err != nil {
-		t.Fatal(err)
-	}
+	queued := readSkipPresence(t, ctx, aliceWS)
 	if queued.Type != "queued" {
 		t.Fatalf("%+v", queued)
 	}
@@ -360,12 +348,117 @@ func TestOfflineMailboxThenFlush(t *testing.T) {
 
 	bobWS := dialWS(t, ctx, hs, bob)
 	defer bobWS.Close(websocket.StatusNormalClosure, "")
-	var first wsOut
-	if err := wsjson.Read(ctx, bobWS, &first); err != nil {
-		t.Fatal(err)
-	}
+	first := readSkipPresence(t, ctx, bobWS)
 	if first.Type != "deliver" {
 		t.Fatalf("expected deliver on reconnect, got %+v", first)
+	}
+}
+
+func TestUniqueLoginRequired(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	body, _ := json.Marshal(map[string]any{
+		"token": setup, "display_name": "", "public_identity": owner.blob, "device_id": owner.id,
+	})
+	resp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 400 {
+		t.Fatalf("empty login wanted 400 got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	bootstrap(t, hs, setup, owner, "Anna")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	dup := newDevice(t)
+	body, _ = json.Marshal(map[string]any{
+		"token": inv.Token, "display_name": "anna", "public_identity": dup.blob, "device_id": dup.id,
+	})
+	resp, err = http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 409 {
+		t.Fatalf("duplicate login wanted 409 got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+func TestPresenceBroadcast(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+
+	bobWS := dialWS(t, ctx, hs, bob)
+	var sawBob bool
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !sawBob {
+		var msg wsOut
+		rctx, cancel := context.WithTimeout(ctx, time.Second)
+		err := wsjson.Read(rctx, aliceWS, &msg)
+		cancel()
+		if err != nil {
+			continue
+		}
+		if msg.Type == "presence" {
+			for _, id := range msg.Devices {
+				if id == bob.id {
+					sawBob = true
+				}
+			}
+		}
+	}
+	if !sawBob {
+		t.Fatal("alice did not see bob come online")
+	}
+	_ = bobWS.Close(websocket.StatusNormalClosure, "")
+	sawOffline := false
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !sawOffline {
+		var msg wsOut
+		rctx, cancel := context.WithTimeout(ctx, time.Second)
+		err := wsjson.Read(rctx, aliceWS, &msg)
+		cancel()
+		if err != nil {
+			continue
+		}
+		if msg.Type == "presence" {
+			sawOffline = true
+			for _, id := range msg.Devices {
+				if id == bob.id {
+					sawOffline = false
+				}
+			}
+		}
+	}
+	if !sawOffline {
+		t.Fatal("alice did not see bob go offline")
 	}
 }
 
@@ -393,6 +486,21 @@ func dialWS(t *testing.T, ctx context.Context, hs *httptest.Server, d testDevice
 		t.Fatal(err)
 	}
 	return c
+}
+
+func readSkipPresence(t *testing.T, ctx context.Context, c *websocket.Conn) wsOut {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	for {
+		var msg wsOut
+		if err := wsjson.Read(ctx, c, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg.Type != "presence" {
+			return msg
+		}
+	}
 }
 
 func drainHello(t *testing.T, ctx context.Context, c *websocket.Conn) {

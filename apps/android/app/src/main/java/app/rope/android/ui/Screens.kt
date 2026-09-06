@@ -2,6 +2,7 @@ package app.rope.android
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -47,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -72,11 +75,20 @@ fun RopeScaffold(
     onInvite: () -> Unit,
     onStatus: () -> Unit,
     onScan: () -> Unit,
+    onUpdateApp: () -> Unit,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (state.offline) "Rope · offline" else "Rope") },
+                title = {
+                    val me = state.profile?.displayName.orEmpty()
+                    val title = when {
+                        state.offline -> "Rope · офлайн"
+                        me.isNotBlank() -> "Rope · $me"
+                        else -> "Rope"
+                    }
+                    Text(title)
+                },
                 actions = {
                     if (state.profile != null) {
                         IconButton(onClick = onInvite) {
@@ -117,11 +129,11 @@ fun RopeScaffold(
                 when (state.screen) {
                     Screen.Start -> StartPane(onGo)
                     Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onGo(Screen.Start) }
-                    Screen.Join -> JoinPane(!state.busy, onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
+                    Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
                     Screen.Chats -> ChatsPane(state, onOpenChat)
                     Screen.Chat -> ChatPane(state, onDraft, onSend)
                     Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
-                    Screen.Status -> StatusPane(state.statusText) { onGo(Screen.Provision) }
+                    Screen.Status -> StatusPane(state.statusText, state.updateText, onUpdateApp) { onGo(Screen.Provision) }
                     Screen.Settings -> Text("Settings", modifier = Modifier.padding(16.dp))
                 }
             }
@@ -167,12 +179,13 @@ private fun ProvisionPane(
     var key by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
     var listen by remember { mutableStateOf("8443") }
-    var name by remember { mutableStateOf("owner") }
+    var name by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var target by remember { mutableStateOf(ServerTarget.AUTO) }
     var advanced by remember { mutableStateOf(false) }
-    val canInstall = enabled && host.isNotBlank() && user.isNotBlank() && (password.isNotBlank() || key.isNotBlank())
+    val canInstall = enabled && host.isNotBlank() && user.isNotBlank() &&
+        (password.isNotBlank() || key.isNotBlank()) && LoginRules.isValid(name)
 
     fun form(upgrade: Boolean) = ProvisionForm(
         host = host.trim(),
@@ -257,7 +270,7 @@ private fun ProvisionPane(
             OutlinedTextField(
                 name,
                 { name = it },
-                label = { Text("Ваше имя в мессенджере") },
+                label = { Text("Ваш логин") },
                 singleLine = true,
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
@@ -355,7 +368,7 @@ private fun ArchPicker(
 }
 
 @Composable
-private fun StatusPane(statusText: String, onUpgrade: () -> Unit) {
+private fun StatusPane(statusText: String, updateText: String, onUpdateApp: () -> Unit, onUpgrade: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -363,13 +376,21 @@ private fun StatusPane(statusText: String, onUpgrade: () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Сервер", style = MaterialTheme.typography.titleLarge)
+        Text("Сервер и обновления", style = MaterialTheme.typography.titleLarge)
         Text(
-            statusText.ifBlank { "Статус ещё не загружен." },
+            statusText.ifBlank { "Статус сервера ещё не загружен." },
             style = MaterialTheme.typography.bodyMedium,
         )
+        Button(onClick = onUpdateApp, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text("Обновить приложение")
+        }
+        Text(
+            updateText.ifBlank { "Скачает новый APK и предложит установить поверх. Удалять Rope не нужно." },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Button(onClick = onUpgrade, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text("Обновить ядро")
+            Text("Обновить ядро на VPS")
         }
         Text(
             "Скачает новый rope-server с GitHub Releases. База и сертификаты останутся.",
@@ -382,13 +403,14 @@ private fun StatusPane(statusText: String, onUpgrade: () -> Unit) {
 @Composable
 private fun JoinPane(
     enabled: Boolean,
+    initialInvite: String,
     onJoin: (String, String) -> Unit,
     onJoinDev: (String, Int, String, String) -> Unit,
     onScan: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var url by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("guest") }
+    var url by remember(initialInvite) { mutableStateOf(initialInvite) }
+    var name by remember { mutableStateOf("") }
     var host by remember { mutableStateOf("10.0.2.2") }
     var port by remember { mutableStateOf("8443") }
     var token by remember { mutableStateOf("") }
@@ -406,7 +428,7 @@ private fun JoinPane(
             OutlinedTextField(
                 name,
                 { name = it },
-                label = { Text("Ваше имя") },
+                label = { Text("Придумайте логин") },
                 singleLine = true,
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
@@ -436,7 +458,7 @@ private fun JoinPane(
                 OutlinedTextField(token, { token = it }, label = { Text("setup / invite token") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
                 OutlinedButton(
                     onClick = { onJoinDev(host, port.toIntOrNull() ?: 8443, token, name) },
-                    enabled = enabled,
+                    enabled = enabled && LoginRules.isValid(name),
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Войти по HTTP") }
             }
@@ -448,7 +470,7 @@ private fun JoinPane(
             }
             OutlinedButton(
                 onClick = { onJoin(url, name) },
-                enabled = enabled && url.isNotBlank(),
+                enabled = enabled && url.isNotBlank() && LoginRules.isValid(name),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) { Text("Войти по ссылке") }
             TextButton(onClick = onBack, enabled = enabled, modifier = Modifier.align(Alignment.CenterHorizontally)) {
@@ -479,8 +501,15 @@ private fun ChatsPane(state: UiState, onOpen: (DirectoryDevice) -> Unit) {
                     .clickable { onOpen(d) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
-                Text(d.displayName.ifBlank { d.deviceId.take(12) }, style = MaterialTheme.typography.titleMedium)
-                Text(d.deviceId.take(16), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PresenceDot(d.online)
+                    Text(d.displayName.ifBlank { d.deviceId.take(12) }, style = MaterialTheme.typography.titleMedium)
+                }
+                Text(
+                    if (d.online) "в сети" else "не в сети",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (d.online) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             HorizontalDivider()
         }
@@ -490,23 +519,36 @@ private fun ChatsPane(state: UiState, onOpen: (DirectoryDevice) -> Unit) {
 @Composable
 private fun ChatPane(state: UiState, onDraft: (String) -> Unit, onSend: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Text(
-            state.peer?.displayName ?: "Чат",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PresenceDot(state.peer?.online == true)
+            Column {
+                Text(state.peer?.displayName ?: "Чат", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    if (state.peer?.online == true) "в сети" else "не в сети — сообщение дойдёт, когда появится",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(state.messages, key = { it.id }) { m ->
-                val who = if (m.outgoing) "Вы" else "Собеседник"
+                val who = if (m.outgoing) "Вы" else (state.peer?.displayName ?: "Собеседник")
                 val mark = when (m.status) {
-                    MessageStatus.CREATED -> "·"
-                    MessageStatus.SENT_TO_SERVER -> "✓"
-                    MessageStatus.DELIVERED_TO_DEVICE -> "✓✓"
+                    MessageStatus.CREATED -> "ожидает отправки"
+                    MessageStatus.SENT_TO_SERVER -> "на сервере"
+                    MessageStatus.DELIVERED_TO_DEVICE -> if (m.outgoing) "доставлено" else ""
                 }
-                Text("$who $mark  ${m.text}", style = MaterialTheme.typography.bodyLarge)
+                Text("$who  ${m.text}", style = MaterialTheme.typography.bodyLarge)
+                if (mark.isNotBlank()) {
+                    Text(mark, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         HorizontalDivider()
@@ -551,6 +593,15 @@ private fun InvitePane(url: String) {
             Text(url, style = MaterialTheme.typography.bodySmall)
         }
     }
+}
+
+@Composable
+private fun PresenceDot(online: Boolean) {
+    Box(
+        Modifier
+            .size(10.dp)
+            .background(if (online) Color(0xFF43A047) else Color(0xFF9E9E9E), CircleShape),
+    )
 }
 
 private fun qrBitmap(text: String): Bitmap {

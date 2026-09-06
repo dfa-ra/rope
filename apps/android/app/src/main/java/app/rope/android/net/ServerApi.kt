@@ -52,6 +52,7 @@ class ServerApi(
                 displayName = members[mid].orEmpty().ifBlank { d.getString("device_id").take(8) },
                 publicIdentity = blob,
                 lastSeen = d.optString("last_seen"),
+                online = d.optBoolean("online"),
             )
         }
         return out

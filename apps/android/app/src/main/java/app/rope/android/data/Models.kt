@@ -15,6 +15,7 @@ data class ServerProfile(
     val role: String,
     val memberId: String,
     val deviceId: String,
+    val displayName: String = "",
 )
 
 data class DirectoryDevice(
@@ -23,6 +24,7 @@ data class DirectoryDevice(
     val displayName: String,
     val publicIdentity: ByteArray,
     val lastSeen: String,
+    val online: Boolean = false,
 )
 
 data class ChatMessage(
@@ -32,4 +34,5 @@ data class ChatMessage(
     val text: String,
     val status: MessageStatus,
     val timestampMs: Long,
+    val envelope: ByteArray? = null,
 )

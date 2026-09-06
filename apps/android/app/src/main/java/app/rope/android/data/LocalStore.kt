@@ -13,7 +13,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 1) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 2) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -25,7 +25,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
               outgoing INTEGER NOT NULL,
               body_enc BLOB NOT NULL,
               status TEXT NOT NULL,
-              ts INTEGER NOT NULL
+              ts INTEGER NOT NULL,
+              envelope BLOB
             )
             """.trimIndent(),
         )
@@ -39,7 +40,11 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN envelope BLOB")
+        }
+    }
 
     fun saveProfile(p: ServerProfile) {
         val o = JSONObject()
@@ -51,6 +56,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             .put("role", p.role)
             .put("memberId", p.memberId)
             .put("deviceId", p.deviceId)
+            .put("displayName", p.displayName)
         put("profile", o.toString())
     }
 
@@ -66,13 +72,22 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             role = o.getString("role"),
             memberId = o.getString("memberId"),
             deviceId = o.getString("deviceId"),
+            displayName = o.optString("displayName"),
         )
     }
 
     fun insertMessage(msg: ChatMessage) {
         writableDatabase.execSQL(
-            "INSERT OR REPLACE INTO messages(id, peer_id, outgoing, body_enc, status, ts) VALUES(?,?,?,?,?,?)",
-            arrayOf(msg.id, msg.peerDeviceId, if (msg.outgoing) 1 else 0, encrypt(msg.text), msg.status.name, msg.timestampMs),
+            "INSERT OR REPLACE INTO messages(id, peer_id, outgoing, body_enc, status, ts, envelope) VALUES(?,?,?,?,?,?,?)",
+            arrayOf(
+                msg.id,
+                msg.peerDeviceId,
+                if (msg.outgoing) 1 else 0,
+                encrypt(msg.text),
+                msg.status.name,
+                msg.timestampMs,
+                msg.envelope,
+            ),
         )
     }
 
@@ -82,7 +97,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun messages(peerId: String): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
-            "SELECT id, peer_id, outgoing, body_enc, status, ts FROM messages WHERE peer_id = ? ORDER BY ts ASC",
+            "SELECT id, peer_id, outgoing, body_enc, status, ts, envelope FROM messages WHERE peer_id = ? ORDER BY ts ASC",
             arrayOf(peerId),
         )
         val out = mutableListOf<ChatMessage>()
@@ -95,6 +110,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                     text = decrypt(it.getBlob(3)),
                     status = MessageStatus.valueOf(it.getString(4)),
                     timestampMs = it.getLong(5),
+                    envelope = if (it.isNull(6)) null else it.getBlob(6),
                 )
             }
         }
@@ -110,7 +126,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun pendingOutgoing(): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
-            "SELECT id, peer_id, outgoing, body_enc, status, ts FROM messages WHERE outgoing = 1 AND status = ?",
+            "SELECT id, peer_id, outgoing, body_enc, status, ts, envelope FROM messages WHERE outgoing = 1 AND status = ?",
             arrayOf(MessageStatus.CREATED.name),
         )
         val out = mutableListOf<ChatMessage>()
@@ -123,11 +139,19 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                     text = decrypt(it.getBlob(3)),
                     status = MessageStatus.valueOf(it.getString(4)),
                     timestampMs = it.getLong(5),
+                    envelope = if (it.isNull(6)) null else it.getBlob(6),
                 )
             }
         }
         return out
     }
+
+    fun saveGithubToken(token: String) {
+        if (token.isBlank()) return
+        put("github_token", token)
+    }
+
+    fun githubToken(): String? = get("github_token")
 
     fun newId(): String = UUID.randomUUID().toString()
 

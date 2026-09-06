@@ -114,6 +114,15 @@ func (s *Store) InsertMember(id, name, role string) error {
 	return err
 }
 
+func (s *Store) LoginTaken(name string) (bool, error) {
+	var n int
+	err := s.SQL.QueryRow(
+		`SELECT COUNT(*) FROM members WHERE revoked_at IS NULL AND lower(display_name) = lower(?)`,
+		name,
+	).Scan(&n)
+	return n > 0, err
+}
+
 func (s *Store) InsertDevice(d Device) error {
 	_, err := s.SQL.Exec(
 		`INSERT INTO devices(device_id, member_id, public_identity, sign_public, created_at, last_seen)

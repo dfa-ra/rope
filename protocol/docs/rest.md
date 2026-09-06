@@ -46,8 +46,8 @@ On `--allow-http` debug servers `fingerprint` is the SHA-256 of the ASCII string
 
 ```json
 {
-  "token": "setup_token or invite token",
-  "display_name": "optional",
+    "token": "setup_token or invite token",
+    "display_name": "required unique login, 2-24 letters/digits/_ . -",
   "public_identity": "base64 ROPP blob",
   "device_id": "hex ed25519 pk"
 }
@@ -87,7 +87,8 @@ Public identities of non-revoked devices so clients can encrypt.
     "device_id": "hex",
     "member_id": "uuid",
     "public_identity": "base64",
-    "last_seen": "RFC3339"
+    "last_seen": "RFC3339",
+    "online": true
   }]
 }
 ```

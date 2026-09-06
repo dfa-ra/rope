@@ -7,9 +7,10 @@ URL: `wss://<host>:<port>/v1/ws?device_id=<hex>&ts=<unix>&sig=<base64url>`
 On connect the server:
 
 1. Authenticates the device
-2. Marks it online
+2. Marks it online and broadcasts `{ "type": "presence", "devices": [...] }` to every live socket
 3. Pushes every mailbox blob for that device as `deliver` frames
 4. Sends `{ "type": "mailbox_done" }`
+5. On disconnect, drops the device from the hub and broadcasts an updated `presence` list
 
 ## Client → server
 

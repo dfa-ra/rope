@@ -19,6 +19,7 @@ import (
 	"github.com/dfa-ra/rope/server/go/internal/config"
 	"github.com/dfa-ra/rope/server/go/internal/db"
 	"github.com/dfa-ra/rope/server/go/internal/envelope"
+	"github.com/dfa-ra/rope/server/go/internal/login"
 	"github.com/dfa-ra/rope/server/go/internal/ratelimit"
 	"github.com/go-chi/chi/v5"
 	"strconv"
@@ -152,8 +153,22 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
+	req.DisplayName = login.Normalize(req.DisplayName)
 	if len(req.PublicIdentity) < 70 || req.DeviceID == "" || req.Token == "" {
 		writeJSON(w, 400, map[string]string{"error": "missing fields"})
+		return
+	}
+	if !login.Valid(req.DisplayName) {
+		writeJSON(w, 400, map[string]string{"error": "login must be 2-24 letters, digits, _ . -"})
+		return
+	}
+	taken, err := s.Store.LoginTaken(req.DisplayName)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	if taken {
+		writeJSON(w, 409, map[string]string{"error": "login taken"})
 		return
 	}
 	if len(req.PublicIdentity) < 38 || hex.EncodeToString(req.PublicIdentity[6:38]) != strings.ToLower(req.DeviceID) {
@@ -270,6 +285,7 @@ func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ [
 		MemberID       string `json:"member_id"`
 		PublicIdentity []byte `json:"public_identity"`
 		LastSeen       string `json:"last_seen"`
+		Online         bool   `json:"online"`
 		Revoked        bool   `json:"revoked"`
 	}
 	outM := []mJSON{}
@@ -281,7 +297,8 @@ func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ [
 		if d.Revoked {
 			continue
 		}
-		outD = append(outD, dJSON{d.ID, d.MemberID, d.PublicIdentity, d.LastSeen, d.Revoked})
+		_, online := s.Hub.Get(d.ID)
+		outD = append(outD, dJSON{d.ID, d.MemberID, d.PublicIdentity, d.LastSeen, online, d.Revoked})
 	}
 	writeJSON(w, 200, map[string]any{"members": outM, "devices": outD})
 }
@@ -431,16 +448,17 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	s.Hub.Add(deviceID, conn)
 	s.Store.TouchDevice(deviceID)
 	defer func() {
-		s.Hub.Drop(deviceID)
+		s.Hub.DropIf(deviceID, conn)
+		s.broadcastPresence()
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	}()
 	ctx := r.Context()
 	pending, _ := s.Store.PendingMailbox(deviceID)
 	for _, row := range pending {
-		_ = wsjson.Write(ctx, c, wsOut{Type: "deliver", Envelope: row.Blob, MessageID: row.MessageID})
+		_ = conn.write(ctx, wsOut{Type: "deliver", Envelope: row.Blob, MessageID: row.MessageID})
 	}
-	_ = wsjson.Write(ctx, c, wsOut{Type: "mailbox_done"})
-	_ = wsjson.Write(ctx, c, wsOut{Type: "presence", Devices: s.Hub.Online()})
+	_ = conn.write(ctx, wsOut{Type: "mailbox_done"})
+	s.broadcastPresence()
 
 	for {
 		var in wsIn
@@ -556,6 +574,25 @@ func (h *Hub) Drop(id string) {
 	h.mu.Lock()
 	delete(h.clients, id)
 	h.mu.Unlock()
+}
+
+func (h *Hub) DropIf(id string, c *clientConn) {
+	h.mu.Lock()
+	if h.clients[id] == c {
+		delete(h.clients, id)
+	}
+	h.mu.Unlock()
+}
+
+func (s *Server) broadcastPresence() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	devices := s.Hub.Online()
+	for _, id := range devices {
+		if dest, ok := s.Hub.Get(id); ok {
+			_ = dest.write(ctx, wsOut{Type: "presence", Devices: devices})
+		}
+	}
 }
 
 func (h *Hub) Get(id string) (*clientConn, bool) {

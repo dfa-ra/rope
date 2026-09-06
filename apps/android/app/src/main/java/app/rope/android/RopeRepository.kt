@@ -13,21 +13,27 @@ import app.rope.android.protocol.InviteCodec
 import app.rope.android.protocol.InviteLink as ParsedInvite
 import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.SshProvisioner
+import app.rope.android.update.AppRelease
+import app.rope.android.update.AppUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.rope_core.DeviceIdentity
 import uniffi.rope_core.buildInviteUrl
 import uniffi.rope_core.parseInviteUrl
 import uniffi.rope_core.publicIdentityFromBlob
 import uniffi.rope_core.verifyInvite
+import java.io.File
 
 data class UiState(
     val screen: Screen = Screen.Start,
@@ -36,12 +42,16 @@ data class UiState(
     val messages: List<ChatMessage> = emptyList(),
     val peer: DirectoryDevice? = null,
     val inviteUrl: String? = null,
+    val pendingInvite: String? = null,
     val statusText: String = "",
+    val updateText: String = "",
+    val pendingApkPath: String? = null,
     val error: String? = null,
     val busy: Boolean = false,
     val offline: Boolean = false,
     val draftHost: String = "",
     val draftText: String = "",
+    val onlineIds: Set<String> = emptySet(),
 )
 
 enum class Screen { Start, Provision, Join, Chats, Chat, Invite, Status, Settings }
@@ -56,6 +66,8 @@ class RopeRepository(private val app: Application) {
     private var identity: DeviceIdentity? = null
     private var api: ServerApi? = null
     private var socket: WebSocket? = null
+    private var reconnectJob: Job? = null
+    private var reconnectAttempt = 0
 
     fun start(pendingLink: String?) {
         scope.launch {
@@ -64,13 +76,21 @@ class RopeRepository(private val app: Application) {
                     vault.save(it.toBytes())
                 }
                 store.profile()?.let { attached(it) }
-                if (!pendingLink.isNullOrBlank()) {
-                    join(pendingLink, "guest")
+                if (!pendingLink.isNullOrBlank() && store.profile() == null) {
+                    prepareJoin(pendingLink)
                 }
             } catch (e: Exception) {
                 error(e)
             }
         }
+    }
+
+    fun prepareJoin(url: String) {
+        _state.value = _state.value.copy(
+            screen = Screen.Join,
+            pendingInvite = url,
+            error = null,
+        )
     }
 
     fun go(screen: Screen) {
@@ -83,16 +103,22 @@ class RopeRepository(private val app: Application) {
 
     fun provision(form: ProvisionForm) {
         scope.launch {
+            if (!form.upgrade && !LoginRules.isValid(form.displayName)) {
+                _state.value = _state.value.copy(error = "Придумайте логин: 2–24 символа, буквы/цифры/_ . -")
+                return@launch
+            }
             busy(true)
             try {
+                store.saveGithubToken(form.githubToken)
                 val result = SshProvisioner(app).install(form)
                 if (form.upgrade) {
-                    _state.value = _state.value.copy(statusText = "server core updated", busy = false, screen = Screen.Status)
+                    _state.value = _state.value.copy(statusText = "ядро сервера обновлено", busy = false, screen = Screen.Status)
                     return@launch
                 }
                 val id = identity ?: error("identity missing")
+                val login = LoginRules.normalize(form.displayName)
                 val boot = ServerApi(dummyProfile(result.host, result.port, result.fingerprint, true), id)
-                    .bootstrap(result.host, result.port, true, result.fingerprint, result.setupToken, form.displayName)
+                    .bootstrap(result.host, result.port, true, result.fingerprint, result.setupToken, login)
                 val profile = ServerProfile(
                     host = result.host,
                     port = result.port,
@@ -102,6 +128,7 @@ class RopeRepository(private val app: Application) {
                     role = boot.getString("role"),
                     memberId = boot.getString("member_id"),
                     deviceId = boot.getString("device_id"),
+                    displayName = login,
                 )
                 attached(profile)
             } catch (e: Exception) {
@@ -112,6 +139,10 @@ class RopeRepository(private val app: Application) {
 
     fun join(url: String, displayName: String) {
         scope.launch {
+            if (!LoginRules.isValid(displayName)) {
+                _state.value = _state.value.copy(error = "Придумайте логин: 2–24 символа, буквы/цифры/_ . -")
+                return@launch
+            }
             busy(true)
             try {
                 val parsed = try {
@@ -142,8 +173,9 @@ class RopeRepository(private val app: Application) {
                     return@launch
                 }
                 val id = identity ?: error("identity missing")
+                val login = LoginRules.normalize(displayName)
                 val boot = ServerApi(dummyProfile(parsed.host, parsed.port, parsed.fingerprint, true), id)
-                    .bootstrap(parsed.host, parsed.port, true, parsed.fingerprint, parsed.token, displayName)
+                    .bootstrap(parsed.host, parsed.port, true, parsed.fingerprint, parsed.token, login)
                 attached(
                     ServerProfile(
                         host = parsed.host,
@@ -154,6 +186,7 @@ class RopeRepository(private val app: Application) {
                         role = boot.getString("role"),
                         memberId = boot.getString("member_id"),
                         deviceId = boot.getString("device_id"),
+                        displayName = login,
                     ),
                 )
             } catch (e: Exception) {
@@ -164,13 +197,18 @@ class RopeRepository(private val app: Application) {
 
     fun joinDevHttp(host: String, port: Int, token: String, displayName: String) {
         scope.launch {
+            if (!LoginRules.isValid(displayName)) {
+                _state.value = _state.value.copy(error = "Придумайте логин: 2–24 символа, буквы/цифры/_ . -")
+                return@launch
+            }
             busy(true)
             try {
                 val fp = uniffi.rope_core.devHttpFingerprint()
                 val info = ServerApi.fetchInfo(host, port, useTls = false, fingerprint = fp)
                 val id = identity ?: error("identity missing")
+                val login = LoginRules.normalize(displayName)
                 val boot = ServerApi(dummyProfile(host, port, fp, false), id)
-                    .bootstrap(host, port, false, fp, token, displayName)
+                    .bootstrap(host, port, false, fp, token, login)
                 attached(
                     ServerProfile(
                         host = host,
@@ -181,6 +219,7 @@ class RopeRepository(private val app: Application) {
                         role = boot.getString("role"),
                         memberId = boot.getString("member_id"),
                         deviceId = boot.getString("device_id"),
+                        displayName = login,
                     ),
                 )
             } catch (e: Exception) {
@@ -213,15 +252,14 @@ class RopeRepository(private val app: Application) {
                     text = text,
                     status = MessageStatus.CREATED,
                     timestampMs = env.timestampMs.toLong(),
+                    envelope = env.bytes,
                 )
                 store.insertMessage(local)
                 refreshMessages(peer.deviceId)
-                val payload = JSONObject()
-                    .put("type", "send")
-                    .put("envelope", Base64.encodeToString(env.bytes, Base64.NO_WRAP))
-                    .toString()
-                if (socket?.send(payload) != true) {
-                    _state.value = _state.value.copy(offline = true, error = "offline — will retry")
+                val sent = socket?.send(sendPayload(env.bytes)) == true
+                if (!sent) {
+                    _state.value = _state.value.copy(offline = true, error = "нет сети — отправится при подключении")
+                    scheduleReconnect()
                 }
             } catch (e: Exception) {
                 error(e)
@@ -259,12 +297,45 @@ class RopeRepository(private val app: Application) {
                 val st = api?.status()
                 _state.value = _state.value.copy(
                     screen = Screen.Status,
-                    statusText = st?.toString(2) ?: "not owner or offline",
+                    statusText = st?.toString(2) ?: "нет прав владельца или офлайн",
                 )
             } catch (e: Exception) {
                 error(e)
             }
         }
+    }
+
+    fun updateApp() {
+        scope.launch {
+            busy(true)
+            try {
+                val latest = AppUpdater().latestApk(store.githubToken())
+                val local = BuildConfig.VERSION_NAME
+                if (!AppRelease.isNewer(latest.version, local)) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        screen = Screen.Status,
+                        updateText = "Уже стоит $local",
+                    )
+                    return@launch
+                }
+                val dest = File(app.cacheDir, "updates/${latest.assetName}")
+                dest.parentFile?.mkdirs()
+                AppUpdater().download(latest, dest, store.githubToken())
+                _state.value = _state.value.copy(
+                    busy = false,
+                    screen = Screen.Status,
+                    pendingApkPath = dest.absolutePath,
+                    updateText = "Скачано ${latest.version}. Подтвердите установку — удалять приложение не нужно.",
+                )
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun consumePendingApk() {
+        _state.value = _state.value.copy(pendingApkPath = null)
     }
 
     fun resume() {
@@ -274,7 +345,13 @@ class RopeRepository(private val app: Application) {
     private fun attached(profile: ServerProfile) {
         store.saveProfile(profile)
         api = ServerApi(profile, identity!!)
-        _state.value = _state.value.copy(profile = profile, screen = Screen.Chats, busy = false, error = null)
+        _state.value = _state.value.copy(
+            profile = profile,
+            screen = Screen.Chats,
+            busy = false,
+            error = null,
+            pendingInvite = null,
+        )
         refreshDirectory()
         connectSocket(profile)
     }
@@ -282,8 +359,12 @@ class RopeRepository(private val app: Application) {
     private fun refreshDirectory() {
         scope.launch {
             try {
-                val devices = api?.directory().orEmpty().filter { it.deviceId != identity?.deviceId() }
-                _state.value = _state.value.copy(devices = devices)
+                val online = _state.value.onlineIds
+                val devices = api?.directory().orEmpty()
+                    .filter { it.deviceId != identity?.deviceId() }
+                    .map { it.copy(online = it.online || it.deviceId in online) }
+                val peer = _state.value.peer?.let { cur -> devices.find { it.deviceId == cur.deviceId } ?: cur }
+                _state.value = _state.value.copy(devices = devices, peer = peer)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(offline = true, error = e.message)
             }
@@ -297,7 +378,9 @@ class RopeRepository(private val app: Application) {
         api = currentApi
         socket = currentApi.openSocket(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                _state.value = _state.value.copy(offline = false)
+                reconnectAttempt = 0
+                _state.value = _state.value.copy(offline = false, error = null)
+                refreshDirectory()
                 flushOutbox()
             }
 
@@ -306,14 +389,34 @@ class RopeRepository(private val app: Application) {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (webSocket != socket) return
                 _state.value = _state.value.copy(offline = true)
+                scheduleReconnect()
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (webSocket != socket) return
+                _state.value = _state.value.copy(offline = true)
+                scheduleReconnect()
             }
         })
+    }
+
+    private fun scheduleReconnect() {
+        if (store.profile() == null) return
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            val wait = (1_000L * (1 shl reconnectAttempt.coerceAtMost(5))).coerceAtMost(30_000L)
+            reconnectAttempt += 1
+            delay(wait)
+            store.profile()?.let { connectSocket(it) }
+        }
     }
 
     private fun handleWs(text: String) {
         val obj = JSONObject(text)
         when (obj.optString("type")) {
+            "presence" -> applyPresence(obj.optJSONArray("devices"))
             "queued" -> {
                 val mid = obj.optString("message_id")
                 store.updateStatus(mid, MessageStatus.SENT_TO_SERVER)
@@ -328,9 +431,7 @@ class RopeRepository(private val app: Application) {
                 val env = Base64.decode(obj.getString("envelope"), Base64.DEFAULT)
                 val id = identity ?: return
                 val meta = uniffi.rope_core.parseEnvelope(env)
-                val sender = _state.value.devices.find { it.deviceId == meta.senderId }
-                    ?: api?.directory()?.find { it.deviceId == meta.senderId }
-                    ?: return
+                val sender = findSender(meta.senderId) ?: return
                 val plain = id.decryptMessage(publicIdentityFromBlob(sender.publicIdentity), env)
                 val msg = ChatMessage(
                     id = plain.messageId,
@@ -353,6 +454,31 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    private fun findSender(senderId: String): DirectoryDevice? {
+        _state.value.devices.find { it.deviceId == senderId }?.let { return it }
+        return try {
+            val devices = api?.directory().orEmpty()
+            val online = _state.value.onlineIds
+            val mapped = devices.map { it.copy(online = it.online || it.deviceId in online) }
+            _state.value = _state.value.copy(
+                devices = mapped.filter { it.deviceId != identity?.deviceId() },
+            )
+            mapped.find { it.deviceId == senderId }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun applyPresence(arr: JSONArray?) {
+        val ids = mutableSetOf<String>()
+        if (arr != null) {
+            for (i in 0 until arr.length()) ids += arr.getString(i)
+        }
+        val devices = _state.value.devices.map { it.copy(online = it.deviceId in ids) }
+        val peer = _state.value.peer?.let { it.copy(online = it.deviceId in ids) }
+        _state.value = _state.value.copy(onlineIds = ids, devices = devices, peer = peer)
+    }
+
     private fun flushOutbox() {
         val id = identity ?: return
         val devices = try {
@@ -361,19 +487,32 @@ class RopeRepository(private val app: Application) {
             emptyList()
         }
         for (msg in store.pendingOutgoing()) {
-            val peer = devices.find { it.deviceId == msg.peerDeviceId } ?: continue
+            val bytes = msg.envelope ?: encryptAgain(id, devices, msg) ?: continue
             try {
-                val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), msg.text)
-                socket?.send(
-                    JSONObject()
-                        .put("type", "send")
-                        .put("envelope", Base64.encodeToString(env.bytes, Base64.NO_WRAP))
-                        .toString(),
-                )
+                socket?.send(sendPayload(bytes))
             } catch (_: Exception) {
             }
         }
     }
+
+    private fun encryptAgain(
+        id: DeviceIdentity,
+        devices: List<DirectoryDevice>,
+        msg: ChatMessage,
+    ): ByteArray? {
+        val peer = devices.find { it.deviceId == msg.peerDeviceId } ?: return null
+        return try {
+            id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), msg.text).bytes
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun sendPayload(envelope: ByteArray): String =
+        JSONObject()
+            .put("type", "send")
+            .put("envelope", Base64.encodeToString(envelope, Base64.NO_WRAP))
+            .toString()
 
     private fun refreshMessages(peerId: String) {
         _state.value = _state.value.copy(messages = store.messages(peerId))
@@ -391,4 +530,3 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(busy = false, error = e.message ?: e.toString())
     }
 }
-
