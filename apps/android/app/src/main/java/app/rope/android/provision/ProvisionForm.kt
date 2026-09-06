@@ -12,4 +12,5 @@ data class ProvisionForm(
     val displayName: String,
     val githubToken: String,
     val upgrade: Boolean,
+    val reinstall: Boolean = false,
 )

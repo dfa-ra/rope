@@ -51,8 +51,10 @@ SSH-пароль/ключ остаются только на телефоне о
 
 ## Обновление ядра на уже живом VPS
 
-В приложении: **Server → Update server core** (снова SSH).  
-Installer запускается с `--upgrade`: заменяет `/opt/rope/bin/rope-server`, `systemctl restart rope`, **не** трогает `data.db` и TLS.
+В приложении: **Server → Обновить ядро на VPS** (снова SSH).  
+Installer с `--upgrade`: заменяет `/opt/rope/bin/rope-server`, `systemctl restart rope`, **не** трогает `data.db` и TLS.
+
+Если телефон-owner потерян или приложение поставили заново: **Создать сервер → Дополнительно → Стереть старое и стать владельцем** (`--reinstall`). Стирает `data.db` и `config.json`, ставит новое ядро, выдаёт новый `SETUP_TOKEN`. TLS остаётся. Повторная обычная установка на живой VPS без флага больше не молча переиспользует старого owner — пишет `ROPE_ALREADY_INSTALLED`.
 
 С машины администратора то же самое:
 

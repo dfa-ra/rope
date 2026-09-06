@@ -56,13 +56,23 @@ class SshProvisioner(
                 sftp.put(FileSystemFile(localBin), "/tmp/rope-server")
             }
             val sudo = if (form.user == "root") "" else "sudo "
-            val upgradeFlag = if (form.upgrade) " --upgrade" else ""
+            val modeFlag = when {
+                form.reinstall -> " --reinstall"
+                form.upgrade -> " --upgrade"
+                else -> ""
+            }
             val cmd = """
                 set -euo pipefail
                 ${sudo}chmod +x /tmp/rope-install.sh /tmp/rope-server
-                ${sudo}/tmp/rope-install.sh --binary /tmp/rope-server --host ${form.host} --port ${form.listenPort}$upgradeFlag
+                ${sudo}/tmp/rope-install.sh --binary /tmp/rope-server --host ${form.host} --port ${form.listenPort}$modeFlag
             """.trimIndent()
             val output = exec(ssh, cmd)
+            if (output.contains("ROPE_ALREADY_INSTALLED")) {
+                error(
+                    "На VPS уже стоит Rope. «Обновить ядро» сохранит чаты. " +
+                        "«Стереть и стать владельцем» удалит старого owner — так заходят, если телефон потерян.",
+                )
+            }
             if (!output.contains("ROPE_INSTALL_OK") && !output.contains("upgraded binary")) {
                 error("installer failed:\n$output")
             }

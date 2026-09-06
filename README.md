@@ -40,7 +40,8 @@ sudo ./deployment/scripts/install.sh \
   --port 8443
 ```
 
-Re-run with `--upgrade` to replace the binary and keep `data.db`.
+Re-run with `--upgrade` to replace the binary and keep `data.db`.  
+`--reinstall` wipes `data.db` + config and issues a new owner `SETUP_TOKEN` (lost-phone recovery).
 
 Раскатка у пользователя (телефон → SSH → VPS): [docs/rollout.md](docs/rollout.md).
 

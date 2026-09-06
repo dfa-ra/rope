@@ -6,13 +6,14 @@ BINARY=""
 HOST=""
 PORT="8443"
 UPGRADE=0
+REINSTALL=0
 DATA_DIR="/var/lib/rope"
 ETC_DIR="/etc/rope"
 BIN_DIR="/opt/rope/bin"
 SERVICE_USER="rope"
 
 usage() {
-  echo "usage: $0 --binary /path/to/rope-server --host <ip-or-dns> [--port 8443] [--upgrade]"
+  echo "usage: $0 --binary /path/to/rope-server --host <ip-or-dns> [--port 8443] [--upgrade|--reinstall]"
   exit 2
 }
 
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --host) HOST="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --upgrade) UPGRADE=1; shift ;;
+    --reinstall) REINSTALL=1; shift ;;
     *) usage ;;
   esac
 done
@@ -40,11 +42,30 @@ fi
 mkdir -p "$BIN_DIR" "$DATA_DIR" "$ETC_DIR/tls"
 install -o root -g root -m 0755 "$BINARY" "$BIN_DIR/rope-server"
 
+already_installed=0
+if [[ -f "$ETC_DIR/config.json" || -f "$DATA_DIR/data.db" ]]; then
+  already_installed=1
+fi
+
+if [[ "$REINSTALL" -eq 1 && "$already_installed" -eq 1 ]]; then
+  systemctl stop rope 2>/dev/null || true
+  rm -f "$DATA_DIR/data.db" "$DATA_DIR/data.db-wal" "$DATA_DIR/data.db-shm"
+  rm -f "$ETC_DIR/config.json"
+  echo "wiped previous Rope data (owner, members, mailbox)"
+  already_installed=0
+fi
+
 if [[ "$UPGRADE" -eq 1 && -f "$ETC_DIR/config.json" ]]; then
   systemctl daemon-reload
   systemctl restart rope
   echo "upgraded binary; data and config preserved"
   exit 0
+fi
+
+if [[ "$already_installed" -eq 1 ]]; then
+  echo "ROPE_ALREADY_INSTALLED"
+  echo "На VPS уже есть Rope. Запустите с --upgrade (сохранить чаты) или --reinstall (стереть owner и начать заново)."
+  exit 3
 fi
 
 if [[ ! -f "$ETC_DIR/tls/cert.pem" || ! -f "$ETC_DIR/tls/key.pem" ]]; then

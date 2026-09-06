@@ -184,10 +184,11 @@ private fun ProvisionPane(
     var url by remember { mutableStateOf("") }
     var target by remember { mutableStateOf(ServerTarget.AUTO) }
     var advanced by remember { mutableStateOf(false) }
+    var confirmWipe by remember { mutableStateOf(false) }
     val canInstall = enabled && host.isNotBlank() && user.isNotBlank() &&
         (password.isNotBlank() || key.isNotBlank()) && LoginRules.isValid(name)
 
-    fun form(upgrade: Boolean) = ProvisionForm(
+    fun form(upgrade: Boolean, reinstall: Boolean = false) = ProvisionForm(
         host = host.trim(),
         sshPort = sshPort.toIntOrNull() ?: 22,
         user = user.trim(),
@@ -199,6 +200,7 @@ private fun ProvisionPane(
         displayName = name.trim().ifBlank { "owner" },
         githubToken = token.trim(),
         upgrade = upgrade,
+        reinstall = reinstall,
     )
 
     Column(Modifier.fillMaxSize()) {
@@ -212,7 +214,7 @@ private fun ProvisionPane(
         ) {
             Text("Создание сервера", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Нужен VPS с Ubuntu/Debian и SSH. После установки SSH больше не используется для чата.",
+                "Нужен VPS с Ubuntu/Debian и SSH. Если Rope уже стоит — обычная установка не затрёт его: обновите ядро или сотрите и зайдите заново как owner.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -277,7 +279,7 @@ private fun ProvisionPane(
             )
             ArchPicker(target = target, enabled = enabled, onSelect = { target = it })
             TextButton(onClick = { advanced = !advanced }, enabled = enabled) {
-                Text(if (advanced) "Скрыть доп. настройки" else "Дополнительно: порт, свой URL, обновление")
+                Text(if (advanced) "Скрыть доп. настройки" else "Дополнительно: порт, обновление, переустановка")
             }
             if (advanced) {
                 OutlinedTextField(
@@ -309,10 +311,33 @@ private fun ProvisionPane(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedButton(
-                    onClick = { onProvision(form(true)) },
+                    onClick = { onProvision(form(upgrade = true)) },
                     enabled = canInstall,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Обновить ядро, данные сохранить") }
+                Text(
+                    "Как обновление в Amnezia: бинарник меняется, чаты и owner остаются.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = {
+                        if (!confirmWipe) {
+                            confirmWipe = true
+                        } else {
+                            onProvision(form(upgrade = false, reinstall = true))
+                        }
+                    },
+                    enabled = canInstall,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (confirmWipe) "Точно стереть owner и чаты?" else "Стереть старое и стать владельцем")
+                }
+                Text(
+                    "Если потеряли телефон-owner: сотрёт data.db и выдаст новый setup token. Сертификат TLS останется.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(
                     "Токен GitHub остаётся на телефоне и на VPS не копируется.",
                     style = MaterialTheme.typography.bodySmall,
@@ -393,7 +418,7 @@ private fun StatusPane(statusText: String, updateText: String, onUpdateApp: () -
             Text("Обновить ядро на VPS")
         }
         Text(
-            "Скачает новый rope-server с GitHub Releases. База и сертификаты останутся.",
+            "Скачает новый rope-server. Чаты и owner останутся. Если зайти как owner больше нельзя — Создать сервер → Дополнительно → Стереть старое.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

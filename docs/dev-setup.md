@@ -57,7 +57,7 @@ sudo ./deployment/scripts/install.sh \
   --port 8443
 ```
 
-The script is idempotent. It prints the TLS fingerprint and one-time `setup_token`. Re-running with `--upgrade` replaces the binary and keeps `data.db` + config.
+The script is idempotent. It prints the TLS fingerprint and one-time `setup_token`. `--upgrade` replaces the binary and keeps `data.db`. `--reinstall` wipes the database and config so a new device can become owner. A bare re-run on an existing install exits with `ROPE_ALREADY_INSTALLED`.
 
 ## Android
 
