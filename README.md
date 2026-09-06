@@ -42,6 +42,8 @@ sudo ./deployment/scripts/install.sh \
 
 Re-run with `--upgrade` to replace the binary and keep `data.db`.
 
+Раскатка у пользователя (телефон → SSH → VPS): [docs/rollout.md](docs/rollout.md).
+
 ## Releases
 
 Push a tag `vX.Y.Z`. GitHub Actions publishes:
