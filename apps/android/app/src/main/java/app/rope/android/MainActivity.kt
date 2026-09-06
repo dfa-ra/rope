@@ -31,9 +31,7 @@ class MainActivity : AppCompatActivity() {
                 RopeScaffold(
                     state = state,
                     onGo = repo::go,
-                    onProvision = { host, sshPort, user, pass, key, port, url, name, upgrade ->
-                        repo.provision(host, sshPort, user, pass, key, port, url, name, upgrade)
-                    },
+                    onProvision = repo::provision,
                     onJoin = repo::join,
                     onJoinDev = repo::joinDevHttp,
                     onOpenChat = repo::openChat,

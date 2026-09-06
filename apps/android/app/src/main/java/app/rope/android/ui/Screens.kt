@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.MessageStatus
+import app.rope.android.provision.ProvisionForm
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
@@ -39,7 +40,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 fun RopeScaffold(
     state: UiState,
     onGo: (Screen) -> Unit,
-    onProvision: (String, Int, String, String, String, Int, String, String, Boolean) -> Unit,
+    onProvision: (ProvisionForm) -> Unit,
     onJoin: (String, String) -> Unit,
     onJoinDev: (String, Int, String, String) -> Unit,
     onOpenChat: (DirectoryDevice) -> Unit,
@@ -90,7 +91,7 @@ private fun StartPane(onGo: (Screen) -> Unit) {
 
 @Composable
 private fun ProvisionPane(
-    onProvision: (String, Int, String, String, String, Int, String, String, Boolean) -> Unit,
+    onProvision: (ProvisionForm) -> Unit,
     onBack: () -> Unit,
 ) {
     var host by remember { mutableStateOf("") }
@@ -100,7 +101,20 @@ private fun ProvisionPane(
     var key by remember { mutableStateOf("") }
     var listen by remember { mutableStateOf("8443") }
     var name by remember { mutableStateOf("owner") }
+    var token by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("https://github.com/dfa-ra/rope/releases/latest/download/rope-server-linux-amd64") }
+    fun form(upgrade: Boolean) = ProvisionForm(
+        host = host,
+        sshPort = sshPort.toIntOrNull() ?: 22,
+        user = user,
+        password = password,
+        keyPem = key,
+        listenPort = listen.toIntOrNull() ?: 8443,
+        binaryUrl = url,
+        displayName = name,
+        githubToken = token,
+        upgrade = upgrade,
+    )
     OutlinedTextField(host, { host = it }, label = { Text("VPS host") }, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(sshPort, { sshPort = it }, label = { Text("SSH port") }, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(user, { user = it }, label = { Text("SSH user") }, modifier = Modifier.fillMaxWidth())
@@ -109,18 +123,10 @@ private fun ProvisionPane(
     OutlinedTextField(listen, { listen = it }, label = { Text("Rope port") }, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(name, { name = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(url, { url = it }, label = { Text("Server binary URL") }, modifier = Modifier.fillMaxWidth())
-    Button(
-        onClick = {
-            onProvision(host, sshPort.toIntOrNull() ?: 22, user, password, key, listen.toIntOrNull() ?: 8443, url, name, false)
-        },
-        modifier = Modifier.fillMaxWidth(),
-    ) { Text("Install and connect") }
-    Button(
-        onClick = {
-            onProvision(host, sshPort.toIntOrNull() ?: 22, user, password, key, listen.toIntOrNull() ?: 8443, url, name, true)
-        },
-        modifier = Modifier.fillMaxWidth(),
-    ) { Text("Update server core (keep data)") }
+    OutlinedTextField(token, { token = it }, label = { Text("GitHub token (private repo)") }, modifier = Modifier.fillMaxWidth())
+    Button(onClick = { onProvision(form(false)) }, modifier = Modifier.fillMaxWidth()) { Text("Install and connect") }
+    Button(onClick = { onProvision(form(true)) }, modifier = Modifier.fillMaxWidth()) { Text("Update server core (keep data)") }
+    Text("Приватный репозиторий: токен с Contents: Read. Скачивание идёт на телефон, на VPS токен не попадает.", style = MaterialTheme.typography.bodySmall)
     Text("SSH нужен только для установки/обновления. После успеха пароль на сервер мессенджера не уходит.", style = MaterialTheme.typography.bodySmall)
     TextButton(onClick = onBack) { Text("Back") }
 }

@@ -7,15 +7,23 @@
 | `rope-<version>-debug.apk` (или подписанный `rope-<version>.apk`) | пользователь на Android |
 | `rope-server-linux-amd64` / `arm64` | приложение по SSH на VPS |
 
-Телефон **не** кладёт сервер в APK. При «Создать сервер» он скачивает `rope-server` с `.../releases/latest/download/`. Пока релиза нет, установка с телефона упадёт на `curl`.
+Телефон **не** кладёт сервер в APK и **не** просит VPS ходить на GitHub.
+
+1. Приложение скачивает `rope-server` **на телефон**.
+2. По SSH заливает бинарник и `install.sh` на VPS (SFTP).
+3. На сервере installer только ставит systemd — без `curl` наружу.
+
+**Публичный репозиторий:** URL вида `https://github.com/dfa-ra/rope/releases/latest/download/rope-server-linux-amd64` качается без токена.
+
+**Приватный репозиторий:** анонимный download с VPS и с телефона даст 404. Нужен Personal Access Token (fine-grained: Contents Read на этот repo, или classic `repo`). Поле «GitHub token» на экране Create server. Токен живёт только в памяти телефона на время скачивания и **не** пишется в `/etc/rope` и не уезжает на VPS.
 
 ## Первая установка (организатор)
 
 1. На VPS открыт SSH (Ubuntu/Debian x86_64, пользователь с `sudo` или `root`).
-2. В приложении: **Create server** — IP/hostname, SSH-порт, логин, пароль или ключ, порт Rope (по умолчанию 8443).
-3. Телефон по SSH:
-   - заливает `install.sh`
-   - на VPS делает `curl` бинарника с GitHub Releases
+2. В приложении: **Create server** — IP/hostname, SSH-порт, логин, пароль или ключ, порт Rope (по умолчанию 8443). Для приватного GitHub — PAT в поле token.
+3. Телефон:
+   - скачивает `rope-server` с Releases (с токеном, если репо закрытое)
+   - по SSH заливает бинарник и `install.sh`
    - запускает installer от root
 4. Installer один раз:
    - создаёт системного пользователя `rope`

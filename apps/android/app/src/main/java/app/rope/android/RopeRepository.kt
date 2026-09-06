@@ -11,6 +11,7 @@ import app.rope.android.data.ServerProfile
 import app.rope.android.net.ServerApi
 import app.rope.android.protocol.InviteCodec
 import app.rope.android.protocol.InviteLink as ParsedInvite
+import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.SshProvisioner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,37 +81,18 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(draftText = text)
     }
 
-    fun provision(
-        host: String,
-        sshPort: Int,
-        user: String,
-        password: String,
-        keyPem: String,
-        listenPort: Int,
-        binaryUrl: String,
-        displayName: String,
-        upgrade: Boolean,
-    ) {
+    fun provision(form: ProvisionForm) {
         scope.launch {
             busy(true)
             try {
-                val result = SshProvisioner(app).install(
-                    sshHost = host,
-                    sshPort = sshPort,
-                    sshUser = user,
-                    sshPassword = password.ifBlank { null },
-                    sshKeyPem = keyPem.ifBlank { null },
-                    listenPort = listenPort,
-                    binaryUrl = binaryUrl,
-                    upgrade = upgrade,
-                )
-                if (upgrade) {
+                val result = SshProvisioner(app).install(form)
+                if (form.upgrade) {
                     _state.value = _state.value.copy(statusText = "server core updated", busy = false, screen = Screen.Status)
                     return@launch
                 }
                 val id = identity ?: error("identity missing")
                 val boot = ServerApi(dummyProfile(result.host, result.port, result.fingerprint, true), id)
-                    .bootstrap(result.host, result.port, true, result.fingerprint, result.setupToken, displayName)
+                    .bootstrap(result.host, result.port, true, result.fingerprint, result.setupToken, form.displayName)
                 val profile = ServerProfile(
                     host = result.host,
                     port = result.port,
