@@ -23,7 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.Button
@@ -86,7 +86,7 @@ fun RopeScaffold(
                             Icon(Icons.Outlined.Dns, contentDescription = "Сервер")
                         }
                         IconButton(onClick = { onGo(Screen.Chats) }) {
-                            Icon(Icons.Outlined.Chat, contentDescription = "Чаты")
+                            Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = "Чаты")
                         }
                     }
                 },
