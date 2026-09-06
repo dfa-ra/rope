@@ -7,6 +7,7 @@ data class ProvisionForm(
     val password: String,
     val keyPem: String,
     val listenPort: Int,
+    val target: ServerTarget = ServerTarget.AUTO,
     val binaryUrl: String,
     val displayName: String,
     val githubToken: String,

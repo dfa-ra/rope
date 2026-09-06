@@ -25,8 +25,6 @@ class SshProvisioner(
     fun install(form: ProvisionForm): ProvisionResult {
         CryptoInit.ensureModernBc()
         val localBin = File(context.cacheDir, "rope-server-linux")
-        fetcher.downloadTo(form.binaryUrl, localBin, form.githubToken.ifBlank { null })
-        localBin.setExecutable(true)
 
         val ssh = connect(form.host, form.sshPort)
         try {
@@ -40,6 +38,14 @@ class SshProvisioner(
                 form.password.isNotBlank() -> ssh.authPassword(form.user, form.password)
                 else -> error("SSH password or key required")
             }
+            val uname = if (form.binaryUrl.isBlank() && form.target == ServerTarget.AUTO) {
+                exec(ssh, "uname -m")
+            } else {
+                null
+            }
+            val binaryUrl = ServerBinaries.resolveDownloadUrl(form, uname)
+            fetcher.downloadTo(binaryUrl, localBin, form.githubToken.ifBlank { null })
+            localBin.setExecutable(true)
             val script = context.assets.open("install.sh").bufferedReader().use { it.readText() }
             ssh.newSFTPClient().use { sftp ->
                 sftp.put(object : net.schmizz.sshj.xfer.InMemorySourceFile() {

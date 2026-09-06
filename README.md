@@ -48,7 +48,7 @@ Re-run with `--upgrade` to replace the binary and keep `data.db`.
 
 Push a tag `vX.Y.Z`. GitHub Actions publishes:
 
-- `rope-server-linux-amd64` and `linux-arm64`
+- `rope-server-linux-amd64` and `linux-arm64` (в приложении выбирается архитектура, без правки URL)
 - Android APK
 - `SHA256SUMS`
 

@@ -13,14 +13,14 @@
 2. По SSH заливает бинарник и `install.sh` на VPS (SFTP).
 3. На сервере installer только ставит systemd — без `curl` наружу.
 
-**Публичный репозиторий:** URL вида `https://github.com/dfa-ra/rope/releases/latest/download/rope-server-linux-amd64` качается без токена.
+**Публичный репозиторий:** приложение само берёт `rope-server-linux-amd64` или `arm64` с Releases (выбор архитектуры на экране, либо «Авто» через `uname -m`). URL руками указывать не нужно.
 
 **Приватный репозиторий:** анонимный download с VPS и с телефона даст 404. Нужен Personal Access Token (fine-grained: Contents Read на этот repo, или classic `repo`). Поле «GitHub token» на экране Create server. Токен живёт только в памяти телефона на время скачивания и **не** пишется в `/etc/rope` и не уезжает на VPS.
 
 ## Первая установка (организатор)
 
 1. На VPS открыт SSH (Ubuntu/Debian x86_64, пользователь с `sudo` или `root`).
-2. В приложении: **Create server** — IP/hostname, SSH-порт, логин, пароль или ключ, порт Rope (по умолчанию 8443). Для приватного GitHub — PAT в поле token.
+2. В приложении: **Создать сервер** — IP/hostname, SSH-порт, логин, пароль или ключ, архитектура VPS (`Авто` / Linux x86_64 / Linux ARM64). Порт Rope по умолчанию 8443. Для приватного GitHub — PAT в «Дополнительно».
 3. Телефон:
    - скачивает `rope-server` с Releases (с токеном, если репо закрытое)
    - по SSH заливает бинарник и `install.sh`
