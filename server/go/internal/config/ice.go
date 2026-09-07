@@ -74,6 +74,8 @@ func (c Config) IceServers(now time.Time) []IceServer {
 		{
 			URLs: []string{
 				fmt.Sprintf("turns:%s:%d?transport=tcp", host, turnsPort),
+				fmt.Sprintf("turns:%s:%d", host, turnsPort),
+				fmt.Sprintf("turn:%s:%d?transport=udp", host, turnPort),
 				fmt.Sprintf("turn:%s:%d", host, turnPort),
 				fmt.Sprintf("turn:%s:%d?transport=tcp", host, turnPort),
 			},

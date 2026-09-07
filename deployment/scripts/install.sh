@@ -310,6 +310,23 @@ EOF
     echo "TURN_PORT=${TURN_PORT}"
     return 0
   fi
+  # 443 may be taken by nginx/caddy; never move rope-server off 8443 — only TURNS.
+  if [[ "$TURNS_PORT" == "443" ]]; then
+    echo "coturn failed on 443; retrying TURNS on 5349" >&2
+    TURNS_PORT="5349"
+    if grep -q '^tls-listening-port=' /etc/turnserver.conf; then
+      sed -i "s/^tls-listening-port=.*/tls-listening-port=${TURNS_PORT}/" /etc/turnserver.conf
+    fi
+    cp /etc/turnserver.conf "$ETC_DIR/turnserver.conf"
+    chmod 640 /etc/turnserver.conf "$ETC_DIR/turnserver.conf"
+    systemctl restart coturn 2>/dev/null || systemctl restart turnserver 2>/dev/null || true
+    if systemctl is-active --quiet coturn || systemctl is-active --quiet turnserver; then
+      echo "ROPE_TURN_OK"
+      echo "TURNS_PORT=${TURNS_PORT}"
+      echo "TURN_PORT=${TURN_PORT}"
+      return 0
+    fi
+  fi
   echo "ROPE_TURN_SKIPPED=inactive" >&2
   systemctl status coturn --no-pager >&2 || systemctl status turnserver --no-pager >&2 || true
   return 1

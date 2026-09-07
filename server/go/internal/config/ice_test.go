@@ -59,6 +59,8 @@ func TestIceServersShapeAndHMAC(t *testing.T) {
 	turn := ice[1]
 	wantURLs := []string{
 		"turns:203.0.113.9:443?transport=tcp",
+		"turns:203.0.113.9:443",
+		"turn:203.0.113.9:3478?transport=udp",
 		"turn:203.0.113.9:3478",
 		"turn:203.0.113.9:3478?transport=tcp",
 	}
