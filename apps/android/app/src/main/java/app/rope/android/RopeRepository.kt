@@ -641,6 +641,7 @@ class RopeRepository(private val app: Application) {
         )
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun onApkInstallFailed(message: String, status: Int) {
         _state.value = _state.value.copy(
             busy = false,
