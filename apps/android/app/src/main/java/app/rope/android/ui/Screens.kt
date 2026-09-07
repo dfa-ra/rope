@@ -79,7 +79,6 @@ fun RopeScaffold(
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
     onPlay: (app.rope.android.data.ChatMessage) -> Unit,
-    onNewGroup: () -> Unit,
     onGroupName: (String) -> Unit,
     onToggleMember: (String) -> Unit,
     onCreateGroup: () -> Unit,

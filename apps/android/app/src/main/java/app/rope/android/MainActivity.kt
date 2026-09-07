@@ -92,7 +92,6 @@ class MainActivity : AppCompatActivity() {
                     onVoiceFinish = repo::finishVoice,
                     onCall = repo::startCall,
                     onPlay = repo::toggleVoice,
-                    onNewGroup = { repo.go(Screen.NewGroup) },
                     onGroupName = repo::setGroupName,
                     onToggleMember = repo::toggleMember,
                     onCreateGroup = repo::createGroup,
