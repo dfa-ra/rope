@@ -4,8 +4,13 @@ import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatIds
+import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ChatRouting
+import app.rope.android.data.Conversation
+import app.rope.android.data.MessageSearch
+import app.rope.android.data.TypingRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.GroupTextPayload
@@ -217,5 +222,44 @@ class Stage2UxTest {
         assertFalse(ChatActions.canForward(deleted))
         assertFalse(ChatActions.canEdit(deleted))
         assertEquals("Сообщение удалено", deleted.preview())
+        assertTrue(ChatActions.canCopy(incoming))
+        assertTrue(ChatActions.canPin(incoming))
+        assertFalse(ChatActions.canCopy(deleted))
+        assertFalse(ChatActions.canPin(deleted))
+    }
+
+    @Test
+    fun chatListSearchPinMuteAndTyping() {
+        val a = Conversation("1", "Анна", "привет", false, true, null, pinned = true, unread = 2)
+        val b = Conversation("2", "Боб", "ок", false, false, null, muted = true)
+        assertTrue(ChatListRules.matches(a, "анн"))
+        assertFalse(ChatListRules.matches(b, "анн"))
+        assertTrue(ChatListRules.compare(a, b) < 0)
+        val prefs = ChatPrefs.parse(ChatPrefs(pinned = true, muted = true, unread = 3, draft = "черн", pinnedMessageId = "m1").toJson())
+        assertTrue(prefs.pinned)
+        assertTrue(prefs.muted)
+        assertEquals(3, prefs.unread)
+        assertEquals("черн", prefs.draft)
+        assertEquals("m1", prefs.pinnedMessageId)
+        val msg = ChatMessage("m", "p", false, "Секретный текст", MessageStatus.DELIVERED_TO_DEVICE, 1L)
+        assertTrue(MessageSearch.matches(msg, "секрет"))
+        assertFalse(MessageSearch.matches(msg, "фото"))
+        assertTrue(TypingRules.shouldSend(0, 3_000, "hi"))
+        assertFalse(TypingRules.shouldSend(2_500, 3_000, "hi"))
+        assertTrue(TypingRules.isActive(4_000, 3_000))
+        val typing = ChatControl.parse("""{"kind":"typing"}""")!!
+        assertEquals(ChatControl.TYPING, typing.kind)
+        val pin = ChatControl.parse(ChatControl(ChatControl.PIN, "m9", op = "set").toJson())!!
+        assertEquals(ChatControl.PIN, pin.kind)
+        assertEquals("m9", pin.targetId)
+        assertEquals("в сети", MessageTime.lastSeenLabel("", true))
+        val seen = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 14)
+            set(java.util.Calendar.MINUTE, 5)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val rfc = java.time.Instant.ofEpochMilli(seen.timeInMillis).toString()
+        assertEquals("был(а) 14:05", MessageTime.lastSeenLabel(rfc, false, seen.timeInMillis))
     }
 }

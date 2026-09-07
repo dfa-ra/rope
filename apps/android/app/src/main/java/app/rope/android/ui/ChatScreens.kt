@@ -33,11 +33,15 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,8 +69,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatActions
+import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ComposerRules
+import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
@@ -87,6 +93,9 @@ fun ChatsPane(
     onNewGroup: () -> Unit,
     onUpdateApp: () -> Unit = {},
     onCancelForward: () -> Unit = {},
+    onQuery: (String) -> Unit = {},
+    onPinChat: (String) -> Unit = {},
+    onMuteChat: (String) -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize()) {
         val forwarding = state.forwarding
@@ -133,18 +142,46 @@ fun ChatsPane(
                 }
             }
         }
+        TextField(
+            value = state.chatQuery,
+            onValueChange = onQuery,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            placeholder = { Text("Поиск чатов") },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            trailingIcon = {
+                if (state.chatQuery.isNotBlank()) {
+                    IconButton(onClick = { onQuery("") }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Очистить")
+                    }
+                }
+            },
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            shape = RoundedCornerShape(18.dp),
+        )
+        val rows = state.conversations.filter { ChatListRules.matches(it, state.chatQuery) }
         Box(Modifier.weight(1f).fillMaxSize()) {
-            if (state.conversations.isEmpty()) {
+            if (rows.isEmpty()) {
                 Column(
                     Modifier
                         .fillMaxSize()
                         .padding(24.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("Пока никого нет", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (state.chatQuery.isNotBlank()) "Ничего не нашли" else "Пока никого нет",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                     Text(
                         if (state.forwarding != null) {
                             "Некуда переслать. Пригласите человека или создайте группу."
+                        } else if (state.chatQuery.isNotBlank()) {
+                            "Попробуйте другое имя или текст последнего сообщения."
                         } else {
                             "Пригласите человека QR-кодом или создайте группу."
                         },
@@ -154,8 +191,13 @@ fun ChatsPane(
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(state.conversations, key = { it.id }) { c ->
-                        ConversationRow(c) { onOpen(c) }
+                    items(rows, key = { it.id }) { c ->
+                        ConversationRow(
+                            c,
+                            onClick = { onOpen(c) },
+                            onPin = { onPinChat(c.id) },
+                            onMute = { onMuteChat(c.id) },
+                        )
                     }
                 }
             }
@@ -173,35 +215,92 @@ fun ChatsPane(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ConversationRow(c: Conversation, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        InitialsAvatar(c.title, c.isGroup, c.online)
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                c.last?.let {
+private fun ConversationRow(
+    c: Conversation,
+    onClick: () -> Unit,
+    onPin: () -> Unit,
+    onMute: () -> Unit,
+) {
+    var menu by remember(c.id) { mutableStateOf(false) }
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = { menu = !menu })
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            InitialsAvatar(c.title, c.isGroup, c.online)
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (c.pinned) {
+                        Icon(
+                            Icons.Outlined.PushPin,
+                            contentDescription = "Закреплён",
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (c.muted) {
+                        Icon(
+                            Icons.Outlined.NotificationsOff,
+                            contentDescription = "Без звука",
+                            modifier = Modifier
+                                .padding(end = 6.dp)
+                                .size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    c.last?.let {
+                        Text(
+                            MessageTime.label(it.timestampMs),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    c.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (c.online && !c.isGroup) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (c.unread > 0) {
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        MessageTime.label(it.timestampMs),
+                        if (c.unread > 99) "99+" else c.unread.toString(),
+                        color = MaterialTheme.colorScheme.onPrimary,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            Text(
-                c.subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (c.online && !c.isGroup) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        }
+        if (menu) {
+            Row(
+                Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = { onPin(); menu = false }) {
+                    Text(if (c.pinned) "Открепить" else "Закрепить")
+                }
+                TextButton(onClick = { onMute(); menu = false }) {
+                    Text(if (c.muted) "Включить звук" else "Без звука")
+                }
+            }
         }
     }
 }
@@ -224,20 +323,36 @@ fun ChatPane(
     onDelete: (ChatMessage) -> Unit = {},
     onForward: (ChatMessage) -> Unit = {},
     onCancelComposer: () -> Unit = {},
+    onCopy: (ChatMessage) -> Unit = {},
+    onPinMessage: (ChatMessage) -> Unit = {},
+    onJump: (String?) -> Unit = {},
+    onOpenImage: (ChatMessage) -> Unit = {},
+    onMessageQuery: (String) -> Unit = {},
+    onConsumedScroll: () -> Unit = {},
 ) {
     val title = state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
     } ?: (state.peer?.online == true)
     val subtitle = when {
+        !state.typingName.isNullOrBlank() ->
+            if (state.group != null) "${state.typingName} печатает…" else "печатает…"
         state.group != null -> "${state.group.members.size} участников · ${if (online) "кто-то в сети" else "все офлайн"}"
-        online -> "в сети"
-        else -> "не в сети — дойдёт, когда появится"
+        else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
     }
+    val visible = state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     val list = rememberLazyListState()
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) list.animateScrollToItem(state.messages.lastIndex)
+    var showSearch by remember { mutableStateOf(false) }
+    LaunchedEffect(visible.size, state.messageQuery) {
+        if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
     }
+    LaunchedEffect(state.scrollToMessageId) {
+        val id = state.scrollToMessageId ?: return@LaunchedEffect
+        val idx = visible.indexOfFirst { it.id == id }
+        if (idx >= 0) list.animateScrollToItem(idx)
+        onConsumedScroll()
+    }
+    val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -250,11 +365,54 @@ fun ChatPane(
             InitialsAvatar(title, state.group != null, online)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
+                Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
             }
             if (state.peer != null && state.group == null) {
                 IconButton(onClick = onCall) {
                     Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
+                }
+            }
+        }
+        if (showSearch) {
+            TextField(
+                value = state.messageQuery,
+                onValueChange = onMessageQuery,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                placeholder = { Text("Найти в чате") },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                shape = RoundedCornerShape(16.dp),
+            )
+        }
+        pinned?.let { pin ->
+            Surface(
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onJump(pin.id) },
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Outlined.PushPin, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f)) {
+                        Text("Закреплено", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(pin.preview(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -266,8 +424,11 @@ fun ChatPane(
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            items(state.messages, key = { it.id }) { m ->
-                MessageBubble(m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward)
+            items(visible, key = { it.id }) { m ->
+                MessageBubble(
+                    m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
+                    onCopy, onPinMessage, onJump, onOpenImage,
+                )
             }
         }
         ComposerBar(state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCancelComposer)
@@ -286,6 +447,10 @@ private fun MessageBubble(
     onEdit: (ChatMessage) -> Unit,
     onDelete: (ChatMessage) -> Unit,
     onForward: (ChatMessage) -> Unit,
+    onCopy: (ChatMessage) -> Unit,
+    onPinMessage: (ChatMessage) -> Unit,
+    onJump: (String?) -> Unit,
+    onOpenImage: (ChatMessage) -> Unit,
 ) {
     val mine = m.outgoing
     val dark = MaterialTheme.colorScheme.background == Color(0xFF0B0F19)
@@ -322,6 +487,7 @@ private fun MessageBubble(
                         name = m.replyName.ifBlank { "Ответ" },
                         preview = m.replyPreview.ifBlank { "Сообщение" },
                         accent = if (mine) outFg else MaterialTheme.colorScheme.primary,
+                        onClick = { onJump(m.replyToId) },
                     )
                 }
                 if (m.deleted) {
@@ -334,7 +500,7 @@ private fun MessageBubble(
                 } else {
                     when (m.kind) {
                         MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
-                        MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia)
+                        MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia, onOpenImage)
                         MessageKind.FILE -> FileBubble(m)
                         MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                         MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
@@ -358,8 +524,11 @@ private fun MessageBubble(
             }
             MessageActionRow(
                 m,
+                pinned = state.pinnedMessageId == m.id,
                 onReply = { onReply(m); picker = false },
                 onForward = { onForward(m); picker = false },
+                onCopy = { onCopy(m); picker = false },
+                onPin = { onPinMessage(m); picker = false },
                 onEdit = { onEdit(m); picker = false },
                 onDelete = { onDelete(m); picker = false },
             )
@@ -371,13 +540,14 @@ private fun MessageBubble(
 }
 
 @Composable
-private fun ReplyQuote(name: String, preview: String, accent: Color) {
+private fun ReplyQuote(name: String, preview: String, accent: Color, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
             .padding(bottom = 6.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.16f))
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Text(name, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -389,8 +559,11 @@ private fun ReplyQuote(name: String, preview: String, accent: Color) {
 @Composable
 private fun MessageActionRow(
     m: ChatMessage,
+    pinned: Boolean,
     onReply: () -> Unit,
     onForward: () -> Unit,
+    onCopy: () -> Unit,
+    onPin: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -408,6 +581,12 @@ private fun MessageActionRow(
             }
             if (ChatActions.canForward(m)) {
                 TextButton(onClick = onForward) { Text("Переслать") }
+            }
+            if (ChatActions.canCopy(m)) {
+                TextButton(onClick = onCopy) { Text("Копировать") }
+            }
+            if (ChatActions.canPin(m)) {
+                TextButton(onClick = onPin) { Text(if (pinned) "Открепить" else "Закрепить") }
             }
             if (ChatActions.canEdit(m)) {
                 TextButton(onClick = onEdit) { Text("Изменить") }
@@ -497,7 +676,7 @@ private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) 
 }
 
 @Composable
-private fun ImageBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit) {
+private fun ImageBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit, onOpen: (ChatMessage) -> Unit) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
     }
@@ -510,7 +689,8 @@ private fun ImageBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 220.dp)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpen(m) },
         )
     } else {
         Text(
@@ -668,6 +848,30 @@ fun InitialsAvatar(title: String, group: Boolean, online: Boolean) {
                 .clip(CircleShape)
                 .background(if (online) Color(0xFF43A047) else Color(0xFF9E9E9E)),
         )
+    }
+}
+
+@Composable
+fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.94f))
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        val bmp = msg.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Фото",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+            )
+        } else {
+            Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        }
     }
 }
 

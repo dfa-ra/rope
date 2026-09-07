@@ -336,6 +336,35 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         put("theme", mode.name)
     }
 
+    fun allChatPrefs(): Map<String, ChatPrefs> {
+        val raw = get("chat_prefs") ?: return emptyMap()
+        return try {
+            val o = JSONObject(raw)
+            buildMap {
+                o.keys().forEach { key ->
+                    val item = o.opt(key)
+                    val json = when (item) {
+                        is JSONObject -> item.toString()
+                        else -> item?.toString()
+                    }
+                    put(key, ChatPrefs.parse(json))
+                }
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun chatPrefs(id: String): ChatPrefs = allChatPrefs()[id] ?: ChatPrefs()
+
+    fun saveChatPrefs(id: String, prefs: ChatPrefs) {
+        val all = allChatPrefs().toMutableMap()
+        all[id] = prefs
+        val o = JSONObject()
+        all.forEach { (key, value) -> o.put(key, JSONObject(value.toJson())) }
+        put("chat_prefs", o.toString())
+    }
+
     fun themeMode(defaultDark: Boolean): ThemeMode {
         return when (get("theme")?.lowercase()) {
             "light" -> ThemeMode.LIGHT

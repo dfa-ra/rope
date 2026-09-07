@@ -101,6 +101,17 @@ fun RopeScaffold(
     onForward: (app.rope.android.data.ChatMessage) -> Unit,
     onCancelComposer: () -> Unit,
     onCancelForward: () -> Unit,
+    onChatQuery: (String) -> Unit,
+    onMessageQuery: (String) -> Unit,
+    onPinChat: (String) -> Unit,
+    onMuteChat: (String) -> Unit,
+    onCopy: (app.rope.android.data.ChatMessage) -> Unit,
+    onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
+    onJump: (String?) -> Unit,
+    onOpenImage: (app.rope.android.data.ChatMessage) -> Unit,
+    onCloseImage: () -> Unit,
+    onConsumedScroll: () -> Unit,
+    onDismissNotice: () -> Unit,
 ) {
     Box {
     Scaffold(
@@ -146,6 +157,16 @@ fun RopeScaffold(
             if (state.busy) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
+            state.notice?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .clickable(onClick = onDismissNotice),
+                )
+            }
             state.error?.let {
                 Text(
                     it,
@@ -168,6 +189,9 @@ fun RopeScaffold(
                         { onGo(Screen.NewGroup) },
                         onUpdateApp,
                         onCancelForward,
+                        onChatQuery,
+                        onPinChat,
+                        onMuteChat,
                     )
                     Screen.Chat -> app.rope.android.ui.ChatPane(
                         state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
@@ -178,6 +202,12 @@ fun RopeScaffold(
                         onDelete = onDelete,
                         onForward = onForward,
                         onCancelComposer = onCancelComposer,
+                        onCopy = onCopy,
+                        onPinMessage = onPinMessage,
+                        onJump = onJump,
+                        onOpenImage = onOpenImage,
+                        onMessageQuery = onMessageQuery,
+                        onConsumedScroll = onConsumedScroll,
                     )
                     Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
                     Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore)
@@ -190,6 +220,9 @@ fun RopeScaffold(
     }
     state.call?.let { call ->
         app.rope.android.ui.CallOverlay(call, onAcceptCall, onRejectCall, onHangup)
+    }
+    state.viewingImage?.let { img ->
+        app.rope.android.ui.ImageViewer(img, onCloseImage)
     }
     }
 }

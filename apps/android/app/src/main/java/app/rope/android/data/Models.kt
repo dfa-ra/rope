@@ -88,6 +88,9 @@ data class Conversation(
     val last: ChatMessage?,
     val peer: DirectoryDevice? = null,
     val group: RopeGroup? = null,
+    val pinned: Boolean = false,
+    val muted: Boolean = false,
+    val unread: Int = 0,
 )
 
 enum class CallPhase { RINGING_IN, RINGING_OUT, ACTIVE, ENDED }

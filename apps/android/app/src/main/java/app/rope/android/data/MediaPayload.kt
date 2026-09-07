@@ -161,6 +161,10 @@ data class ChatControl(
         const val REACTION = "reaction"
         const val EDIT = "edit"
         const val DELETE = "delete"
+        const val TYPING = "typing"
+        const val PIN = "pin"
+
+        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN)
 
         fun parse(raw: String): ChatControl? {
             val o = try {
@@ -169,8 +173,8 @@ data class ChatControl(
                 return null
             }
             val kind = o.optString("kind")
-            val target = JsonIds.optional(o.optString("target")) ?: return null
-            if (kind !in setOf(REACTION, EDIT, DELETE)) return null
+            if (kind !in kinds) return null
+            val target = JsonIds.optional(o.optString("target")) ?: if (kind == TYPING) "typing" else return null
             return ChatControl(
                 kind = kind,
                 targetId = target,
@@ -230,6 +234,83 @@ object ChatActions {
             (msg.kind == MessageKind.TEXT || msg.kind == MessageKind.GROUP_TEXT)
 
     fun canDelete(msg: ChatMessage): Boolean = msg.outgoing && !msg.deleted
+
+    fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
+
+    fun canPin(msg: ChatMessage): Boolean = !msg.deleted
+}
+
+data class ChatPrefs(
+    val pinned: Boolean = false,
+    val muted: Boolean = false,
+    val unread: Int = 0,
+    val lastReadMs: Long = 0,
+    val draft: String = "",
+    val pinnedMessageId: String? = null,
+) {
+    fun toJson(): String = JSONObject()
+        .put("pinned", pinned)
+        .put("muted", muted)
+        .put("unread", unread)
+        .put("last_read_ms", lastReadMs)
+        .put("draft", draft)
+        .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
+        .toString()
+
+    companion object {
+        fun parse(raw: String?): ChatPrefs {
+            if (raw.isNullOrBlank()) return ChatPrefs()
+            return try {
+                val o = JSONObject(raw)
+                ChatPrefs(
+                    pinned = o.optBoolean("pinned"),
+                    muted = o.optBoolean("muted"),
+                    unread = o.optInt("unread"),
+                    lastReadMs = o.optLong("last_read_ms"),
+                    draft = o.optString("draft"),
+                    pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
+                )
+            } catch (_: Exception) {
+                ChatPrefs()
+            }
+        }
+    }
+}
+
+object ChatListRules {
+    fun matches(c: Conversation, query: String): Boolean {
+        if (query.isBlank()) return true
+        val q = query.trim().lowercase()
+        return c.title.lowercase().contains(q) ||
+            c.subtitle.lowercase().contains(q) ||
+            c.last?.preview()?.lowercase()?.contains(q) == true
+    }
+
+    fun compare(a: Conversation, b: Conversation): Int {
+        val pin = b.pinned.compareTo(a.pinned)
+        if (pin != 0) return pin
+        return (b.last?.timestampMs ?: 0L).compareTo(a.last?.timestampMs ?: 0L)
+    }
+}
+
+object MessageSearch {
+    fun matches(msg: ChatMessage, query: String): Boolean {
+        if (query.isBlank()) return true
+        val q = query.trim().lowercase()
+        return msg.text.lowercase().contains(q) ||
+            msg.senderName.lowercase().contains(q) ||
+            msg.preview().lowercase().contains(q)
+    }
+}
+
+object TypingRules {
+    const val TTL_MS = 3500L
+    const val SEND_EVERY_MS = 2000L
+
+    fun shouldSend(lastSentAt: Long, now: Long, draft: String): Boolean =
+        draft.isNotBlank() && now - lastSentAt >= SEND_EVERY_MS
+
+    fun isActive(untilMs: Long, now: Long): Boolean = untilMs > now
 }
 
 object EnvelopeTypes {
@@ -344,6 +425,21 @@ object MessageTime {
         val mark = ComposerRules.statusLabel(status, outgoing)
         val edit = if (edited) "изм." else ""
         return listOf(time, edit, mark).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
+    fun lastSeenLabel(raw: String, online: Boolean, now: Long = System.currentTimeMillis()): String {
+        if (online) return "в сети"
+        val ms = parseRfc3339(raw) ?: return "не в сети — дойдёт, когда появится"
+        return "был(а) ${label(ms, now)}"
+    }
+
+    fun parseRfc3339(raw: String): Long? {
+        if (raw.isBlank()) return null
+        return try {
+            java.time.Instant.parse(raw).toEpochMilli()
+        } catch (_: Exception) {
+            null
+        }
     }
 }
 

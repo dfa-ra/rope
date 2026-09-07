@@ -129,6 +129,17 @@ class MainActivity : AppCompatActivity() {
                     onForward = repo::startForward,
                     onCancelComposer = repo::cancelComposerExtra,
                     onCancelForward = repo::cancelForward,
+                    onChatQuery = repo::setChatQuery,
+                    onMessageQuery = repo::setMessageQuery,
+                    onPinChat = repo::togglePinChat,
+                    onMuteChat = repo::toggleMuteChat,
+                    onCopy = repo::copyMessage,
+                    onPinMessage = repo::togglePinMessage,
+                    onJump = repo::jumpToMessage,
+                    onOpenImage = repo::openImage,
+                    onCloseImage = repo::closeImage,
+                    onConsumedScroll = repo::consumeScrollTo,
+                    onDismissNotice = repo::dismissNotice,
                 )
             }
         }

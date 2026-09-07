@@ -1,6 +1,9 @@
 package app.rope.android
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -22,8 +25,11 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
+import app.rope.android.data.ChatListRules
+import app.rope.android.data.ChatPrefs
 import app.rope.android.data.RoleRules
 import app.rope.android.data.TextBody
+import app.rope.android.data.TypingRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -103,6 +109,13 @@ data class UiState(
     val replyTo: ChatMessage? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
+    val chatQuery: String = "",
+    val messageQuery: String = "",
+    val typingName: String? = null,
+    val viewingImage: ChatMessage? = null,
+    val scrollToMessageId: String? = null,
+    val notice: String? = null,
+    val pinnedMessageId: String? = null,
 )
 
 enum class Screen { Start, Provision, Join, Chats, Chat, Invite, Status, Settings, NewGroup, GroupInfo }
@@ -125,6 +138,9 @@ class RopeRepository(private val app: Application) {
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
     private val mediaAttempts = mutableSetOf<String>()
+    private var lastTypingSentAt = 0L
+    private val typingUntil = mutableMapOf<String, Pair<String, Long>>()
+    private var typingJob: Job? = null
 
     fun start(pendingLink: String?) {
         scope.launch {
@@ -158,7 +174,8 @@ class RopeRepository(private val app: Application) {
     }
 
     fun go(screen: Screen) {
-        _state.value = _state.value.copy(screen = screen, error = null)
+        if (screen != Screen.Chat) persistOpenDraft()
+        _state.value = _state.value.copy(screen = screen, error = null, viewingImage = null)
         if (screen == Screen.Chats) refreshConversations()
         if (screen == Screen.NewGroup) {
             _state.value = _state.value.copy(groupNameDraft = "", pickedMembers = emptySet())
@@ -167,6 +184,16 @@ class RopeRepository(private val app: Application) {
 
     fun setDraft(text: String) {
         _state.value = _state.value.copy(draftText = text)
+        persistOpenDraft()
+        maybeSendTyping(text)
+    }
+
+    fun setChatQuery(query: String) {
+        _state.value = _state.value.copy(chatQuery = query)
+    }
+
+    fun setMessageQuery(query: String) {
+        _state.value = _state.value.copy(messageQuery = query)
     }
 
     fun setGroupName(name: String) {
@@ -316,23 +343,13 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openChat(device: DirectoryDevice) {
-        _state.value = _state.value.copy(
-            screen = Screen.Chat,
-            peer = device,
-            group = null,
-            messages = store.messages(device.deviceId),
-        )
-        prefetchMedia(_state.value.messages)
+        persistOpenDraft()
+        enterChat(device.deviceId, device, null)
     }
 
     fun openGroup(group: RopeGroup) {
-        _state.value = _state.value.copy(
-            screen = Screen.Chat,
-            peer = null,
-            group = group,
-            messages = store.messages(ChatIds.group(group.groupId)),
-        )
-        prefetchMedia(_state.value.messages)
+        persistOpenDraft()
+        enterChat(ChatIds.group(group.groupId), null, group)
     }
 
     fun openConversation(c: Conversation) {
@@ -364,11 +381,13 @@ class RopeRepository(private val app: Application) {
         val edit = _state.value.editTarget
         if (edit != null) {
             _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null)
+            persistOpenDraft()
             applyEdit(edit, text)
             return
         }
         val reply = _state.value.replyTo
         _state.value = _state.value.copy(draftText = "", replyTo = null)
+        persistOpenDraft()
         val group = _state.value.group
         if (group != null) {
             sendGroupText(group, text, reply)
@@ -438,6 +457,64 @@ class RopeRepository(private val app: Application) {
 
     fun cancelForward() {
         _state.value = _state.value.copy(forwarding = null)
+    }
+
+    fun togglePinChat(id: String) {
+        val cur = store.chatPrefs(id)
+        store.saveChatPrefs(id, cur.copy(pinned = !cur.pinned))
+        refreshConversations()
+    }
+
+    fun toggleMuteChat(id: String) {
+        val cur = store.chatPrefs(id)
+        store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
+        refreshConversations()
+    }
+
+    fun copyMessage(msg: ChatMessage) {
+        if (!msg.text.isNotBlank() || msg.deleted) return
+        val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
+        _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun togglePinMessage(msg: ChatMessage) {
+        if (msg.deleted) return
+        val chatId = openChatId() ?: msg.peerDeviceId
+        val cur = store.chatPrefs(chatId)
+        val nextId = if (cur.pinnedMessageId == msg.id) null else msg.id
+        store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = nextId))
+        _state.value = _state.value.copy(pinnedMessageId = nextId)
+        sendControl(
+            EnvelopeTypes.RECEIPT,
+            ChatControl(
+                ChatControl.PIN,
+                msg.id,
+                op = if (nextId == null) ReactionPayload.CLEAR else ReactionPayload.SET,
+            ).toJson().toByteArray(),
+        )
+    }
+
+    fun jumpToMessage(id: String?) {
+        if (id.isNullOrBlank()) return
+        _state.value = _state.value.copy(scrollToMessageId = id)
+    }
+
+    fun consumeScrollTo() {
+        _state.value = _state.value.copy(scrollToMessageId = null)
+    }
+
+    fun openImage(msg: ChatMessage) {
+        if (msg.kind != MessageKind.IMAGE || msg.deleted) return
+        _state.value = _state.value.copy(viewingImage = msg)
+    }
+
+    fun closeImage() {
+        _state.value = _state.value.copy(viewingImage = null)
+    }
+
+    fun dismissNotice() {
+        _state.value = _state.value.copy(notice = null)
     }
 
     fun completeForward(c: Conversation) {
@@ -1091,6 +1168,68 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    private fun openChatId(): String? {
+        _state.value.group?.let { return ChatIds.group(it.groupId) }
+        return _state.value.peer?.deviceId
+    }
+
+    private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?) {
+        val prefs = store.chatPrefs(chatId)
+        store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
+        _state.value = _state.value.copy(
+            screen = Screen.Chat,
+            peer = peer,
+            group = group,
+            messages = store.messages(chatId),
+            draftText = prefs.draft,
+            replyTo = null,
+            editTarget = null,
+            messageQuery = "",
+            pinnedMessageId = prefs.pinnedMessageId,
+            viewingImage = null,
+        )
+        publishTyping()
+        prefetchMedia(_state.value.messages)
+        refreshConversations()
+    }
+
+    private fun persistOpenDraft() {
+        val id = openChatId() ?: return
+        val cur = store.chatPrefs(id)
+        if (cur.draft == _state.value.draftText) return
+        store.saveChatPrefs(id, cur.copy(draft = _state.value.draftText))
+    }
+
+    private fun maybeSendTyping(text: String) {
+        val now = System.currentTimeMillis()
+        if (!TypingRules.shouldSend(lastTypingSentAt, now, text)) return
+        lastTypingSentAt = now
+        val target = openChatId() ?: return
+        sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.TYPING, target).toJson().toByteArray())
+    }
+
+    private fun noteTyping(chatId: String, name: String) {
+        typingUntil[chatId] = name.ifBlank { "печатает" } to System.currentTimeMillis() + TypingRules.TTL_MS
+        publishTyping()
+        if (typingJob?.isActive == true) return
+        typingJob = scope.launch {
+            while (typingUntil.isNotEmpty()) {
+                delay(800)
+                val now = System.currentTimeMillis()
+                typingUntil.entries.removeAll { !TypingRules.isActive(it.value.second, now) }
+                publishTyping()
+            }
+        }
+    }
+
+    private fun publishTyping() {
+        val open = openChatId()
+        val name = open?.let { typingUntil[it]?.first }
+        if (_state.value.typingName != name) {
+            _state.value = _state.value.copy(typingName = name)
+        }
+    }
+
     private fun applyEdit(msg: ChatMessage, text: String) {
         store.editMessage(msg.id, text)
         refreshOpenChat()
@@ -1201,8 +1340,10 @@ class RopeRepository(private val app: Application) {
         val devices = _state.value.devices
         val groups = _state.value.groups
         val lastBy = store.conversations().associate { it.first to it.second }
+        val prefs = store.allChatPrefs()
         val dms = devices.map { d ->
             val last = lastBy[d.deviceId]
+            val p = prefs[d.deviceId] ?: ChatPrefs()
             Conversation(
                 id = d.deviceId,
                 title = d.displayName.ifBlank { d.deviceId.take(8) },
@@ -1211,18 +1352,26 @@ class RopeRepository(private val app: Application) {
                 online = d.online,
                 last = last,
                 peer = d,
+                pinned = p.pinned,
+                muted = p.muted,
+                unread = p.unread,
             )
         }
         val gs = groups.map { g ->
-            val last = lastBy[ChatIds.group(g.groupId)]
+            val id = ChatIds.group(g.groupId)
+            val last = lastBy[id]
+            val p = prefs[id] ?: ChatPrefs()
             Conversation(
-                id = ChatIds.group(g.groupId),
+                id = id,
                 title = g.name,
                 subtitle = last?.preview() ?: "${g.members.size} участников",
                 isGroup = true,
                 online = g.members.any { it in _state.value.onlineIds && it != identity?.deviceId() },
                 last = last,
                 group = g,
+                pinned = p.pinned,
+                muted = p.muted,
+                unread = p.unread,
             )
         }
         val leftover = lastBy.keys
@@ -1232,6 +1381,7 @@ class RopeRepository(private val app: Application) {
                     gs.none { it.id == id }
             }
             .map { id ->
+                val p = prefs[id] ?: ChatPrefs()
                 Conversation(
                     id = id,
                     title = id.take(8),
@@ -1240,10 +1390,13 @@ class RopeRepository(private val app: Application) {
                     online = id in _state.value.onlineIds,
                     last = lastBy[id],
                     peer = devices.find { it.deviceId == id },
+                    pinned = p.pinned,
+                    muted = p.muted,
+                    unread = p.unread,
                 )
             }
         _state.value = _state.value.copy(
-            conversations = (dms + gs + leftover).sortedByDescending { it.last?.timestampMs ?: 0L },
+            conversations = (dms + gs + leftover).sortedWith { a, b -> ChatListRules.compare(a, b) },
         )
     }
 
@@ -1415,6 +1568,20 @@ class RopeRepository(private val app: Application) {
                 when {
                     control?.kind == ChatControl.EDIT -> store.editMessage(control.targetId, control.text)
                     control?.kind == ChatControl.DELETE -> store.markDeleted(control.targetId)
+                    control?.kind == ChatControl.TYPING -> {
+                        val chatId = if (ChatIds.isGroup(control.targetId)) control.targetId else sender.deviceId
+                        noteTyping(chatId, sender.displayName)
+                    }
+                    control?.kind == ChatControl.PIN -> {
+                        val chatId = store.message(control.targetId)?.peerDeviceId
+                            ?: if (ChatIds.isGroup(control.targetId)) control.targetId else sender.deviceId
+                        val cur = store.chatPrefs(chatId)
+                        val next = if (control.op == ReactionPayload.CLEAR) null else control.targetId
+                        store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = next))
+                        if (openChatId() == chatId) {
+                            _state.value = _state.value.copy(pinnedMessageId = next)
+                        }
+                    }
                     reaction != null -> store.applyReaction(
                         reaction.targetId,
                         reaction.emoji,
@@ -1570,11 +1737,12 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun notifyIfHidden(title: String, body: String, chatId: String) {
-        val open = _state.value.screen == Screen.Chat && (
-            _state.value.peer?.deviceId == chatId ||
-                (_state.value.group != null && ChatIds.group(_state.value.group!!.groupId) == chatId)
-            )
-        if (!open) notifier.message(title, body)
+        val open = _state.value.screen == Screen.Chat && openChatId() == chatId
+        if (open) return
+        val cur = store.chatPrefs(chatId)
+        store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
+        refreshConversations()
+        if (!cur.muted) notifier.message(title, body)
     }
 
     private fun ack(messageId: String) {
