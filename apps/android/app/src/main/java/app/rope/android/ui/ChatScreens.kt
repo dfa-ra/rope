@@ -1,13 +1,25 @@
 package app.rope.android.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,9 +45,12 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.InsertDriveFile
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Pause
@@ -60,13 +75,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListRules
@@ -79,12 +97,15 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.ReactionPayload
+import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
+import kotlinx.coroutines.delay
 
 private val OutBubbleLight = Color(0xFF2563EB)
 private val OutBubbleDark = Color(0xFF00D4FF)
 private val InBubbleLight = Color(0xFFF1F5F9)
 private val InBubbleDark = Color(0xFF1E293B)
+private val RecRed = Color(0xFFE53935)
 
 @Composable
 fun ChatsPane(
@@ -101,7 +122,11 @@ fun ChatsPane(
         val forwarding = state.forwarding
         when {
             forwarding != null -> {
-                Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    tonalElevation = 3.dp,
+                    shape = RoundedCornerShape(bottomStart = RopeShapes.card, bottomEnd = RopeShapes.card),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Row(
                         Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -124,6 +149,7 @@ fun ChatsPane(
             state.appUpdateAvailable -> {
                 Surface(
                     tonalElevation = 2.dp,
+                    shape = RoundedCornerShape(bottomStart = RopeShapes.card, bottomEnd = RopeShapes.card),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onUpdateApp),
@@ -162,7 +188,7 @@ fun ChatsPane(
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
             ),
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(RopeShapes.search),
         )
         val rows = state.conversations.filter { ChatListRules.matches(it, state.chatQuery) }
         Box(Modifier.weight(1f).fillMaxSize()) {
@@ -207,6 +233,7 @@ fun ChatsPane(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),
+                    shape = CircleShape,
                 ) {
                     Icon(Icons.Outlined.Add, contentDescription = "Новая группа")
                 }
@@ -224,11 +251,27 @@ private fun ConversationRow(
     onMute: () -> Unit,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
-    Column {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = when {
+            pressed -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            menu -> MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+            else -> Color.Transparent
+        },
+        animationSpec = tween(120),
+        label = "chatRow",
+    )
+    Column(Modifier.background(bg)) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = { menu = !menu })
+                .combinedClickable(
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
+                    onClick = onClick,
+                    onLongClick = { menu = !menu },
+                )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -343,6 +386,7 @@ fun ChatPane(
     val visible = state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
+    var flashId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(visible.size, state.messageQuery) {
         if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
     }
@@ -350,7 +394,10 @@ fun ChatPane(
         val id = state.scrollToMessageId ?: return@LaunchedEffect
         val idx = visible.indexOfFirst { it.id == id }
         if (idx >= 0) list.animateScrollToItem(idx)
+        flashId = id
         onConsumedScroll()
+        delay(700)
+        if (flashId == id) flashId = null
     }
     val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
     Column(Modifier.fillMaxSize()) {
@@ -393,12 +440,13 @@ fun ChatPane(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(RopeShapes.search),
             )
         }
         pinned?.let { pin ->
             Surface(
                 tonalElevation = 2.dp,
+                shape = RoundedCornerShape(bottomStart = RopeShapes.quote, bottomEnd = RopeShapes.quote),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onJump(pin.id) },
@@ -428,6 +476,7 @@ fun ChatPane(
                 MessageBubble(
                     m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
                     onCopy, onPinMessage, onJump, onOpenImage,
+                    highlighted = flashId == m.id,
                 )
             }
         }
@@ -451,6 +500,7 @@ private fun MessageBubble(
     onPinMessage: (ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
     onOpenImage: (ChatMessage) -> Unit,
+    highlighted: Boolean = false,
 ) {
     val mine = m.outgoing
     val dark = MaterialTheme.colorScheme.background == Color(0xFF0B0F19)
@@ -458,18 +508,43 @@ private fun MessageBubble(
     val outFg = if (dark) Color(0xFF0B0F19) else Color.White
     var picker by remember(m.id) { mutableStateOf(false) }
     val me = state.profile?.deviceId.orEmpty()
+    val selected = picker || highlighted
+    var appeared by remember(m.id) { mutableStateOf(false) }
+    LaunchedEffect(m.id) { appeared = true }
+    val appear by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 380f),
+        label = "bubbleIn",
+    )
+    val selectScale by animateFloatAsState(
+        targetValue = if (selected) 1.03f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 420f),
+        label = "bubbleSel",
+    )
+    val selectAlpha by animateFloatAsState(
+        targetValue = if (highlighted) 0.18f else 0f,
+        animationSpec = tween(180),
+        label = "bubbleFlash",
+    )
     Column(
-        Modifier.fillMaxWidth(),
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                val s = 0.94f + 0.06f * appear
+                scaleX = s * selectScale
+                scaleY = s * selectScale
+                alpha = appear
+            },
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
         Surface(
             color = if (mine) outBg else if (dark) InBubbleDark else InBubbleLight,
             contentColor = if (mine) outFg else MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (mine) 16.dp else 4.dp,
-                bottomEnd = if (mine) 4.dp else 16.dp,
+                topStart = RopeShapes.bubble,
+                topEnd = RopeShapes.bubble,
+                bottomStart = if (mine) RopeShapes.bubble else RopeShapes.bubbleTail,
+                bottomEnd = if (mine) RopeShapes.bubbleTail else RopeShapes.bubble,
             ),
             modifier = Modifier
                 .widthIn(max = 300.dp)
@@ -478,43 +553,50 @@ private fun MessageBubble(
                     onLongClick = { if (!m.deleted) picker = !picker },
                 ),
         ) {
-            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                if (!mine && state.group != null && !m.deleted) {
-                    Text(m.senderName.ifBlank { m.senderId.take(8) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                }
-                if (!m.deleted && !m.replyToId.isNullOrBlank()) {
-                    ReplyQuote(
-                        name = m.replyName.ifBlank { "Ответ" },
-                        preview = m.replyPreview.ifBlank { "Сообщение" },
-                        accent = if (mine) outFg else MaterialTheme.colorScheme.primary,
-                        onClick = { onJump(m.replyToId) },
-                    )
-                }
-                if (m.deleted) {
-                    Text(
-                        "Сообщение удалено",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontStyle = FontStyle.Italic,
-                        color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    when (m.kind) {
-                        MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
-                        MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia, onOpenImage)
-                        MessageKind.FILE -> FileBubble(m)
-                        MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
-                        MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
-                        else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
+            Box {
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    if (!mine && state.group != null && !m.deleted) {
+                        Text(m.senderName.ifBlank { m.senderId.take(8) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    if (!m.deleted && !m.replyToId.isNullOrBlank()) {
+                        ReplyQuote(
+                            name = m.replyName.ifBlank { "Ответ" },
+                            preview = m.replyPreview.ifBlank { "Сообщение" },
+                            accent = if (mine) outFg else MaterialTheme.colorScheme.primary,
+                            onClick = { onJump(m.replyToId) },
+                        )
+                    }
+                    if (m.deleted) {
+                        Text(
+                            "Сообщение удалено",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontStyle = FontStyle.Italic,
+                            color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        when (m.kind) {
+                            MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
+                            MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia, onOpenImage)
+                            MessageKind.FILE -> FileBubble(m)
+                            MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
+                            MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
+                            else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-                val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
-                if (meta.isNotBlank()) {
-                    Text(
-                        meta,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = selectAlpha)),
+                )
             }
         }
         if (picker && !m.deleted) {
@@ -541,13 +623,18 @@ private fun MessageBubble(
 
 @Composable
 private fun ReplyQuote(name: String, preview: String, accent: Color, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "quote")
+    val bgAlpha by animateFloatAsState(if (pressed) 0.30f else 0.16f, tween(90), label = "quoteBg")
     Column(
         Modifier
             .fillMaxWidth()
             .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(accent.copy(alpha = 0.16f))
-            .clickable(onClick = onClick)
+            .scale(scale)
+            .clip(RoundedCornerShape(RopeShapes.quote))
+            .background(accent.copy(alpha = bgAlpha))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Text(name, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -569,7 +656,7 @@ private fun MessageActionRow(
 ) {
     Surface(
         tonalElevation = 4.dp,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(RopeShapes.action),
         modifier = Modifier.padding(top = 4.dp),
     ) {
         FlowRow(
@@ -601,20 +688,42 @@ private fun MessageActionRow(
 @Composable
 private fun ReactionPicker(onPick: (String) -> Unit) {
     Surface(
-        tonalElevation = 4.dp,
-        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 4.dp,
+        shape = RoundedCornerShape(RopeShapes.picker),
         modifier = Modifier.padding(top = 4.dp),
     ) {
-        Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             ReactionPayload.EMOJIS.forEach { emoji ->
-                Text(
-                    emoji,
-                    modifier = Modifier
-                        .clickable { onPick(emoji) }
-                        .padding(6.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                ReactionPickEmoji(emoji, onPick)
             }
+        }
+    }
+}
+
+@Composable
+private fun ReactionPickEmoji(emoji: String, onPick: (String) -> Unit) {
+    var pop by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (pop) 1.38f else 1f,
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = 520f),
+        label = "reactPick",
+    )
+    Text(
+        emoji,
+        modifier = Modifier
+            .scale(scale)
+            .clickable {
+                pop = true
+                onPick(emoji)
+            }
+            .padding(8.dp),
+        style = MaterialTheme.typography.headlineSmall,
+    )
+    LaunchedEffect(pop) {
+        if (pop) {
+            delay(180)
+            pop = false
         }
     }
 }
@@ -632,25 +741,44 @@ private fun ReactionRow(
     ) {
         ReactionCodec.grouped(m.reactions).forEach { (emoji, people) ->
             val mineHere = people.any { it.deviceId == myId }
-            Surface(
-                color = if (mineHere) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.clickable { onReact(m, emoji) },
-            ) {
-                Text(
-                    "$emoji ${people.size}",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (mine) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            ReactionChip(emoji, people.size, mineHere, mine) { onReact(m, emoji) }
         }
+    }
+}
+
+@Composable
+private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boolean, onClick: () -> Unit) {
+    var pop by remember(count, mineHere) { mutableStateOf(true) }
+    val scale by animateFloatAsState(
+        targetValue = if (pop) 1.22f else 1f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 500f),
+        label = "reactChip",
+    )
+    LaunchedEffect(count, mineHere) {
+        pop = true
+        delay(160)
+        pop = false
+    }
+    Surface(
+        color = if (mineHere) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(RopeShapes.chip),
+        modifier = Modifier
+            .scale(scale)
+            .clickable(onClick = onClick),
+    ) {
+        Text(
+            "$emoji $count",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (mine) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
 @Composable
 private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) -> Unit) {
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
+    val wave by animateFloatAsState(if (playing) 1f else 0.35f, tween(180), label = "wave")
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         IconButton(onClick = { onPlay(m) }, modifier = Modifier.size(36.dp)) {
             Icon(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, contentDescription = "Голос")
@@ -660,8 +788,8 @@ private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) 
                 Modifier
                     .fillMaxWidth()
                     .height(18.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.25f)),
+                    .clip(RoundedCornerShape(RopeShapes.media))
+                    .background(Color.White.copy(alpha = 0.18f + 0.18f * wave)),
             )
             Text(
                 when {
@@ -689,7 +817,7 @@ private fun ImageBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit, onOpen:
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 220.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(RopeShapes.media))
                 .clickable { onOpen(m) },
         )
     } else {
@@ -719,8 +847,24 @@ private fun ComposerBar(
     onVoiceFinish: (Boolean) -> Unit,
     onCancelComposer: () -> Unit,
 ) {
-    val showSend = ComposerRules.showSendButton(state.draftText, state.recording)
-    Surface(tonalElevation = 2.dp) {
+    var recordingLocked by remember { mutableStateOf(false) }
+    var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
+    LaunchedEffect(state.recording) {
+        if (!state.recording) {
+            recordingLocked = false
+            slideHint = VoiceGesture.HOLD
+        }
+    }
+    val showSend = ComposerRules.showSendButton(state.draftText, state.recording, recordingLocked)
+    val micScale by animateFloatAsState(
+        targetValue = if (state.recording && !recordingLocked) 1.18f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
+        label = "mic",
+    )
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
         Column(Modifier.fillMaxWidth()) {
             state.editTarget?.let { target ->
                 ComposerHint(
@@ -736,69 +880,155 @@ private fun ComposerBar(
                 )
             }
             Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onAttach, enabled = !state.recording) {
-                Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
-            }
-            if (state.recording) {
-                Text(
-                    "Запись ${MediaPayload.formatDuration(state.recordMs)}  ·  влево — отмена",
-                    color = Color(0xFFE53935),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(bottom = 12.dp),
-                )
-            } else {
-                TextField(
-                    value = state.draftText,
-                    onValueChange = onDraft,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Сообщение") },
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                    ),
-                    shape = RoundedCornerShape(22.dp),
-                    maxLines = 5,
-                )
-            }
-            if (showSend) {
-                IconButton(onClick = onSend) {
-                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "Отправить")
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (!state.recording) {
+                    IconButton(onClick = onAttach) {
+                        Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
+                    }
+                } else if (recordingLocked) {
+                    IconButton(onClick = { onVoiceFinish(false) }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Отменить запись", tint = RecRed)
+                    }
                 }
-            } else {
-                Box(
-                    Modifier
-                        .size(48.dp)
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown()
-                                onVoiceStart()
-                                var cancel = false
-                                drag(down.id) { change ->
-                                    if (change.position.x - down.position.x < -80f) cancel = true
-                                    change.consume()
-                                }
-                                onVoiceFinish(!cancel)
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Outlined.Mic,
-                        contentDescription = "Голосовое: удерживайте",
-                        tint = if (state.recording) Color(0xFFE53935) else MaterialTheme.colorScheme.primary,
+                if (state.recording) {
+                    RecordingStrip(
+                        recordMs = state.recordMs,
+                        locked = recordingLocked,
+                        hint = slideHint,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(bottom = 6.dp),
+                    )
+                } else {
+                    TextField(
+                        value = state.draftText,
+                        onValueChange = onDraft,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Сообщение") },
+                        colors = TextFieldDefaults.colors(
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                        shape = RoundedCornerShape(RopeShapes.field),
+                        maxLines = 5,
                     )
                 }
+                if (showSend) {
+                    IconButton(
+                        onClick = {
+                            if (recordingLocked || state.recording) onVoiceFinish(true) else onSend()
+                        },
+                    ) {
+                        Icon(
+                            if (recordingLocked) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Send,
+                            contentDescription = "Отправить",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                } else {
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .scale(micScale)
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    onVoiceStart()
+                                    var latest = VoiceGesture.HOLD
+                                    var lockedNow = false
+                                    slideHint = VoiceGesture.HOLD
+                                    drag(down.id) { change ->
+                                        val dx = change.position.x - down.position.x
+                                        val dy = change.position.y - down.position.y
+                                        latest = ComposerRules.voiceGesture(dx, dy)
+                                        if (latest == VoiceGesture.LOCK) {
+                                            lockedNow = true
+                                            recordingLocked = true
+                                        }
+                                        slideHint = if (lockedNow) VoiceGesture.LOCK else latest
+                                        change.consume()
+                                    }
+                                    when {
+                                        lockedNow -> slideHint = VoiceGesture.LOCK
+                                        latest == VoiceGesture.CANCEL -> onVoiceFinish(false)
+                                        else -> onVoiceFinish(true)
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Mic,
+                            contentDescription = "Голосовое: удерживайте",
+                            tint = if (state.recording) RecRed else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
-        }
+    }
+}
+
+@Composable
+private fun RecordingStrip(
+    recordMs: Long,
+    locked: Boolean,
+    hint: VoiceGesture,
+    modifier: Modifier = Modifier,
+) {
+    val pulse = rememberInfiniteTransition(label = "recPulse")
+    val glow by pulse.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+        label = "recGlow",
+    )
+    val hintColor = when (hint) {
+        VoiceGesture.CANCEL -> RecRed
+        VoiceGesture.LOCK -> MaterialTheme.colorScheme.primary
+        VoiceGesture.HOLD -> RecRed
+    }
+    val caption = when {
+        locked -> "запись закреплена"
+        hint == VoiceGesture.CANCEL -> "отпустите — отмена"
+        hint == VoiceGesture.LOCK -> "отпустите — закрепить"
+        else -> "влево — отмена · вверх — закрепить"
+    }
+    Row(
+        modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(RecRed.copy(alpha = glow)),
+        )
+        Text(
+            MediaPayload.formatDuration(recordMs),
+            color = RecRed,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Icon(
+            if (locked) Icons.Outlined.Lock else Icons.Outlined.KeyboardArrowUp,
+            contentDescription = if (locked) "Запись закреплена" else "Вверх — закрепить",
+            tint = if (locked) MaterialTheme.colorScheme.primary else hintColor,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            caption,
+            color = hintColor,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -867,11 +1097,11 @@ fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
                 contentDescription = "Фото",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(RopeShapes.media)),
             )
         } else {
             Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
-

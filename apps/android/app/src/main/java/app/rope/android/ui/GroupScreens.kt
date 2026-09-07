@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -22,7 +23,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import app.rope.android.RopeShapes
 import app.rope.android.UiState
 
 @Composable
@@ -52,6 +55,7 @@ fun NewGroupPane(
                 onName,
                 label = { Text("Название") },
                 singleLine = true,
+                shape = RoundedCornerShape(RopeShapes.field),
                 modifier = Modifier.fillMaxWidth(),
             )
             Text("Участники", style = MaterialTheme.typography.titleSmall)
@@ -59,8 +63,9 @@ fun NewGroupPane(
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(RopeShapes.card))
                         .clickable { onToggle(d.deviceId) }
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = d.deviceId in state.pickedMembers, onCheckedChange = { onToggle(d.deviceId) })
@@ -112,7 +117,10 @@ fun GroupInfoPane(
             }
             items(g.members, key = { it }) { id ->
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(RopeShapes.card))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

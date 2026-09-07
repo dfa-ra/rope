@@ -1,10 +1,13 @@
 package app.rope.android
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import app.rope.android.data.ThemeMode
 
 val RopeDeepBlue = Color(0xFF0F172A)
@@ -44,6 +47,28 @@ private val DarkColors = darkColorScheme(
     error = Color(0xFFF87171),
 )
 
+/** Slightly rounder than default Material3 — Telegram-ish, not a new system. */
+val RopeMaterialShapes = Shapes(
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp),
+)
+
+object RopeShapes {
+    val bubble = 20.dp
+    val bubbleTail = 6.dp
+    val field = 24.dp
+    val search = 22.dp
+    val card = 18.dp
+    val chip = 16.dp
+    val quote = 12.dp
+    val picker = 24.dp
+    val action = 18.dp
+    val media = 12.dp
+}
+
 @Composable
 fun RopeTheme(
     mode: ThemeMode = ThemeMode.DARK,
@@ -51,6 +76,7 @@ fun RopeTheme(
 ) {
     MaterialTheme(
         colorScheme = if (mode == ThemeMode.DARK) DarkColors else LightColors,
+        shapes = RopeMaterialShapes,
         content = content,
     )
 }

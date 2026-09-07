@@ -443,9 +443,17 @@ object MessageTime {
     }
 }
 
+enum class VoiceGesture { HOLD, CANCEL, LOCK }
+
 object ComposerRules {
     /** Hold-to-record is a single gesture. */
     const val VOICE_TAPS_TO_SEND = 1
+
+    /** Slide up this many px while holding to lock recording. */
+    const val VOICE_LOCK_SLIDE_UP = 80f
+
+    /** Slide left this many px while holding to cancel. */
+    const val VOICE_CANCEL_SLIDE_LEFT = 80f
 
     /** Attach → pick from gallery. */
     const val PHOTO_TAPS_TO_SEND = 2
@@ -456,11 +464,27 @@ object ComposerRules {
     /** Chats FAB → name → create. */
     const val GROUP_CREATE_TAPS = 2
 
-    fun showSendButton(draft: String, recording: Boolean): Boolean =
-        draft.isNotBlank() && !recording
+    fun showSendButton(draft: String, recording: Boolean, recordingLocked: Boolean = false): Boolean =
+        (draft.isNotBlank() && !recording) || recordingLocked
 
-    fun showMicButton(draft: String, recording: Boolean): Boolean =
-        draft.isBlank() || recording
+    fun showMicButton(draft: String, recording: Boolean, recordingLocked: Boolean = false): Boolean =
+        (draft.isBlank() || recording) && !recordingLocked
+
+    fun shouldLockVoice(deltaY: Float): Boolean = deltaY <= -VOICE_LOCK_SLIDE_UP
+
+    fun shouldCancelVoice(deltaX: Float): Boolean = deltaX <= -VOICE_CANCEL_SLIDE_LEFT
+
+    fun voiceGesture(deltaX: Float, deltaY: Float): VoiceGesture {
+        val cancel = shouldCancelVoice(deltaX)
+        val lock = shouldLockVoice(deltaY)
+        return when {
+            cancel && lock ->
+                if (kotlin.math.abs(deltaX) >= kotlin.math.abs(deltaY)) VoiceGesture.CANCEL else VoiceGesture.LOCK
+            cancel -> VoiceGesture.CANCEL
+            lock -> VoiceGesture.LOCK
+            else -> VoiceGesture.HOLD
+        }
+    }
 
     fun statusLabel(status: MessageStatus, outgoing: Boolean): String = when (status) {
         MessageStatus.CREATED -> "ожидает"
