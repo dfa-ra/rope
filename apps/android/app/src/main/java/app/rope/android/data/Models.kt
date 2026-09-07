@@ -6,6 +6,16 @@ enum class MessageStatus {
     DELIVERED_TO_DEVICE,
 }
 
+enum class MessageKind {
+    TEXT,
+    VOICE,
+    IMAGE,
+    FILE,
+    GROUP_TEXT,
+    CALL,
+    UNKNOWN,
+}
+
 data class ServerProfile(
     val host: String,
     val port: Int,
@@ -35,4 +45,49 @@ data class ChatMessage(
     val status: MessageStatus,
     val timestampMs: Long,
     val envelope: ByteArray? = null,
+    val kind: MessageKind = MessageKind.TEXT,
+    val extra: String = "",
+    val groupId: String? = null,
+    val localPath: String? = null,
+    val senderId: String = "",
+    val senderName: String = "",
 )
+
+data class RopeGroup(
+    val groupId: String,
+    val name: String,
+    val epoch: Int,
+    val members: List<String>,
+)
+
+data class Conversation(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val isGroup: Boolean,
+    val online: Boolean,
+    val last: ChatMessage?,
+    val peer: DirectoryDevice? = null,
+    val group: RopeGroup? = null,
+)
+
+enum class CallPhase { RINGING_IN, RINGING_OUT, ACTIVE, ENDED }
+
+data class CallInfo(
+    val callId: String,
+    val peerDeviceId: String,
+    val peerName: String,
+    val outgoing: Boolean,
+    val phase: CallPhase,
+    val payload: String = "",
+)
+
+object ChatIds {
+    const val GROUP_PREFIX = "g:"
+
+    fun group(groupId: String): String = GROUP_PREFIX + groupId
+
+    fun isGroup(id: String): Boolean = id.startsWith(GROUP_PREFIX)
+
+    fun rawGroupId(id: String): String = id.removePrefix(GROUP_PREFIX)
+}

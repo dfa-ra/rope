@@ -1,16 +1,20 @@
 package app.rope.android
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -24,11 +28,22 @@ class MainActivity : AppCompatActivity() {
         (application as RopeApp).repo.prepareJoin(text)
     }
 
+    private val picker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { (application as RopeApp).repo.sendAttachment(it) }
+    }
+
+    private val audioPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) (application as RopeApp).repo.startVoice()
+    }
+
+    private val notifyPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val repo = (application as RopeApp).repo
         repo.start(intent?.data?.toString())
+        requestNotifications()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
                 repo.resume()
@@ -48,7 +63,7 @@ class MainActivity : AppCompatActivity() {
                     onProvision = repo::provision,
                     onJoin = repo::join,
                     onJoinDev = repo::joinDevHttp,
-                    onOpenChat = repo::openChat,
+                    onOpenConversation = repo::openConversation,
                     onDraft = repo::setDraft,
                     onSend = repo::sendDraft,
                     onInvite = repo::createInvite,
@@ -64,8 +79,39 @@ class MainActivity : AppCompatActivity() {
                         if (!ensureInstallPermission()) return@RopeScaffold
                         repo.updateApp()
                     },
+                    onAttach = { picker.launch("*/*") },
+                    onVoiceStart = {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            repo.startVoice()
+                        } else {
+                            audioPerm.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    onVoiceFinish = repo::finishVoice,
+                    onCall = repo::startCall,
+                    onPlay = repo::toggleVoice,
+                    onNewGroup = { repo.go(Screen.NewGroup) },
+                    onGroupName = repo::setGroupName,
+                    onToggleMember = repo::toggleMember,
+                    onCreateGroup = repo::createGroup,
+                    onAddMember = repo::addMemberToOpenGroup,
+                    onRemoveMember = repo::removeMemberFromOpenGroup,
+                    onAcceptCall = repo::acceptCall,
+                    onRejectCall = repo::rejectCall,
+                    onHangup = repo::hangup,
                 )
             }
+        }
+    }
+
+    private fun requestNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notifyPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 

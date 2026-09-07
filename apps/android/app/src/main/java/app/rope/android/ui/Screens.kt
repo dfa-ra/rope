@@ -54,8 +54,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import app.rope.android.data.DirectoryDevice
-import app.rope.android.data.MessageStatus
 import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.ServerTarget
 import com.google.zxing.BarcodeFormat
@@ -69,14 +67,29 @@ fun RopeScaffold(
     onProvision: (ProvisionForm) -> Unit,
     onJoin: (String, String) -> Unit,
     onJoinDev: (String, Int, String, String) -> Unit,
-    onOpenChat: (DirectoryDevice) -> Unit,
+    onOpenConversation: (app.rope.android.data.Conversation) -> Unit,
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onInvite: () -> Unit,
     onStatus: () -> Unit,
     onScan: () -> Unit,
     onUpdateApp: () -> Unit,
+    onAttach: () -> Unit,
+    onVoiceStart: () -> Unit,
+    onVoiceFinish: (Boolean) -> Unit,
+    onCall: () -> Unit,
+    onPlay: (app.rope.android.data.ChatMessage) -> Unit,
+    onNewGroup: () -> Unit,
+    onGroupName: (String) -> Unit,
+    onToggleMember: (String) -> Unit,
+    onCreateGroup: () -> Unit,
+    onAddMember: (String) -> Unit,
+    onRemoveMember: (String) -> Unit,
+    onAcceptCall: () -> Unit,
+    onRejectCall: () -> Unit,
+    onHangup: () -> Unit,
 ) {
+    Box {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -130,14 +143,22 @@ fun RopeScaffold(
                     Screen.Start -> StartPane(onGo)
                     Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onGo(Screen.Start) }
                     Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
-                    Screen.Chats -> ChatsPane(state, onOpenChat)
-                    Screen.Chat -> ChatPane(state, onDraft, onSend)
+                    Screen.Chats -> app.rope.android.ui.ChatsPane(state, onOpenConversation) { onGo(Screen.NewGroup) }
+                    Screen.Chat -> app.rope.android.ui.ChatPane(
+                        state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
+                    ) { onGo(Screen.GroupInfo) }
                     Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
-                    Screen.Status -> StatusPane(state.statusText, state.updateText, onUpdateApp) { onGo(Screen.Provision) }
+                    Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp) { onGo(Screen.Provision) }
                     Screen.Settings -> Text("Settings", modifier = Modifier.padding(16.dp))
+                    Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onGo(Screen.Chats) }
+                    Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onGo(Screen.Chat) }
                 }
             }
         }
+    }
+    state.call?.let { call ->
+        app.rope.android.ui.CallOverlay(call, onAcceptCall, onRejectCall, onHangup)
+    }
     }
 }
 
@@ -393,39 +414,6 @@ private fun ArchPicker(
 }
 
 @Composable
-private fun StatusPane(statusText: String, updateText: String, onUpdateApp: () -> Unit, onUpgrade: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Сервер и обновления", style = MaterialTheme.typography.titleLarge)
-        Text(
-            statusText.ifBlank { "Статус сервера ещё не загружен." },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Button(onClick = onUpdateApp, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text("Обновить приложение")
-        }
-        Text(
-            updateText.ifBlank { "Скачает новый APK и предложит установить поверх. Удалять Rope не нужно." },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Button(onClick = onUpgrade, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text("Обновить ядро на VPS")
-        }
-        Text(
-            "Скачает новый rope-server. Чаты и owner останутся. Если зайти как owner больше нельзя — Создать сервер → Дополнительно → Стереть старое.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun JoinPane(
     enabled: Boolean,
     initialInvite: String,
@@ -506,98 +494,6 @@ private fun JoinPane(
 }
 
 @Composable
-private fun ChatsPane(state: UiState, onOpen: (DirectoryDevice) -> Unit) {
-    if (state.devices.isEmpty()) {
-        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-            Text("Пока никого нет", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Нажмите Invite вверху и покажите QR второму телефону.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(state.devices, key = { it.deviceId }) { d ->
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpen(d) }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PresenceDot(d.online)
-                    Text(d.displayName.ifBlank { d.deviceId.take(12) }, style = MaterialTheme.typography.titleMedium)
-                }
-                Text(
-                    if (d.online) "в сети" else "не в сети",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (d.online) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            HorizontalDivider()
-        }
-    }
-}
-
-@Composable
-private fun ChatPane(state: UiState, onDraft: (String) -> Unit, onSend: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PresenceDot(state.peer?.online == true)
-            Column {
-                Text(state.peer?.displayName ?: "Чат", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    if (state.peer?.online == true) "в сети" else "не в сети — сообщение дойдёт, когда появится",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        LazyColumn(
-            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(state.messages, key = { it.id }) { m ->
-                val who = if (m.outgoing) "Вы" else (state.peer?.displayName ?: "Собеседник")
-                val mark = when (m.status) {
-                    MessageStatus.CREATED -> "ожидает отправки"
-                    MessageStatus.SENT_TO_SERVER -> "на сервере"
-                    MessageStatus.DELIVERED_TO_DEVICE -> if (m.outgoing) "доставлено" else ""
-                }
-                Text("$who  ${m.text}", style = MaterialTheme.typography.bodyLarge)
-                if (mark.isNotBlank()) {
-                    Text(mark, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        HorizontalDivider()
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            OutlinedTextField(
-                state.draftText,
-                onDraft,
-                modifier = Modifier.weight(1f),
-                label = { Text("Сообщение") },
-            )
-            Button(onClick = onSend, enabled = state.draftText.isNotBlank(), modifier = Modifier.height(56.dp)) {
-                Text("OK")
-            }
-        }
-    }
-}
-
-@Composable
 private fun InvitePane(url: String) {
     Column(
         Modifier
@@ -618,15 +514,6 @@ private fun InvitePane(url: String) {
             Text(url, style = MaterialTheme.typography.bodySmall)
         }
     }
-}
-
-@Composable
-private fun PresenceDot(online: Boolean) {
-    Box(
-        Modifier
-            .size(10.dp)
-            .background(if (online) Color(0xFF43A047) else Color(0xFF9E9E9E), CircleShape),
-    )
 }
 
 private fun qrBitmap(text: String): Bitmap {

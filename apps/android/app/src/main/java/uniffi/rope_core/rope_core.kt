@@ -758,6 +758,22 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -789,9 +805,13 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_method_deviceidentity_decrypt_message(`ptr`: Pointer,`sender`: RustBuffer.ByValue,`envelope`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_method_deviceidentity_decrypt_typed(`ptr`: Pointer,`sender`: RustBuffer.ByValue,`envelope`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_method_deviceidentity_device_id(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_method_deviceidentity_encrypt_message(`ptr`: Pointer,`recipient`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_method_deviceidentity_encrypt_typed(`ptr`: Pointer,`recipient`: RustBuffer.ByValue,`msgType`: Byte,`body`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_method_deviceidentity_public_identity(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -803,11 +823,23 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_build_invite_url(`link`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_func_bump_group_epoch(`epoch`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     fun uniffi_rope_core_fn_func_create_device_identity(uniffi_out_err: UniffiRustCallStatus, 
     ): Pointer
+    fun uniffi_rope_core_fn_func_decrypt_object(`key`: RustBuffer.ByValue,`ciphertext`: RustBuffer.ByValue,`expectedSha256`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_dev_http_fingerprint(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_func_encrypt_object(`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_fingerprint_from_cert_der(`der`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_func_initial_group_epoch(uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    fun uniffi_rope_core_fn_func_known_envelope_type(`msgType`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    fun uniffi_rope_core_fn_func_object_hash_hex(`ciphertext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_parse_envelope(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -939,11 +971,23 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_rope_core_checksum_func_build_invite_url(
     ): Short
+    fun uniffi_rope_core_checksum_func_bump_group_epoch(
+    ): Short
     fun uniffi_rope_core_checksum_func_create_device_identity(
+    ): Short
+    fun uniffi_rope_core_checksum_func_decrypt_object(
     ): Short
     fun uniffi_rope_core_checksum_func_dev_http_fingerprint(
     ): Short
+    fun uniffi_rope_core_checksum_func_encrypt_object(
+    ): Short
     fun uniffi_rope_core_checksum_func_fingerprint_from_cert_der(
+    ): Short
+    fun uniffi_rope_core_checksum_func_initial_group_epoch(
+    ): Short
+    fun uniffi_rope_core_checksum_func_known_envelope_type(
+    ): Short
+    fun uniffi_rope_core_checksum_func_object_hash_hex(
     ): Short
     fun uniffi_rope_core_checksum_func_parse_envelope(
     ): Short
@@ -965,9 +1009,13 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_rope_core_checksum_method_deviceidentity_decrypt_message(
     ): Short
+    fun uniffi_rope_core_checksum_method_deviceidentity_decrypt_typed(
+    ): Short
     fun uniffi_rope_core_checksum_method_deviceidentity_device_id(
     ): Short
     fun uniffi_rope_core_checksum_method_deviceidentity_encrypt_message(
+    ): Short
+    fun uniffi_rope_core_checksum_method_deviceidentity_encrypt_typed(
     ): Short
     fun uniffi_rope_core_checksum_method_deviceidentity_public_identity(
     ): Short
@@ -1001,13 +1049,31 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_rope_core_checksum_func_build_invite_url() != 42114.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_rope_core_checksum_func_bump_group_epoch() != 26773.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_rope_core_checksum_func_create_device_identity() != 39813.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_rope_core_checksum_func_decrypt_object() != 48954.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rope_core_checksum_func_dev_http_fingerprint() != 18521.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_rope_core_checksum_func_encrypt_object() != 32618.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_rope_core_checksum_func_fingerprint_from_cert_der() != 43196.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_rope_core_checksum_func_initial_group_epoch() != 41909.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_rope_core_checksum_func_known_envelope_type() != 17675.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_rope_core_checksum_func_object_hash_hex() != 10344.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rope_core_checksum_func_parse_envelope() != 16652.toShort()) {
@@ -1040,10 +1106,16 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_rope_core_checksum_method_deviceidentity_decrypt_message() != 12582.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_rope_core_checksum_method_deviceidentity_decrypt_typed() != 32593.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_rope_core_checksum_method_deviceidentity_device_id() != 63107.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rope_core_checksum_method_deviceidentity_encrypt_message() != 530.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_rope_core_checksum_method_deviceidentity_encrypt_typed() != 55815.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rope_core_checksum_method_deviceidentity_public_identity() != 27585.toShort()) {
@@ -1154,6 +1226,29 @@ public object FfiConverterUShort: FfiConverter<UShort, Short> {
 
     override fun write(value: UShort, buf: ByteBuffer) {
         buf.putShort(value.toShort())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterUInt: FfiConverter<UInt, Int> {
+    override fun lift(value: Int): UInt {
+        return value.toUInt()
+    }
+
+    override fun read(buf: ByteBuffer): UInt {
+        return lift(buf.getInt())
+    }
+
+    override fun lower(value: UInt): Int {
+        return value.toInt()
+    }
+
+    override fun allocationSize(value: UInt) = 4UL
+
+    override fun write(value: UInt, buf: ByteBuffer) {
+        buf.putInt(value.toInt())
     }
 }
 
@@ -1447,9 +1542,13 @@ public interface DeviceIdentityInterface {
     
     fun `decryptMessage`(`sender`: PublicIdentity, `envelope`: kotlin.ByteArray): PlainMessage
     
+    fun `decryptTyped`(`sender`: PublicIdentity, `envelope`: kotlin.ByteArray): DecryptedPayload
+    
     fun `deviceId`(): kotlin.String
     
     fun `encryptMessage`(`recipient`: PublicIdentity, `plaintext`: kotlin.String): EncryptedEnvelope
+    
+    fun `encryptTyped`(`recipient`: PublicIdentity, `msgType`: kotlin.UByte, `body`: kotlin.ByteArray): EncryptedEnvelope
     
     fun `publicIdentity`(): PublicIdentity
     
@@ -1568,6 +1667,19 @@ open class DeviceIdentity: Disposable, AutoCloseable, DeviceIdentityInterface {
     }
     
 
+    
+    @Throws(RopeException::class)override fun `decryptTyped`(`sender`: PublicIdentity, `envelope`: kotlin.ByteArray): DecryptedPayload {
+            return FfiConverterTypeDecryptedPayload.lift(
+    callWithPointer {
+    uniffiRustCallWithError(RopeException) { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_method_deviceidentity_decrypt_typed(
+        it, FfiConverterTypePublicIdentity.lower(`sender`),FfiConverterByteArray.lower(`envelope`),_status)
+}
+    }
+    )
+    }
+    
+
     override fun `deviceId`(): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
@@ -1587,6 +1699,19 @@ open class DeviceIdentity: Disposable, AutoCloseable, DeviceIdentityInterface {
     uniffiRustCallWithError(RopeException) { _status ->
     UniffiLib.INSTANCE.uniffi_rope_core_fn_method_deviceidentity_encrypt_message(
         it, FfiConverterTypePublicIdentity.lower(`recipient`),FfiConverterString.lower(`plaintext`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(RopeException::class)override fun `encryptTyped`(`recipient`: PublicIdentity, `msgType`: kotlin.UByte, `body`: kotlin.ByteArray): EncryptedEnvelope {
+            return FfiConverterTypeEncryptedEnvelope.lift(
+    callWithPointer {
+    uniffiRustCallWithError(RopeException) { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_method_deviceidentity_encrypt_typed(
+        it, FfiConverterTypePublicIdentity.lower(`recipient`),FfiConverterUByte.lower(`msgType`),FfiConverterByteArray.lower(`body`),_status)
 }
     }
     )
@@ -1701,6 +1826,50 @@ public object FfiConverterTypeDeviceIdentity: FfiConverter<DeviceIdentity, Point
 
 
 
+data class DecryptedPayload (
+    var `messageId`: kotlin.String, 
+    var `senderId`: kotlin.String, 
+    var `timestampMs`: kotlin.ULong, 
+    var `msgType`: kotlin.UByte, 
+    var `body`: kotlin.ByteArray
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDecryptedPayload: FfiConverterRustBuffer<DecryptedPayload> {
+    override fun read(buf: ByteBuffer): DecryptedPayload {
+        return DecryptedPayload(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DecryptedPayload) = (
+            FfiConverterString.allocationSize(value.`messageId`) +
+            FfiConverterString.allocationSize(value.`senderId`) +
+            FfiConverterULong.allocationSize(value.`timestampMs`) +
+            FfiConverterUByte.allocationSize(value.`msgType`) +
+            FfiConverterByteArray.allocationSize(value.`body`)
+    )
+
+    override fun write(value: DecryptedPayload, buf: ByteBuffer) {
+            FfiConverterString.write(value.`messageId`, buf)
+            FfiConverterString.write(value.`senderId`, buf)
+            FfiConverterULong.write(value.`timestampMs`, buf)
+            FfiConverterUByte.write(value.`msgType`, buf)
+            FfiConverterByteArray.write(value.`body`, buf)
+    }
+}
+
+
+
 data class EncryptedEnvelope (
     var `messageId`: kotlin.String, 
     var `timestampMs`: kotlin.ULong, 
@@ -1740,6 +1909,50 @@ public object FfiConverterTypeEncryptedEnvelope: FfiConverterRustBuffer<Encrypte
             FfiConverterString.write(value.`senderId`, buf)
             FfiConverterString.write(value.`recipientId`, buf)
             FfiConverterByteArray.write(value.`bytes`, buf)
+    }
+}
+
+
+
+data class EncryptedObject (
+    var `objectId`: kotlin.String, 
+    var `key`: kotlin.ByteArray, 
+    var `sha256`: kotlin.String, 
+    var `ciphertext`: kotlin.ByteArray, 
+    var `plainLen`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeEncryptedObject: FfiConverterRustBuffer<EncryptedObject> {
+    override fun read(buf: ByteBuffer): EncryptedObject {
+        return EncryptedObject(
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: EncryptedObject) = (
+            FfiConverterString.allocationSize(value.`objectId`) +
+            FfiConverterByteArray.allocationSize(value.`key`) +
+            FfiConverterString.allocationSize(value.`sha256`) +
+            FfiConverterByteArray.allocationSize(value.`ciphertext`) +
+            FfiConverterULong.allocationSize(value.`plainLen`)
+    )
+
+    override fun write(value: EncryptedObject, buf: ByteBuffer) {
+            FfiConverterString.write(value.`objectId`, buf)
+            FfiConverterByteArray.write(value.`key`, buf)
+            FfiConverterString.write(value.`sha256`, buf)
+            FfiConverterByteArray.write(value.`ciphertext`, buf)
+            FfiConverterULong.write(value.`plainLen`, buf)
     }
 }
 
@@ -2122,11 +2335,30 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
     )
     }
     
+ fun `bumpGroupEpoch`(`epoch`: kotlin.UInt): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_bump_group_epoch(
+        FfiConverterUInt.lower(`epoch`),_status)
+}
+    )
+    }
+    
  fun `createDeviceIdentity`(): DeviceIdentity {
             return FfiConverterTypeDeviceIdentity.lift(
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_rope_core_fn_func_create_device_identity(
         _status)
+}
+    )
+    }
+    
+
+    @Throws(RopeException::class) fun `decryptObject`(`key`: kotlin.ByteArray, `ciphertext`: kotlin.ByteArray, `expectedSha256`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(RopeException) { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_decrypt_object(
+        FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`ciphertext`),FfiConverterString.lower(`expectedSha256`),_status)
 }
     )
     }
@@ -2140,11 +2372,48 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
     )
     }
     
+
+    @Throws(RopeException::class) fun `encryptObject`(`plaintext`: kotlin.ByteArray): EncryptedObject {
+            return FfiConverterTypeEncryptedObject.lift(
+    uniffiRustCallWithError(RopeException) { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_encrypt_object(
+        FfiConverterByteArray.lower(`plaintext`),_status)
+}
+    )
+    }
+    
  fun `fingerprintFromCertDer`(`der`: kotlin.ByteArray): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_rope_core_fn_func_fingerprint_from_cert_der(
         FfiConverterByteArray.lower(`der`),_status)
+}
+    )
+    }
+    
+ fun `initialGroupEpoch`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_initial_group_epoch(
+        _status)
+}
+    )
+    }
+    
+ fun `knownEnvelopeType`(`msgType`: kotlin.UByte): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_known_envelope_type(
+        FfiConverterUByte.lower(`msgType`),_status)
+}
+    )
+    }
+    
+ fun `objectHashHex`(`ciphertext`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_object_hash_hex(
+        FfiConverterByteArray.lower(`ciphertext`),_status)
 }
     )
     }

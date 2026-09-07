@@ -3,6 +3,7 @@ package app.rope.android.data
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 import javax.crypto.Cipher
@@ -13,7 +14,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 2) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 3) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -26,7 +27,13 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
               body_enc BLOB NOT NULL,
               status TEXT NOT NULL,
               ts INTEGER NOT NULL,
-              envelope BLOB
+              envelope BLOB,
+              kind TEXT NOT NULL DEFAULT 'TEXT',
+              extra TEXT NOT NULL DEFAULT '',
+              group_id TEXT,
+              local_path TEXT,
+              sender_id TEXT NOT NULL DEFAULT '',
+              sender_name TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent(),
         )
@@ -38,11 +45,39 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             )
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE TABLE groups (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              epoch INTEGER NOT NULL,
+              members TEXT NOT NULL
+            )
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE messages ADD COLUMN envelope BLOB")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'TEXT'")
+            db.execSQL("ALTER TABLE messages ADD COLUMN extra TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE messages ADD COLUMN group_id TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN local_path TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN sender_id TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE messages ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS groups (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  epoch INTEGER NOT NULL,
+                  members TEXT NOT NULL
+                )
+                """.trimIndent(),
+            )
         }
     }
 
@@ -78,7 +113,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun insertMessage(msg: ChatMessage) {
         writableDatabase.execSQL(
-            "INSERT OR REPLACE INTO messages(id, peer_id, outgoing, body_enc, status, ts, envelope) VALUES(?,?,?,?,?,?,?)",
+            """
+            INSERT OR REPLACE INTO messages(
+              id, peer_id, outgoing, body_enc, status, ts, envelope,
+              kind, extra, group_id, local_path, sender_id, sender_name
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """.trimIndent(),
             arrayOf(
                 msg.id,
                 msg.peerDeviceId,
@@ -87,6 +127,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 msg.status.name,
                 msg.timestampMs,
                 msg.envelope,
+                msg.kind.name,
+                msg.extra,
+                msg.groupId,
+                msg.localPath,
+                msg.senderId,
+                msg.senderName,
             ),
         )
     }
@@ -95,23 +141,23 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         writableDatabase.execSQL("UPDATE messages SET status = ? WHERE id = ?", arrayOf(status.name, id))
     }
 
+    fun updateLocalPath(id: String, path: String) {
+        writableDatabase.execSQL("UPDATE messages SET local_path = ? WHERE id = ?", arrayOf(path, id))
+    }
+
     fun messages(peerId: String): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
-            "SELECT id, peer_id, outgoing, body_enc, status, ts, envelope FROM messages WHERE peer_id = ? ORDER BY ts ASC",
+            """
+            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
+                   kind, extra, group_id, local_path, sender_id, sender_name
+            FROM messages WHERE peer_id = ? ORDER BY ts ASC
+            """.trimIndent(),
             arrayOf(peerId),
         )
         val out = mutableListOf<ChatMessage>()
         c.use {
             while (it.moveToNext()) {
-                out += ChatMessage(
-                    id = it.getString(0),
-                    peerDeviceId = it.getString(1),
-                    outgoing = it.getInt(2) == 1,
-                    text = decrypt(it.getBlob(3)),
-                    status = MessageStatus.valueOf(it.getString(4)),
-                    timestampMs = it.getLong(5),
-                    envelope = if (it.isNull(6)) null else it.getBlob(6),
-                )
+                out += row(it)
             }
         }
         return out
@@ -126,25 +172,57 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun pendingOutgoing(): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
-            "SELECT id, peer_id, outgoing, body_enc, status, ts, envelope FROM messages WHERE outgoing = 1 AND status = ?",
+            """
+            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
+                   kind, extra, group_id, local_path, sender_id, sender_name
+            FROM messages WHERE outgoing = 1 AND status = ?
+            """.trimIndent(),
             arrayOf(MessageStatus.CREATED.name),
         )
         val out = mutableListOf<ChatMessage>()
         c.use {
             while (it.moveToNext()) {
-                out += ChatMessage(
-                    id = it.getString(0),
-                    peerDeviceId = it.getString(1),
-                    outgoing = true,
-                    text = decrypt(it.getBlob(3)),
-                    status = MessageStatus.valueOf(it.getString(4)),
-                    timestampMs = it.getLong(5),
-                    envelope = if (it.isNull(6)) null else it.getBlob(6),
-                )
+                out += row(it)
             }
         }
         return out
     }
+
+    fun saveGroups(groups: List<RopeGroup>) {
+        writableDatabase.beginTransaction()
+        try {
+            writableDatabase.execSQL("DELETE FROM groups")
+            for (g in groups) {
+                upsertGroup(g)
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
+    fun upsertGroup(g: RopeGroup) {
+        val members = JSONArray().apply { g.members.forEach { put(it) } }.toString()
+        writableDatabase.execSQL(
+            "INSERT OR REPLACE INTO groups(id, name, epoch, members) VALUES(?,?,?,?)",
+            arrayOf(g.groupId, g.name, g.epoch, members),
+        )
+    }
+
+    fun groups(): List<RopeGroup> {
+        val c = readableDatabase.rawQuery("SELECT id, name, epoch, members FROM groups", null)
+        val out = mutableListOf<RopeGroup>()
+        c.use {
+            while (it.moveToNext()) {
+                val arr = JSONArray(it.getString(3))
+                val members = buildList { for (i in 0 until arr.length()) add(arr.getString(i)) }
+                out += RopeGroup(it.getString(0), it.getString(1), it.getInt(2), members)
+            }
+        }
+        return out
+    }
+
+    fun group(id: String): RopeGroup? = groups().find { it.groupId == id }
 
     fun saveGithubToken(token: String) {
         if (token.isBlank()) return
@@ -154,6 +232,25 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     fun githubToken(): String? = get("github_token")
 
     fun newId(): String = UUID.randomUUID().toString()
+
+    private fun row(it: android.database.Cursor): ChatMessage {
+        val kind = runCatching { MessageKind.valueOf(it.getString(7)) }.getOrDefault(MessageKind.TEXT)
+        return ChatMessage(
+            id = it.getString(0),
+            peerDeviceId = it.getString(1),
+            outgoing = it.getInt(2) == 1,
+            text = decrypt(it.getBlob(3)),
+            status = MessageStatus.valueOf(it.getString(4)),
+            timestampMs = it.getLong(5),
+            envelope = if (it.isNull(6)) null else it.getBlob(6),
+            kind = kind,
+            extra = it.getString(8).orEmpty(),
+            groupId = if (it.isNull(9)) null else it.getString(9),
+            localPath = if (it.isNull(10)) null else it.getString(10),
+            senderId = it.getString(11).orEmpty(),
+            senderName = it.getString(12).orEmpty(),
+        )
+    }
 
     private fun put(k: String, v: String) {
         writableDatabase.execSQL("INSERT OR REPLACE INTO kv(k,v) VALUES(?,?)", arrayOf(k, v))
