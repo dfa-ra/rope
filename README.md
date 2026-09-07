@@ -4,6 +4,13 @@ Private self-hosted messenger for Android. You provision a personal VPS from the
 
 Stack: **Kotlin UI → Rust security core (UniFFI) → HTTPS/WSS → Go + SQLite**.
 
+**Лендинг:** [web/index.html](web/index.html)
+
+```bash
+cd web && python3 -m http.server 8080
+# http://127.0.0.1:8080
+```
+
 ## Layout
 
 ```
@@ -13,6 +20,7 @@ server/go         relay, mailbox, invites
 deployment/       systemd + install.sh
 protocol/docs     wire format
 docs/             architecture and threat model
+web/              marketing landing (open web/index.html)
 ```
 
 ## Quick start (developers)
@@ -44,6 +52,10 @@ Re-run with `--upgrade` to replace the binary, keep `data.db`, and (from 0.2.7) 
 `--reinstall` wipes `data.db` + config and issues a new owner `SETUP_TOKEN` (lost-phone recovery).
 
 Раскатка у пользователя (телефон → SSH → VPS): [docs/rollout.md](docs/rollout.md).
+
+## Сайт
+
+Посадочная страница: откройте [`web/index.html`](web/index.html) в браузере (позже можно включить GitHub Pages из папки `web/`).
 
 ## Releases
 
