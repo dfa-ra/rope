@@ -55,17 +55,15 @@ if [[ "$REINSTALL" -eq 1 && "$already_installed" -eq 1 ]]; then
   already_installed=0
 fi
 
-if [[ "$UPGRADE" -eq 1 && -f "$ETC_DIR/config.json" ]]; then
+# Re-run is Amnezia-style upgrade: new binary, keep owner and chats.
+# Only --reinstall wipes membership so a new phone can become owner.
+if [[ "$already_installed" -eq 1 ]]; then
   systemctl daemon-reload
+  systemctl enable rope 2>/dev/null || true
   systemctl restart rope
   echo "upgraded binary; data and config preserved"
+  echo "ROPE_UPGRADE_OK"
   exit 0
-fi
-
-if [[ "$already_installed" -eq 1 ]]; then
-  echo "ROPE_ALREADY_INSTALLED"
-  echo "На VPS уже есть Rope. Запустите с --upgrade (сохранить чаты) или --reinstall (стереть owner и начать заново)."
-  exit 3
 fi
 
 if [[ ! -f "$ETC_DIR/tls/cert.pem" || ! -f "$ETC_DIR/tls/key.pem" ]]; then

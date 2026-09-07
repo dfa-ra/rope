@@ -2,6 +2,7 @@ package app.rope.android
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -15,14 +16,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import app.rope.android.update.ApkInstaller
+import app.rope.android.update.DeviceBackup
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
+    private var waitingForInstallPerm = false
+    private var startedInstallFor: String? = null
+
     private val scanner = registerForActivityResult(ScanContract()) { result ->
         val text = result.contents ?: return@registerForActivityResult
         (application as RopeApp).repo.prepareJoin(text)
@@ -32,29 +37,42 @@ class MainActivity : AppCompatActivity() {
         uri?.let { (application as RopeApp).repo.sendAttachment(it) }
     }
 
+    private val restorePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val bytes = uri?.let { contentResolver.openInputStream(it)?.use { s -> s.readBytes() } } ?: return@registerForActivityResult
+        (application as RopeApp).repo.restoreFromFile(bytes)
+    }
+
     private val audioPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) (application as RopeApp).repo.startVoice()
     }
 
     private val notifyPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    private val installSources = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        waitingForInstallPerm = false
+        tryInstallPending()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val repo = (application as RopeApp).repo
-        repo.start(intent?.data?.toString())
+        if (intent?.action != ApkInstaller.ACTION) {
+            repo.start(intent?.data?.toString())
+        }
+        handleInstallResult(intent)
         requestNotifications()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
                 repo.resume()
+                if (canInstallPackages() && startedInstallFor == null) tryInstallPending()
             }
         })
         setContent {
             val state by repo.state.collectAsState()
-            LaunchedEffect(state.pendingApkPath) {
-                val path = state.pendingApkPath ?: return@LaunchedEffect
-                installApk(File(path))
-                repo.consumePendingApk()
+            LaunchedEffect(state.pendingApkPath, state.installTick) {
+                startedInstallFor = null
+                if (state.pendingApkPath != null) tryInstallPending()
             }
             RopeTheme {
                 RopeScaffold(
@@ -79,6 +97,8 @@ class MainActivity : AppCompatActivity() {
                         if (!ensureInstallPermission()) return@RopeScaffold
                         repo.updateApp()
                     },
+                    onUpgradeCore = repo::upgradeCore,
+                    onRestoreBackup = { restorePicker.launch("*/*") },
                     onAttach = { picker.launch("*/*") },
                     onVoiceStart = {
                         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -105,6 +125,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleInstallResult(intent)
+    }
+
+    private fun handleInstallResult(intent: Intent?) {
+        if (intent?.action != ApkInstaller.ACTION) return
+        val repo = (application as RopeApp).repo
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        when (status) {
+            PackageInstaller.STATUS_SUCCESS -> repo.onApkInstalled()
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                val confirm = if (Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                }
+                if (confirm != null) {
+                    startActivity(confirm)
+                } else {
+                    repo.onApkInstallFailed("система не показала окно установки", status)
+                }
+            }
+            PackageInstaller.STATUS_FAILURE_CONFLICT,
+            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE,
+            -> repo.onApkInstallFailed(
+                "Старая сборка подписана другим ключом CI. Ключ и логин лежат в Загрузках как ${DeviceBackup.FILE_NAME}. " +
+                    "Удалите Rope, поставьте APK из Загрузок и на старте нажмите «Восстановить устройство».",
+                status,
+            )
+            else -> repo.onApkInstallFailed(
+                intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                    ?: "установка не удалась ($status)",
+                status,
+            )
+        }
+    }
+
+    private fun tryInstallPending() {
+        val repo = (application as RopeApp).repo
+        val path = repo.state.value.pendingApkPath ?: return
+        if (!canInstallPackages()) {
+            ensureInstallPermission()
+            return
+        }
+        if (startedInstallFor == path) return
+        startedInstallFor = path
+        try {
+            ApkInstaller(this).install(File(path))
+        } catch (e: Exception) {
+            startedInstallFor = null
+            repo.onApkInstallFailed(e.message ?: "не удалось начать установку", -1)
+        }
+    }
+
     private fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -114,24 +191,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun ensureInstallPermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            startActivity(
-                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
-            )
-            return false
-        }
-        return true
-    }
+    private fun canInstallPackages(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
 
-    private fun installApk(file: File) {
-        if (!ensureInstallPermission()) return
-        val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(intent)
+    private fun ensureInstallPermission(): Boolean {
+        if (canInstallPackages()) return true
+        waitingForInstallPerm = true
+        installSources.launch(
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+        )
+        return false
     }
 }

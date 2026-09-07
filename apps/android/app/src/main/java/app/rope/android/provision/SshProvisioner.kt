@@ -73,10 +73,14 @@ class SshProvisioner(
                         "«Стереть и стать владельцем» удалит старого owner — так заходят, если телефон потерян.",
                 )
             }
-            if (!output.contains("ROPE_INSTALL_OK") && !output.contains("upgraded binary")) {
+            if (
+                !output.contains("ROPE_INSTALL_OK") &&
+                !output.contains("upgraded binary") &&
+                !output.contains("ROPE_UPGRADE_OK")
+            ) {
                 error("installer failed:\n$output")
             }
-            if (output.contains("upgraded binary")) {
+            if (output.contains("upgraded binary") || output.contains("ROPE_UPGRADE_OK")) {
                 return ProvisionResult(form.host, form.listenPort, "", "", "")
             }
             fun field(name: String) = Regex("$name=(\\S+)").find(output)?.groupValues?.get(1)

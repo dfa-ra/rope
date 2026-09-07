@@ -28,6 +28,13 @@ data class ServerProfile(
     val displayName: String = "",
 )
 
+data class SshTarget(
+    val host: String,
+    val sshPort: Int = 22,
+    val user: String = "root",
+    val listenPort: Int = 8443,
+)
+
 data class DirectoryDevice(
     val deviceId: String,
     val memberId: String,

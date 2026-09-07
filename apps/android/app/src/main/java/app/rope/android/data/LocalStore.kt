@@ -12,6 +12,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import app.rope.android.update.DeviceBackup
 import java.security.KeyStore
 
 class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 3) {
@@ -230,6 +231,39 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     }
 
     fun githubToken(): String? = get("github_token")
+
+    fun saveSshTarget(t: SshTarget) {
+        put(
+            "ssh_target",
+            JSONObject()
+                .put("host", t.host)
+                .put("sshPort", t.sshPort)
+                .put("user", t.user)
+                .put("listenPort", t.listenPort)
+                .toString(),
+        )
+    }
+
+    fun sshTarget(): SshTarget? {
+        val raw = get("ssh_target") ?: return null
+        val o = JSONObject(raw)
+        return SshTarget(
+            host = o.getString("host"),
+            sshPort = o.optInt("sshPort", 22),
+            user = o.optString("user", "root"),
+            listenPort = o.optInt("listenPort", 8443),
+        )
+    }
+
+    fun applyBackup(backup: DeviceBackup) {
+        if (backup.profileJson.isNotBlank()) put("profile", backup.profileJson)
+        if (backup.githubToken.isNotBlank()) put("github_token", backup.githubToken)
+        if (backup.sshJson.isNotBlank()) put("ssh_target", backup.sshJson)
+    }
+
+    fun profileJson(): String? = get("profile")
+
+    fun sshJson(): String? = get("ssh_target")
 
     fun newId(): String = UUID.randomUUID().toString()
 

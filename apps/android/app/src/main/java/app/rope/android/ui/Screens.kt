@@ -74,6 +74,8 @@ fun RopeScaffold(
     onStatus: () -> Unit,
     onScan: () -> Unit,
     onUpdateApp: () -> Unit,
+    onUpgradeCore: (String, String) -> Unit,
+    onRestoreBackup: () -> Unit,
     onAttach: () -> Unit,
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
@@ -139,7 +141,7 @@ fun RopeScaffold(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (state.screen) {
-                    Screen.Start -> StartPane(onGo)
+                    Screen.Start -> StartPane(onGo, onRestoreBackup)
                     Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onGo(Screen.Start) }
                     Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
                     Screen.Chats -> app.rope.android.ui.ChatsPane(state, onOpenConversation) { onGo(Screen.NewGroup) }
@@ -147,7 +149,7 @@ fun RopeScaffold(
                         state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
                     ) { onGo(Screen.GroupInfo) }
                     Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
-                    Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp) { onGo(Screen.Provision) }
+                    Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore)
                     Screen.Settings -> Text("Settings", modifier = Modifier.padding(16.dp))
                     Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onGo(Screen.Chats) }
                     Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onGo(Screen.Chat) }
@@ -162,7 +164,7 @@ fun RopeScaffold(
 }
 
 @Composable
-private fun StartPane(onGo: (Screen) -> Unit) {
+private fun StartPane(onGo: (Screen) -> Unit, onRestore: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -183,6 +185,14 @@ private fun StartPane(onGo: (Screen) -> Unit) {
         OutlinedButton(onClick = { onGo(Screen.Join) }, modifier = Modifier.fillMaxWidth()) {
             Text("Войти по QR или ссылке")
         }
+        TextButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) {
+            Text("Восстановить устройство из Загрузок")
+        }
+        Text(
+            "Если пришлось удалить приложение из‑за другой подписи: выберите файл rope-device.backup из Загрузок.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

@@ -22,6 +22,7 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
+import app.rope.android.data.SshTarget
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
 import app.rope.android.net.ServerApi
@@ -29,7 +30,10 @@ import app.rope.android.notify.RopeNotifier
 import app.rope.android.protocol.InviteCodec
 import app.rope.android.protocol.InviteLink as ParsedInvite
 import app.rope.android.provision.ProvisionForm
+import app.rope.android.provision.ServerTarget
 import app.rope.android.provision.SshProvisioner
+import app.rope.android.update.DeviceBackup
+import app.rope.android.update.PublicDownloads
 import app.rope.android.update.AppRelease
 import app.rope.android.update.AppUpdater
 import kotlinx.coroutines.CoroutineScope
@@ -71,6 +75,7 @@ data class UiState(
     val admin: AdminSnapshot? = null,
     val updateText: String = "",
     val pendingApkPath: String? = null,
+    val installTick: Int = 0,
     val error: String? = null,
     val busy: Boolean = false,
     val offline: Boolean = false,
@@ -108,6 +113,7 @@ class RopeRepository(private val app: Application) {
     fun start(pendingLink: String?) {
         scope.launch {
             try {
+                if (!vault.exists()) tryRestoreBackup()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
                     vault.save(it.toBytes())
                 }
@@ -160,9 +166,18 @@ class RopeRepository(private val app: Application) {
             busy(true)
             try {
                 store.saveGithubToken(form.githubToken)
+                store.saveSshTarget(SshTarget(form.host, form.sshPort, form.user, form.listenPort))
                 val result = SshProvisioner(app).install(form)
                 if (form.upgrade) {
-                    _state.value = _state.value.copy(statusText = "ядро сервера обновлено", busy = false, screen = Screen.Status)
+                    val st = runCatching { api?.status() }.getOrNull()
+                    _state.value = _state.value.copy(
+                        statusText = st?.toString(2) ?: "ядро сервера обновлено",
+                        admin = st?.let { AdminSnapshot.from(it) } ?: _state.value.admin,
+                        updateText = "Ядро на VPS обновлено, чаты и owner на месте.",
+                        busy = false,
+                        screen = Screen.Status,
+                        error = null,
+                    )
                     return@launch
                 }
                 val id = identity ?: error("identity missing")
@@ -525,10 +540,18 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             try {
                 val st = api?.status()
+                val latest = runCatching { AppUpdater().latestApk(store.githubToken()) }.getOrNull()
+                val updateHint = when {
+                    latest == null -> _state.value.updateText
+                    !AppRelease.isNewer(latest.version, BuildConfig.VERSION_NAME) ->
+                        "Уже стоит ${BuildConfig.VERSION_NAME}"
+                    else -> "Доступно приложение ${latest.version}. Поставится поверх, без удаления."
+                }
                 _state.value = _state.value.copy(
                     screen = Screen.Status,
                     statusText = st?.toString(2) ?: "нет прав владельца или офлайн",
                     admin = st?.let { AdminSnapshot.from(it) },
+                    updateText = updateHint,
                 )
             } catch (e: Exception) {
                 error(e)
@@ -536,7 +559,44 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun upgradeCore(password: String, keyPem: String) {
+        val profile = store.profile()
+        if (profile == null) {
+            _state.value = _state.value.copy(error = "сначала подключитесь к серверу")
+            return
+        }
+        if (password.isBlank() && keyPem.isBlank()) {
+            _state.value = _state.value.copy(error = "Введите SSH-пароль или ключ")
+            return
+        }
+        val ssh = store.sshTarget() ?: SshTarget(profile.host, 22, "root", profile.port)
+        provision(
+            ProvisionForm(
+                host = ssh.host.ifBlank { profile.host },
+                sshPort = ssh.sshPort,
+                user = ssh.user.ifBlank { "root" },
+                password = password,
+                keyPem = keyPem,
+                listenPort = ssh.listenPort.takeIf { it > 0 } ?: profile.port,
+                target = ServerTarget.AUTO,
+                binaryUrl = "",
+                displayName = profile.displayName,
+                githubToken = store.githubToken().orEmpty(),
+                upgrade = true,
+            ),
+        )
+    }
+
     fun updateApp() {
+        val existing = _state.value.pendingApkPath
+        if (!existing.isNullOrBlank() && File(existing).isFile) {
+            _state.value = _state.value.copy(
+                installTick = _state.value.installTick + 1,
+                error = null,
+                updateText = "Повтор установки. Подтвердите в системном окне.",
+            )
+            return
+        }
         scope.launch {
             busy(true)
             try {
@@ -553,11 +613,14 @@ class RopeRepository(private val app: Application) {
                 val dest = File(app.cacheDir, "updates/${latest.assetName}")
                 dest.parentFile?.mkdirs()
                 AppUpdater().download(latest, dest, store.githubToken())
+                writeUpdateArtifacts(dest, latest.assetName)
                 _state.value = _state.value.copy(
                     busy = false,
                     screen = Screen.Status,
                     pendingApkPath = dest.absolutePath,
-                    updateText = "Скачано ${latest.version}. Подтвердите установку — удалять приложение не нужно.",
+                    installTick = _state.value.installTick + 1,
+                    error = null,
+                    updateText = "Ставим ${latest.version} поверх. Подтвердите установку в системном окне.",
                 )
             } catch (e: Exception) {
                 error(e)
@@ -567,6 +630,40 @@ class RopeRepository(private val app: Application) {
 
     fun consumePendingApk() {
         _state.value = _state.value.copy(pendingApkPath = null)
+    }
+
+    fun onApkInstalled() {
+        _state.value = _state.value.copy(
+            pendingApkPath = null,
+            updateText = "приложение обновлено",
+            error = null,
+            busy = false,
+        )
+    }
+
+    fun onApkInstallFailed(message: String, status: Int) {
+        _state.value = _state.value.copy(
+            busy = false,
+            error = message,
+            updateText = message,
+        )
+    }
+
+    fun restoreFromFile(bytes: ByteArray) {
+        scope.launch {
+            try {
+                applyDeviceBackup(DeviceBackup.parse(bytes))
+                identity = DeviceIdentity.fromBytes(vault.load())
+                val profile = store.profile()
+                if (profile != null) {
+                    attached(profile)
+                } else {
+                    _state.value = _state.value.copy(error = "восстановили ключ, но профиля сервера нет")
+                }
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
     }
 
     fun resume() {
@@ -1145,6 +1242,32 @@ class RopeRepository(private val app: Application) {
         api?.directory().orEmpty()
     } catch (_: Exception) {
         _state.value.devices
+    }
+
+    private fun writeUpdateArtifacts(apk: File, assetName: String) {
+        val id = identity ?: return
+        val backup = DeviceBackup(
+            identity = id.toBytes(),
+            profileJson = store.profileJson().orEmpty(),
+            githubToken = store.githubToken().orEmpty(),
+            sshJson = store.sshJson().orEmpty(),
+        )
+        runCatching {
+            PublicDownloads.write(app, DeviceBackup.FILE_NAME, "application/octet-stream", backup.toBytes())
+        }
+        runCatching {
+            PublicDownloads.write(app, assetName, "application/vnd.android.package-archive", apk.readBytes())
+        }
+    }
+
+    private fun tryRestoreBackup() {
+        val raw = PublicDownloads.read(app, DeviceBackup.FILE_NAME) ?: return
+        applyDeviceBackup(DeviceBackup.parse(raw))
+    }
+
+    private fun applyDeviceBackup(backup: DeviceBackup) {
+        vault.save(backup.identity)
+        store.applyBackup(backup)
     }
 
     private fun dummyProfile(host: String, port: Int, fp: String, tls: Boolean) = ServerProfile(
