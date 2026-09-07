@@ -3,13 +3,15 @@ uniffi::setup_scaffolding!();
 mod auth;
 mod envelope;
 mod error;
+mod group;
 mod identity;
 mod invite;
+mod media;
 mod util;
 
 pub use envelope::{
-    decrypt_with_peer, encrypt_message, parse_envelope_meta, EncryptedEnvelope, EnvelopeMeta,
-    PlainMessage, PROTOCOL_VERSION,
+    decrypt_typed, decrypt_with_peer, encrypt_message, encrypt_typed, parse_envelope_meta,
+    DecryptedPayload, EncryptedEnvelope, EnvelopeMeta, PlainMessage, PROTOCOL_VERSION,
 };
 pub use error::RopeError;
 pub use identity::{DeviceIdentity as NativeIdentity, PublicIdentity};
@@ -64,6 +66,23 @@ impl DeviceIdentity {
         envelope: Vec<u8>,
     ) -> Result<PlainMessage, RopeError> {
         decrypt_with_peer(&self.inner, &sender, &envelope)
+    }
+
+    pub fn encrypt_typed(
+        &self,
+        recipient: PublicIdentity,
+        msg_type: u8,
+        body: Vec<u8>,
+    ) -> Result<EncryptedEnvelope, RopeError> {
+        encrypt_typed(&self.inner, &recipient, msg_type, &body)
+    }
+
+    pub fn decrypt_typed(
+        &self,
+        sender: PublicIdentity,
+        envelope: Vec<u8>,
+    ) -> Result<DecryptedPayload, RopeError> {
+        decrypt_typed(&self.inner, &sender, &envelope)
     }
 
     pub fn sign(&self, data: Vec<u8>) -> Vec<u8> {
@@ -127,6 +146,40 @@ pub fn fingerprint_from_cert_der(der: Vec<u8>) -> String {
 #[uniffi::export]
 pub fn dev_http_fingerprint() -> String {
     invite::dev_http_fingerprint()
+}
+
+#[uniffi::export]
+pub fn encrypt_object(plaintext: Vec<u8>) -> Result<media::EncryptedObject, RopeError> {
+    media::encrypt_object(plaintext)
+}
+
+#[uniffi::export]
+pub fn decrypt_object(
+    key: Vec<u8>,
+    ciphertext: Vec<u8>,
+    expected_sha256: String,
+) -> Result<Vec<u8>, RopeError> {
+    media::decrypt_object(key, ciphertext, expected_sha256)
+}
+
+#[uniffi::export]
+pub fn object_hash_hex(ciphertext: Vec<u8>) -> String {
+    media::object_hash_hex(ciphertext)
+}
+
+#[uniffi::export]
+pub fn bump_group_epoch(epoch: u32) -> u32 {
+    group::bump_epoch(epoch)
+}
+
+#[uniffi::export]
+pub fn initial_group_epoch() -> u32 {
+    group::initial_epoch()
+}
+
+#[uniffi::export]
+pub fn known_envelope_type(msg_type: u8) -> bool {
+    envelope::known_envelope_type(msg_type)
 }
 
 #[uniffi::export]

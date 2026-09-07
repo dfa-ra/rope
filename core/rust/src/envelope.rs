@@ -12,6 +12,10 @@ use uuid::Uuid;
 pub const ENVELOPE_MAGIC: &[u8; 4] = b"ROPE";
 pub const PROTOCOL_VERSION: u16 = 1;
 pub const ENVELOPE_TYPE_TEXT: u8 = 1;
+pub const ENVELOPE_TYPE_MEDIA: u8 = 2;
+pub const ENVELOPE_TYPE_GROUP_TEXT: u8 = 3;
+pub const ENVELOPE_TYPE_CALL: u8 = 4;
+pub const ENVELOPE_TYPE_RECEIPT: u8 = 5;
 pub const HEADER_AAD_LEN: usize = 96;
 pub const MAX_CIPHERTEXT: usize = 65536;
 
@@ -42,11 +46,43 @@ pub struct PlainMessage {
     pub timestamp_ms: u64,
 }
 
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct DecryptedPayload {
+    pub message_id: String,
+    pub sender_id: String,
+    pub timestamp_ms: u64,
+    pub msg_type: u8,
+    pub body: Vec<u8>,
+}
+
+pub fn known_envelope_type(msg_type: u8) -> bool {
+    matches!(
+        msg_type,
+        ENVELOPE_TYPE_TEXT
+            | ENVELOPE_TYPE_MEDIA
+            | ENVELOPE_TYPE_GROUP_TEXT
+            | ENVELOPE_TYPE_CALL
+            | ENVELOPE_TYPE_RECEIPT
+    )
+}
+
 pub fn encrypt_message(
     sender: &DeviceIdentity,
     recipient: &PublicIdentity,
     plaintext: &str,
 ) -> Result<EncryptedEnvelope, RopeError> {
+    encrypt_typed(sender, recipient, ENVELOPE_TYPE_TEXT, &encode_text_payload(plaintext))
+}
+
+pub fn encrypt_typed(
+    sender: &DeviceIdentity,
+    recipient: &PublicIdentity,
+    msg_type: u8,
+    inner: &[u8],
+) -> Result<EncryptedEnvelope, RopeError> {
+    if !known_envelope_type(msg_type) {
+        return Err(RopeError::InvalidEnvelope);
+    }
     let (_, recipient_x) = decode_public(&recipient.blob)?;
     let message_id = Uuid::new_v4();
     let timestamp_ms = unix_ms();
@@ -57,14 +93,13 @@ pub fn encrypt_message(
     let mut header = Vec::with_capacity(124);
     header.extend_from_slice(ENVELOPE_MAGIC);
     header.extend_from_slice(&PROTOCOL_VERSION.to_le_bytes());
-    header.push(ENVELOPE_TYPE_TEXT);
+    header.push(msg_type);
     header.push(0);
     header.extend_from_slice(message_id.as_bytes());
     header.extend_from_slice(&timestamp_ms.to_le_bytes());
     header.extend_from_slice(&sender_pk);
     header.extend_from_slice(&recipient_pk);
 
-    let inner = encode_text_payload(plaintext);
     let key = derive_key(sender.ecdh_secret().diffie_hellman(&recipient_x).as_bytes(), message_id.as_bytes())?;
     let cipher = XChaCha20Poly1305::new((&key).into());
     let mut nonce_bytes = [0u8; 24];
@@ -132,11 +167,59 @@ pub fn decrypt_with_peer(
             },
         )
         .map_err(|_| RopeError::crypto("decrypt"))?;
+    if parsed.meta.msg_type != ENVELOPE_TYPE_TEXT && parsed.meta.msg_type != ENVELOPE_TYPE_GROUP_TEXT {
+        return Err(RopeError::InvalidEnvelope);
+    }
     Ok(PlainMessage {
         message_id: parsed.meta.message_id,
         sender_id: parsed.meta.sender_id,
         text: decode_text_payload(&inner)?,
         timestamp_ms: parsed.meta.timestamp_ms,
+    })
+}
+
+pub fn decrypt_typed(
+    recipient: &DeviceIdentity,
+    sender: &PublicIdentity,
+    envelope: &[u8],
+) -> Result<DecryptedPayload, RopeError> {
+    let parsed = parse_envelope(envelope)?;
+    if parsed.meta.version != PROTOCOL_VERSION {
+        return Err(RopeError::UnsupportedVersion(parsed.meta.version));
+    }
+    if !known_envelope_type(parsed.meta.msg_type) {
+        return Err(RopeError::InvalidEnvelope);
+    }
+    if parsed.meta.recipient_id != recipient.device_id() {
+        return Err(RopeError::InvalidEnvelope);
+    }
+    if parsed.meta.sender_id != sender.device_id {
+        return Err(RopeError::InvalidEnvelope);
+    }
+    let (sender_sign, sender_x) = decode_public(&sender.blob)?;
+    if !crate::identity::verify_signature(sender_sign.as_bytes(), parsed.signed_body, &parsed.signature)? {
+        return Err(RopeError::InvalidEnvelope);
+    }
+    let msg_id = Uuid::parse_str(&parsed.meta.message_id).map_err(|_| RopeError::InvalidEnvelope)?;
+    let key = derive_key(recipient.ecdh_secret().diffie_hellman(&sender_x).as_bytes(), msg_id.as_bytes())?;
+    let cipher = XChaCha20Poly1305::new((&key).into());
+    let nonce = XNonce::from_slice(&parsed.nonce);
+    let aad = &parsed.signed_body[..HEADER_AAD_LEN];
+    let inner = cipher
+        .decrypt(
+            nonce,
+            Payload {
+                msg: parsed.ciphertext,
+                aad,
+            },
+        )
+        .map_err(|_| RopeError::crypto("decrypt"))?;
+    Ok(DecryptedPayload {
+        message_id: parsed.meta.message_id,
+        sender_id: parsed.meta.sender_id,
+        timestamp_ms: parsed.meta.timestamp_ms,
+        msg_type: parsed.meta.msg_type,
+        body: inner,
     })
 }
 
@@ -264,7 +347,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn http_dev_fingerprint_is_stable() {
         assert_eq!(
             http_dev_fingerprint(),
@@ -283,5 +365,32 @@ mod tests {
         assert_eq!(meta.version, 99);
         let err = decrypt_with_peer(&bob, &alice.public_identity(), &env.bytes).unwrap_err();
         assert!(matches!(err, RopeError::UnsupportedVersion(99)));
+    }
+
+    #[test]
+    fn typed_media_roundtrip_and_unknown_type() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let body = br#"{"kind":"voice","object_id":"x"}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, body).unwrap();
+        assert_eq!(parse_envelope_meta(&env.bytes).unwrap().msg_type, ENVELOPE_TYPE_MEDIA);
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_MEDIA);
+        assert_eq!(got.body, body);
+        assert!(encrypt_typed(&alice, &bob.public_identity(), 99, b"x").is_err());
+    }
+
+    #[test]
+    fn v1_text_still_works_after_typed_api() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let env = encrypt_message(&alice, &bob.public_identity(), "compat").unwrap();
+        assert_eq!(parse_envelope_meta(&env.bytes).unwrap().msg_type, ENVELOPE_TYPE_TEXT);
+        assert_eq!(
+            decrypt_with_peer(&bob, &alice.public_identity(), &env.bytes)
+                .unwrap()
+                .text,
+            "compat"
+        );
     }
 }

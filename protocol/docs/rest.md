@@ -27,7 +27,7 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 ### `GET /version`
 
 ```json
-{ "server": "0.1.0", "protocol": 1 }
+{ "server": "0.2.0", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -98,12 +98,63 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "protocol_version": 1,
   "member_count": 2,
-  "mailbox_count": 0
+  "device_count": 2,
+  "mailbox_count": 0,
+  "object_count": 0,
+  "object_bytes": 0,
+  "group_count": 0,
+  "listen": "0.0.0.0:8443",
+  "max_object_bytes": 26214400,
+  "online_devices": 1
 }
 ```
+
+### `POST /v1/objects`
+
+Auth signs the **raw ciphertext body**. Optional `X-Rope-SHA256` must match SHA-256 of that body. Limits: 25 MiB object, 512 MiB server quota. Response:
+
+```json
+{ "object_id": "uuid", "sha256": "hex", "size": 123, "expires_at": "RFC3339" }
+```
+
+### `GET /v1/objects/{id}`
+
+Returns `application/octet-stream` plus `X-Rope-SHA256`. Any authenticated member who knows the id can download (capability is the E2EE media payload).
+
+### `POST /v1/groups`
+
+```json
+{ "name": "crew" }
+```
+
+```json
+{ "group_id": "uuid", "name": "crew", "epoch": 1, "members": ["device_hex"] }
+```
+
+### `GET /v1/groups`
+
+```json
+{ "groups": [{ "group_id": "...", "name": "...", "epoch": 2, "members": [] }] }
+```
+
+### `POST /v1/groups/{id}/members`
+
+```json
+{ "device_id": "hex" }
+```
+
+Bumps epoch. Caller must already be a member.
+
+### `POST /v1/groups/{id}/remove`
+
+```json
+{ "device_id": "hex" }
+```
+
+Soft-removes the member and bumps epoch. Removed devices no longer see the group.
 
 ### `POST /v1/admin/revoke-member` (owner)
 
