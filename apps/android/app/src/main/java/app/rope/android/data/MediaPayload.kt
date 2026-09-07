@@ -215,6 +215,7 @@ object RoleRules {
 
     fun canUpgradeCore(role: String?): Boolean = isOwner(role)
 
+    @Suppress("UNUSED_PARAMETER")
     fun canUpdateApp(role: String?): Boolean = true
 }
 
