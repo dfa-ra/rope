@@ -67,6 +67,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.rope.android.RopeDarkBg
 import app.rope.android.UiState
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListRules
@@ -81,10 +82,10 @@ import app.rope.android.data.ReactionCodec
 import app.rope.android.data.ReactionPayload
 import app.rope.android.media.ImageCodec
 
-private val OutBubbleLight = Color(0xFF2563EB)
-private val OutBubbleDark = Color(0xFF00D4FF)
-private val InBubbleLight = Color(0xFFF1F5F9)
-private val InBubbleDark = Color(0xFF1E293B)
+private val OutBubbleLight = Color(0xFF3F3F46)
+private val OutBubbleDark = Color(0xFF3F3F46)
+private val InBubbleLight = Color(0xFFF4F4F5)
+private val InBubbleDark = Color(0xFF27272A)
 
 @Composable
 fun ChatsPane(
@@ -453,9 +454,9 @@ private fun MessageBubble(
     onOpenImage: (ChatMessage) -> Unit,
 ) {
     val mine = m.outgoing
-    val dark = MaterialTheme.colorScheme.background == Color(0xFF0B0F19)
+    val dark = MaterialTheme.colorScheme.background == RopeDarkBg
     val outBg = if (dark) OutBubbleDark else OutBubbleLight
-    val outFg = if (dark) Color(0xFF0B0F19) else Color.White
+    val outFg = if (dark) Color(0xFFF4F4F5) else Color.White
     var picker by remember(m.id) { mutableStateOf(false) }
     val me = state.profile?.deviceId.orEmpty()
     Column(

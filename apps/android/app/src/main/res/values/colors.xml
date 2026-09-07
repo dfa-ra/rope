@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rope_ink">#09090B</color>
+    <color name="rope_light_gray">#D4D4D8</color>
+    <color name="rope_dark_gray">#3F3F46</color>
+    <color name="ic_launcher_background">#09090B</color>
+</resources>

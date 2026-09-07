@@ -7,40 +7,57 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import app.rope.android.data.ThemeMode
 
-val RopeDeepBlue = Color(0xFF0F172A)
-val RopeAccentLight = Color(0xFF2563EB)
-val RopeDarkBg = Color(0xFF0B0F19)
-val RopeDarkSurface = Color(0xFF121826)
-val RopeTextDark = Color(0xFF38BDF8)
-val RopeNeon = Color(0xFF00D4FF)
+/** Near-black surfaces. Primary stays black / white. */
+val RopeBlack = Color(0xFF09090B)
+val RopeWhite = Color(0xFFFAFAFA)
+
+/** Secondary: light gray on dark, dark gray in containers / outgoing bubbles. */
+val RopeGrayLight = Color(0xFFD4D4D8)
+val RopeGrayDark = Color(0xFF3F3F46)
+val RopeLightGray = RopeGrayLight
+val RopeDarkGray = RopeGrayDark
+val RopeMidGray = Color(0xFFA1A1AA)
+
+val RopeDarkBg = RopeBlack
+val RopeDarkSurface = Color(0xFF18181B)
+val RopeTextDark = RopeGrayLight
+
+/** Kept so existing call sites compile; no longer a neon accent. */
+val RopeDeepBlue = RopeBlack
+val RopeAccentLight = RopeGrayDark
+val RopeNeon = RopeGrayLight
 
 private val LightColors = lightColorScheme(
-    primary = RopeAccentLight,
+    primary = RopeBlack,
     onPrimary = Color.White,
-    secondary = RopeAccentLight,
-    onSecondary = Color.White,
+    secondary = RopeGrayDark,
+    onSecondary = RopeWhite,
+    secondaryContainer = Color(0xFFE4E4E7),
+    onSecondaryContainer = RopeBlack,
     background = Color.White,
-    onBackground = RopeDeepBlue,
+    onBackground = RopeBlack,
     surface = Color.White,
-    onSurface = RopeDeepBlue,
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = Color(0xFF334155),
-    outline = Color(0xFF94A3B8),
+    onSurface = RopeBlack,
+    surfaceVariant = Color(0xFFF4F4F5),
+    onSurfaceVariant = Color(0xFF52525B),
+    outline = Color(0xFFA1A1AA),
     error = Color(0xFFB91C1C),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = RopeNeon,
-    onPrimary = RopeDarkBg,
-    secondary = RopeNeon,
-    onSecondary = RopeDarkBg,
+    primary = RopeWhite,
+    onPrimary = RopeBlack,
+    secondary = RopeGrayLight,
+    onSecondary = RopeBlack,
+    secondaryContainer = RopeGrayDark,
+    onSecondaryContainer = RopeGrayLight,
     background = RopeDarkBg,
-    onBackground = RopeTextDark,
+    onBackground = RopeGrayLight,
     surface = RopeDarkSurface,
-    onSurface = RopeTextDark,
-    surfaceVariant = Color(0xFF1E293B),
-    onSurfaceVariant = Color(0xFF7DD3FC),
-    outline = Color(0xFF334155),
+    onSurface = Color(0xFFE4E4E7),
+    surfaceVariant = Color(0xFF27272A),
+    onSurfaceVariant = Color(0xFFA1A1AA),
+    outline = Color(0xFF52525B),
     error = Color(0xFFF87171),
 )
 
