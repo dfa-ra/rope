@@ -339,3 +339,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .reveal { opacity: 1; transform: none; }
   .logo-hero .draw, .rope-line-path { stroke-dashoffset: 0; }
 }
+
+@media (scripting: none) {
+  .reveal { opacity: 1; transform: none; animation: none; }
+}
