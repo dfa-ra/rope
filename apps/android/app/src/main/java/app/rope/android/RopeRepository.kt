@@ -12,9 +12,12 @@ import android.util.Base64
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.CallInfo
+import app.rope.android.data.CallLink
+import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.CallSignal
+import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
@@ -63,6 +66,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -147,6 +151,9 @@ class RopeRepository(private val app: Application) {
     private var typingJob: Job? = null
     private var rtc: WebRtcSession? = null
     private val queuedSignals = mutableListOf<CallSignal>()
+    private var connectWatch: Job? = null
+    private var iceRestarted = false
+    private val rtcLock = Any()
 
     fun start(pendingLink: String?) {
         scope.launch {
@@ -716,29 +723,35 @@ class RopeRepository(private val app: Application) {
             peerName = peer.displayName,
             outgoing = true,
             phase = CallPhase.RINGING_OUT,
+            media = "WebRTC · соединяем",
+            link = CallLinkState.RINGING,
         )
-        _state.value = _state.value.copy(call = call.copy(media = CallMedia.label("NEW")))
+        _state.value = _state.value.copy(call = call)
         recordCall(peer.deviceId, "Исходящий звонок", outgoing = true)
         sendCall(call.callId, peer.deviceId, "ring", "")
         sendCallEnvelope(peer, call.callId, "ring")
         prefetchIce()
-        attachRtc(asCaller = true)
         startTone(true)
         audioMode(true)
     }
 
     fun acceptCall() {
         val call = _state.value.call ?: return
-        _state.value = _state.value.copy(call = call.copy(phase = CallPhase.ACTIVE, media = CallMedia.label("CHECKING")))
+        _state.value = _state.value.copy(
+            call = call.copy(
+                phase = CallPhase.ACTIVE,
+                media = CallMedia.label("CHECKING"),
+                link = CallLinkState.CONNECTING,
+            ),
+        )
         sendCall(call.callId, call.peerDeviceId, "accept", "")
         _state.value.devices.find { it.deviceId == call.peerDeviceId }?.let {
             sendCallEnvelope(it, call.callId, "accept")
         }
-        prefetchIce()
-        attachRtc(asCaller = false)
         stopTone()
         audioMode(true)
         notifier.clearCall()
+        scope.launch { startRtc(asCaller = false) }
     }
 
     fun rejectCall() {
@@ -1658,20 +1671,38 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun handleCallEvent(obj: JSONObject) {
-        val from = obj.optString("from")
-        val event = obj.optString("event")
-        val callId = obj.optString("call_id")
+        val from = JsonIds.optional(obj.optString("from")).orEmpty()
+        val event = JsonIds.optional(obj.optString("event")).orEmpty()
+        val callId = JsonIds.optional(obj.optString("call_id")).orEmpty()
         if (from.isBlank() || callId.isBlank()) return
         val name = _state.value.devices.find { it.deviceId == from }?.displayName ?: from.take(8)
         val current = _state.value.call
         when (event) {
             "ring" -> {
                 if (current?.callId == callId) return
+                if (current != null && current.outgoing && current.peerDeviceId == from &&
+                    current.phase == CallPhase.RINGING_OUT
+                ) {
+                    val me = identity?.deviceId().orEmpty()
+                    val iOffer = CallLink.weCreateOffer(me, from)
+                    _state.value = _state.value.copy(
+                        call = current.copy(
+                            phase = CallPhase.ACTIVE,
+                            media = CallMedia.label("CHECKING"),
+                            link = CallLinkState.CONNECTING,
+                        ),
+                    )
+                    stopTone()
+                    scope.launch { startRtc(asCaller = iOffer) }
+                    return
+                }
+                if (current != null) return
                 _state.value = _state.value.copy(
                     call = CallInfo(
                         callId, from, name, outgoing = false, phase = CallPhase.RINGING_IN,
                         payload = obj.optString("payload"),
-                        media = CallMedia.label("NEW"),
+                        media = "WebRTC · соединяем",
+                        link = CallLinkState.RINGING,
                     ),
                 )
                 recordCall(from, "Входящий звонок", outgoing = false)
@@ -1683,8 +1714,14 @@ class RopeRepository(private val app: Application) {
             "accept" -> {
                 val cur = current ?: return
                 if (cur.callId != callId) return
-                _state.value = _state.value.copy(call = cur.copy(phase = CallPhase.ACTIVE, media = CallMedia.label("CHECKING")))
-                if (cur.outgoing) attachRtc(asCaller = true)
+                _state.value = _state.value.copy(
+                    call = cur.copy(
+                        phase = CallPhase.ACTIVE,
+                        media = CallMedia.label("CHECKING"),
+                        link = CallLinkState.CONNECTING,
+                    ),
+                )
+                if (cur.outgoing) scope.launch { startRtc(asCaller = true) }
                 stopTone()
             }
             "reject", "hangup" -> {
@@ -1692,46 +1729,115 @@ class RopeRepository(private val app: Application) {
             }
             in CallSignal.EVENTS -> {
                 if (current != null && current.callId != callId) return
-                val sig = CallSignal.parse(obj.optString("payload")) ?: return
+                val sig = CallSignal.parsePayload(obj.opt("payload")) ?: return
                 val session = rtc
                 if (session == null) queuedSignals += sig else session.handleRemote(sig)
             }
         }
     }
 
-    private fun attachRtc(asCaller: Boolean) {
-        if (rtc != null) {
-            if (asCaller) return
-            queuedSignals.toList().also { queuedSignals.clear() }.forEach { rtc?.handleRemote(it) }
-            return
+    private suspend fun startRtc(asCaller: Boolean) {
+        val ice = awaitIce()
+        val hasTurn = !CallLink.missingTurn(ice)
+        val cur = _state.value.call ?: return
+        val media = if (hasTurn) cur.media.ifBlank { CallMedia.label("CHECKING") } else CallLink.missingTurnDetail()
+        _state.value = _state.value.copy(call = cur.copy(hasTurn = hasTurn, media = media, link = CallLinkState.CONNECTING))
+        attachRtc(asCaller, ice)
+        watchConnecting()
+    }
+
+    private suspend fun awaitIce(): List<IceServerSpec> {
+        val cur = store.profile() ?: _state.value.profile
+        val updated = withContext(Dispatchers.IO) {
+            cur?.let { refreshIceServers(it) } ?: cur
         }
-        val profile = store.profile() ?: _state.value.profile
-        val ice = IceServers.parse(profile?.iceServersJson)
-        val session = try {
-            WebRtcSession(
-                app,
-                iceServers = ice,
-                pinnedFingerprint = profile?.fingerprint.orEmpty(),
-                onLocalSignal = { sig ->
-                    val call = _state.value.call ?: return@WebRtcSession
-                    val peer = _state.value.devices.find { it.deviceId == call.peerDeviceId }
-                        ?: _state.value.peer
-                        ?: return@WebRtcSession
-                    sendCall(call.callId, peer.deviceId, sig.kind, sig.toJson())
-                    sendCallEnvelope(peer, call.callId, sig.kind, sig.toJson())
-                },
-                onMedia = { label ->
-                    val cur = _state.value.call ?: return@WebRtcSession
-                    _state.value = _state.value.copy(call = cur.copy(media = label))
-                },
-            )
-        } catch (e: Exception) {
-            _state.value = _state.value.copy(error = "WebRTC: ${e.message}")
-            return
+        if (updated != null) {
+            store.saveProfile(updated)
+            _state.value = _state.value.copy(profile = updated)
         }
-        rtc = session
-        if (asCaller) session.createOffer() else session.prepareCallee()
-        queuedSignals.toList().also { queuedSignals.clear() }.forEach { session.handleRemote(it) }
+        val parsed = IceServers.parse(updated?.iceServersJson)
+        return IceServers.resolve(parsed, updated?.host)
+    }
+
+    private fun attachRtc(asCaller: Boolean, ice: List<IceServerSpec>) {
+        synchronized(rtcLock) {
+            if (rtc != null) {
+                if (asCaller) return
+                queuedSignals.toList().also { queuedSignals.clear() }.forEach { rtc?.handleRemote(it) }
+                return
+            }
+            val profile = store.profile() ?: _state.value.profile
+            val session = try {
+                WebRtcSession(
+                    app,
+                    iceServers = ice,
+                    pinnedFingerprint = profile?.fingerprint.orEmpty(),
+                    hintHost = profile?.host,
+                    onLocalSignal = { sig ->
+                        val call = _state.value.call ?: return@WebRtcSession
+                        val peer = _state.value.devices.find { it.deviceId == call.peerDeviceId }
+                            ?: _state.value.peer
+                            ?: return@WebRtcSession
+                        sendCall(call.callId, peer.deviceId, sig.kind, sig.toJson())
+                        sendCallEnvelope(peer, call.callId, sig.kind, sig.toJson())
+                    },
+                    onIce = { name, viaRelay ->
+                        applyIceState(name, viaRelay)
+                    },
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = "WebRTC: ${e.message}")
+                return
+            }
+            rtc = session
+            if (asCaller) session.createOffer() else session.prepareCallee()
+            queuedSignals.toList().also { queuedSignals.clear() }.forEach { session.handleRemote(it) }
+        }
+    }
+
+    private fun applyIceState(name: String, viaRelay: Boolean) {
+        val cur = _state.value.call ?: return
+        val (link, label) = CallLink.applyIce(name, viaRelay, cur.hasTurn)
+        _state.value = _state.value.copy(call = cur.copy(media = label, link = link))
+        if (link == CallLinkState.CONNECTED) {
+            connectWatch?.cancel()
+            connectWatch = null
+        }
+        if (link == CallLinkState.FAILED && !iceRestarted && cur.hasTurn) {
+            iceRestarted = true
+            rtc?.restartIce()
+            watchConnecting()
+        }
+    }
+
+    private fun watchConnecting() {
+        connectWatch?.cancel()
+        val startedAt = System.currentTimeMillis()
+        connectWatch = scope.launch {
+            delay(CallLink.CONNECT_TIMEOUT_MS)
+            val call = _state.value.call ?: return@launch
+            if (call.phase != CallPhase.ACTIVE) return@launch
+            if (!CallLink.timedOut(System.currentTimeMillis() - startedAt, call.link)) return@launch
+            if (!iceRestarted && call.hasTurn) {
+                iceRestarted = true
+                rtc?.restartIce()
+                delay(CallLink.CONNECT_TIMEOUT_MS)
+                val again = _state.value.call ?: return@launch
+                if (again.link == CallLinkState.CONNECTED || again.phase != CallPhase.ACTIVE) return@launch
+                failConnecting(CallLink.timeoutDetail(again.hasTurn))
+                return@launch
+            }
+            failConnecting(CallLink.timeoutDetail(call.hasTurn))
+        }
+    }
+
+    private fun failConnecting(detail: String) {
+        val cur = _state.value.call ?: return
+        if (cur.link == CallLinkState.CONNECTED) return
+        _state.value = _state.value.copy(
+            call = cur.copy(link = CallLinkState.FAILED, media = detail),
+            error = detail,
+        )
     }
 
     private fun sendCallEnvelope(peer: DirectoryDevice, callId: String, event: String, payload: String = "") {
@@ -1788,6 +1894,9 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun endCall() {
+        connectWatch?.cancel()
+        connectWatch = null
+        iceRestarted = false
         stopTone()
         audioMode(false)
         notifier.clearCall()

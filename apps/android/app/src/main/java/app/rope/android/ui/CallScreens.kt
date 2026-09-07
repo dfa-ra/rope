@@ -27,6 +27,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.rope.android.data.CallInfo
+import app.rope.android.data.CallLink
+import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallPhase
 
 @Composable
@@ -46,12 +48,7 @@ fun CallOverlay(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                when (call.phase) {
-                    CallPhase.RINGING_IN -> "Входящий вызов"
-                    CallPhase.RINGING_OUT -> "Вызов…"
-                    CallPhase.ACTIVE -> "Разговор"
-                    CallPhase.ENDED -> "Завершён"
-                },
+                CallLink.heading(call.phase, call.link),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -72,10 +69,15 @@ fun CallOverlay(
             Text(
                 when {
                     call.media.isNotBlank() -> call.media
-                    call.phase == CallPhase.ACTIVE -> "WebRTC · DTLS-SRTP"
+                    call.link == CallLinkState.CONNECTED -> "WebRTC · DTLS-SRTP"
+                    call.phase == CallPhase.ACTIVE -> "WebRTC · соединяем"
                     else -> "один тап — ответить"
                 },
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = if (call.link == CallLinkState.FAILED) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
