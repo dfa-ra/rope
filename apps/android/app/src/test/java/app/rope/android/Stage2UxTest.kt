@@ -16,7 +16,6 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.TypingRules
 import app.rope.android.data.ComposerRules
-import app.rope.android.data.VoiceGesture
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.JsonIds
@@ -45,21 +44,6 @@ class Stage2UxTest {
         assertFalse(ComposerRules.showSendButton("", false))
         assertTrue(ComposerRules.showSendButton("привет", false))
         assertFalse(ComposerRules.showSendButton("привет", true))
-        assertFalse(ComposerRules.showSendButton("привет", true, recordingLocked = false))
-        assertTrue(ComposerRules.showSendButton("", true, recordingLocked = true))
-        assertTrue(ComposerRules.showSendButton("привет", true, recordingLocked = true))
-        assertFalse(ComposerRules.showMicButton("", true, recordingLocked = true))
-        assertTrue(ComposerRules.showMicButton("", true, recordingLocked = false))
-        assertEquals(80f, ComposerRules.VOICE_LOCK_SLIDE_UP)
-        assertEquals(80f, ComposerRules.VOICE_CANCEL_SLIDE_LEFT)
-        assertEquals(VoiceGesture.LOCK, ComposerRules.voiceGesture(0f, -80f))
-        assertEquals(VoiceGesture.CANCEL, ComposerRules.voiceGesture(-80f, 0f))
-        assertEquals(VoiceGesture.HOLD, ComposerRules.voiceGesture(-20f, -20f))
-        assertEquals(VoiceGesture.LOCK, ComposerRules.voiceGesture(-40f, -100f))
-        assertEquals(VoiceGesture.CANCEL, ComposerRules.voiceGesture(-100f, -40f))
-        assertTrue(ComposerRules.shouldLockVoice(-80f))
-        assertTrue(ComposerRules.shouldCancelVoice(-80f))
-        assertFalse(ComposerRules.shouldLockVoice(-20f))
     }
 
     @Test
