@@ -1,8 +1,8 @@
 # Rope
 
-Private self-hosted 1-to-1 messenger for Android. You provision a personal VPS from the app, invite a second device with a QR / deep link, and exchange E2EE text through a Go relay that never sees plaintext.
+Private self-hosted messenger for Android. You provision a personal VPS from the app, invite people with a QR / deep link, and exchange E2EE text, voice, photos, files, and group chats through a Go relay that never sees plaintext.
 
-MVP stack: **Kotlin UI → Rust security core (UniFFI) → HTTPS/WSS → Go + SQLite**.
+Stack: **Kotlin UI → Rust security core (UniFFI) → HTTPS/WSS → Go + SQLite**.
 
 ## Layout
 
@@ -55,9 +55,11 @@ Push a tag `vX.Y.Z`. GitHub Actions publishes:
 
 Production APK signing uses repository secrets documented in [docs/dev-setup.md](docs/dev-setup.md).
 
-## What is not in MVP
+Stage 2 (v0.2): photos/files, hold-to-record voice, groups, call signaling, encrypted object store. Details: [docs/stage2.md](docs/stage2.md), metrics: [docs/stage2-metrics.md](docs/stage2-metrics.md).
 
-iOS, calls, voice notes, files, groups, federation, web/desktop, polished Telegram/Amnezia UI.
+## What is not in this tree
+
+iOS, WebRTC media/TURN in production, federation, web/desktop.
 
 ## License
 

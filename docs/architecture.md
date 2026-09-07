@@ -8,7 +8,7 @@ Rope is a private self-hosted messenger. The Android app provisions a personal V
 | --- | --- | --- |
 | Android UI | `apps/android` | Screens, lifecycle, HTTPS/WSS, QR, SSH provisioning, local history |
 | Rust core | `core/rust` | Device identity, keys, envelope, encrypt/sign/verify, invite + fingerprint checks |
-| Go relay | `server/go` | REST + WSS, members/devices, invites, encrypted mailbox, health |
+| Go relay | `server/go` | REST + WSS, members/devices, invites, encrypted mailbox, encrypted objects, groups, call signaling, health |
 | Deployment | `deployment/` | Idempotent VPS install, systemd, TLS material |
 
 Kotlin never implements cryptography and never touches raw private keys. It calls the UniFFI API exported by `rope_core` and stores the serialized identity blob after wrapping it with an Android Keystore key.
