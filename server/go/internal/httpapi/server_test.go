@@ -54,6 +54,11 @@ func newDevice(t *testing.T) testDevice {
 
 func testServer(t *testing.T) (*Server, *httptest.Server, string) {
 	t.Helper()
+	return testServerCfg(t, nil)
+}
+
+func testServerCfg(t *testing.T, tweak func(*config.Config)) (*Server, *httptest.Server, string) {
+	t.Helper()
 	dir := t.TempDir()
 	store, err := db.Open(filepath.Join(dir, "data.db"))
 	if err != nil {
@@ -66,6 +71,9 @@ func testServer(t *testing.T) (*Server, *httptest.Server, string) {
 	cfg.ServerID = "test-server"
 	cfg.SetupToken = "setup-secret"
 	cfg.MailboxTTLSeconds = 60
+	if tweak != nil {
+		tweak(&cfg)
+	}
 	if err := store.EnsureMeta(cfg.ServerID, config.ServerVersion, config.ProtocolVersion); err != nil {
 		t.Fatal(err)
 	}

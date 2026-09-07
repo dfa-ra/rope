@@ -1,0 +1,140 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+)
+
+func TestGroupSendRejectsNonMember(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	carol := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+	req = authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, carol, "carol")
+
+	req = authReq(t, http.MethodPost, hs.URL+"/v1/groups", "/v1/groups", []byte(`{"name":"crew"}`), alice)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var g groupJSON
+	_ = json.NewDecoder(resp.Body).Decode(&g)
+	resp.Body.Close()
+	body, _ := json.Marshal(map[string]string{"device_id": bob.id})
+	req = authReq(t, http.MethodPost, hs.URL+"/v1/groups/"+g.GroupID+"/members", "/v1/groups/"+g.GroupID+"/members", body, alice)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	carolWS := dialWS(t, ctx, hs, carol)
+	defer carolWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+	drainHello(t, ctx, carolWS)
+
+	env := buildEnvelope(t, alice, bob, "group-hi")
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "group_send", "group_id": g.GroupID, "envelopes": [][]byte{env},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	queued := readSkipPresence(t, ctx, aliceWS)
+	if queued.Type != "queued" {
+		t.Fatalf("member send want queued got %+v", queued)
+	}
+	got := readSkipPresence(t, ctx, bobWS)
+	if got.Type != "deliver" {
+		t.Fatalf("bob want deliver got %+v", got)
+	}
+
+	env2 := buildEnvelope(t, carol, bob, "intruder")
+	if err := wsjson.Write(ctx, carolWS, map[string]any{
+		"type": "group_send", "group_id": g.GroupID, "envelopes": [][]byte{env2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rej := readSkipPresence(t, ctx, carolWS)
+	if rej.Type != "error" || rej.Code != "auth" {
+		t.Fatalf("non-member want auth error got %+v", rej)
+	}
+}
+
+func TestCallRelayLiveAndOffline(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c1", "to": bob.id, "event": "ring", "payload": "sdp",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := readSkipPresence(t, ctx, bobWS)
+	if got.Type != "call" || got.Event != "ring" || got.From != alice.id || got.CallID != "c1" {
+		t.Fatalf("call relay %+v", got)
+	}
+
+	_ = bobWS.Close(websocket.StatusNormalClosure, "")
+	time.Sleep(200 * time.Millisecond)
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c2", "to": bob.id, "event": "ring",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	off := readSkipPresence(t, ctx, aliceWS)
+	if off.Type != "error" || off.Code != "not_found" {
+		t.Fatalf("offline call want not_found got %+v", off)
+	}
+}

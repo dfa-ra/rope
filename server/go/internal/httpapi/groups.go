@@ -1,0 +1,113 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+)
+
+func (s *Server) createGroup(w http.ResponseWriter, _ *http.Request, a authed, body []byte) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(body, &req)
+	if len([]rune(req.Name)) < 1 || len([]rune(req.Name)) > 40 {
+		writeJSON(w, 400, map[string]string{"error": "bad group name"})
+		return
+	}
+	id := uuid.NewString()
+	if err := s.Store.InsertGroup(id, req.Name, a.Device.ID, 1); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	_ = s.Store.AddGroupMember(id, a.Device.ID)
+	s.writeGroup(w, id)
+}
+
+func (s *Server) listGroups(w http.ResponseWriter, _ *http.Request, a authed, _ []byte) {
+	groups, err := s.Store.ListGroupsForDevice(a.Device.ID)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	type gJSON struct {
+		GroupID string   `json:"group_id"`
+		Name    string   `json:"name"`
+		Epoch   uint32   `json:"epoch"`
+		Members []string `json:"members"`
+	}
+	out := []gJSON{}
+	for _, g := range groups {
+		members, _ := s.Store.GroupMembers(g.ID)
+		out = append(out, gJSON{g.ID, g.Name, g.Epoch, members})
+	}
+	writeJSON(w, 200, map[string]any{"groups": out})
+}
+
+func (s *Server) groupAdd(w http.ResponseWriter, r *http.Request, a authed, body []byte) {
+	gid := chi.URLParam(r, "id")
+	ok, err := s.Store.IsGroupMember(gid, a.Device.ID)
+	if err != nil || !ok {
+		writeJSON(w, 403, map[string]string{"error": "not a member"})
+		return
+	}
+	var req struct {
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.DeviceID == "" {
+		writeJSON(w, 400, map[string]string{"error": "device_id"})
+		return
+	}
+	if _, err := s.Store.Device(req.DeviceID); err != nil {
+		writeJSON(w, 404, map[string]string{"error": "unknown device"})
+		return
+	}
+	if err := s.Store.AddGroupMember(gid, req.DeviceID); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	_, _ = s.Store.BumpGroupEpoch(gid)
+	s.writeGroup(w, gid)
+}
+
+func (s *Server) groupRemove(w http.ResponseWriter, r *http.Request, a authed, body []byte) {
+	gid := chi.URLParam(r, "id")
+	ok, err := s.Store.IsGroupMember(gid, a.Device.ID)
+	if err != nil || !ok {
+		writeJSON(w, 403, map[string]string{"error": "not a member"})
+		return
+	}
+	var req struct {
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.DeviceID == "" {
+		writeJSON(w, 400, map[string]string{"error": "device_id"})
+		return
+	}
+	if err := s.Store.RemoveGroupMember(gid, req.DeviceID); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	_, _ = s.Store.BumpGroupEpoch(gid)
+	s.writeGroup(w, gid)
+}
+
+func (s *Server) writeGroup(w http.ResponseWriter, id string) {
+	g, err := s.Store.Group(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	members, _ := s.Store.GroupMembers(id)
+	if members == nil {
+		members = []string{}
+	}
+	writeJSON(w, 200, map[string]any{
+		"group_id": g.ID,
+		"name":     g.Name,
+		"epoch":    g.Epoch,
+		"members":  members,
+	})
+}
