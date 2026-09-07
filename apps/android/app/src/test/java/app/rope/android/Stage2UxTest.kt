@@ -292,6 +292,7 @@ class Stage2UxTest {
         assertEquals(CallSignal.ICE, ice.kind)
         assertEquals("typ host", ice.candidate)
         assertEquals(null, CallSignal.parse("""{"kind":"ring"}"""))
+        assertEquals(null, CallSignal.parse("""{"kind":"offer","sdp":null}"""))
         assertTrue(CallMedia.STUN_URLS.any { it.startsWith("stun:") })
         assertEquals("WebRTC · DTLS-SRTP", CallMedia.label("CONNECTED"))
         assertEquals("WebRTC · через сервер", CallMedia.label("CONNECTED", viaRelay = true))

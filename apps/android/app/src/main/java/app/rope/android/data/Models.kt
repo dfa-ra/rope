@@ -104,6 +104,8 @@ data class CallInfo(
     val phase: CallPhase,
     val payload: String = "",
     val media: String = "",
+    val link: CallLinkState = CallLinkState.RINGING,
+    val hasTurn: Boolean = false,
 )
 
 object ChatIds {

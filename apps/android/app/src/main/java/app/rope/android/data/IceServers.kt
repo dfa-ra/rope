@@ -50,7 +50,7 @@ object IceServers {
         return out
     }
 
-    fun resolve(serverProvided: List<IceServerSpec>): List<IceServerSpec> {
+    fun resolve(serverProvided: List<IceServerSpec>, hintHost: String? = null): List<IceServerSpec> {
         val cleaned = serverProvided.map { spec ->
             spec.copy(
                 urls = spec.urls.map { it.trim() }.filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) },
@@ -58,7 +58,19 @@ object IceServers {
                 credential = JsonIds.optional(spec.credential),
             )
         }.filter { it.urls.isNotEmpty() }
-        return if (cleaned.isNotEmpty()) cleaned else fallbackStun()
+        if (cleaned.isNotEmpty()) return cleaned
+        val fallback = fallbackStun().toMutableList()
+        stunHint(hintHost)?.let { fallback.add(0, it) }
+        return fallback
+    }
+
+    fun missingTurn(resolved: List<IceServerSpec>): Boolean = resolved.none { it.hasTurn }
+
+    fun stunHint(host: String?): IceServerSpec? {
+        val raw = JsonIds.optional(host) ?: return null
+        if (raw == "localhost" || raw == "127.0.0.1" || raw == "::1") return null
+        val h = if (raw.contains(":") && !raw.startsWith("[")) "[$raw]" else raw
+        return IceServerSpec(listOf("stun:$h:3478"))
     }
 
     fun fallbackStun(): List<IceServerSpec> =

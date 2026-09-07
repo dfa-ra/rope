@@ -25,17 +25,27 @@ data class CallSignal(
 
         val EVENTS = setOf(OFFER, ANSWER, ICE)
 
+        fun parsePayload(raw: Any?): CallSignal? = when (raw) {
+            null -> null
+            is JSONObject -> parse(raw.toString())
+            is String -> parse(raw)
+            else -> parse(raw.toString())
+        }
+
         fun parse(raw: String): CallSignal? {
-            if (raw.isBlank()) return null
+            if (raw.isBlank() || raw.equals("null", ignoreCase = true)) return null
             return try {
                 val o = JSONObject(raw)
-                val kind = o.optString("kind")
+                val kind = JsonIds.optional(o.optString("kind")) ?: return null
                 if (kind !in EVENTS) return null
+                val sdp = JsonIds.optional(o.optString("sdp")).orEmpty()
+                val candidate = JsonIds.optional(o.optString("candidate")).orEmpty()
+                if ((kind == OFFER || kind == ANSWER) && sdp.isBlank()) return null
                 CallSignal(
                     kind = kind,
-                    sdp = o.optString("sdp"),
-                    candidate = o.optString("candidate"),
-                    sdpMid = o.optString("sdp_mid"),
+                    sdp = sdp,
+                    candidate = candidate,
+                    sdpMid = JsonIds.optional(o.optString("sdp_mid")).orEmpty(),
                     sdpMLineIndex = o.optInt("sdp_mline"),
                 )
             } catch (_: Exception) {
