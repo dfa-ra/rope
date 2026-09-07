@@ -3,6 +3,8 @@ package app.rope.android
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.CallMedia
 import app.rope.android.data.CallSignal
+import app.rope.android.data.IceServerSpec
+import app.rope.android.data.IceServers
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatIds
@@ -14,6 +16,7 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.TypingRules
 import app.rope.android.data.ComposerRules
+import app.rope.android.data.VoiceGesture
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.JsonIds
@@ -42,6 +45,21 @@ class Stage2UxTest {
         assertFalse(ComposerRules.showSendButton("", false))
         assertTrue(ComposerRules.showSendButton("привет", false))
         assertFalse(ComposerRules.showSendButton("привет", true))
+        assertFalse(ComposerRules.showSendButton("привет", true, recordingLocked = false))
+        assertTrue(ComposerRules.showSendButton("", true, recordingLocked = true))
+        assertTrue(ComposerRules.showSendButton("привет", true, recordingLocked = true))
+        assertFalse(ComposerRules.showMicButton("", true, recordingLocked = true))
+        assertTrue(ComposerRules.showMicButton("", true, recordingLocked = false))
+        assertEquals(80f, ComposerRules.VOICE_LOCK_SLIDE_UP)
+        assertEquals(80f, ComposerRules.VOICE_CANCEL_SLIDE_LEFT)
+        assertEquals(VoiceGesture.LOCK, ComposerRules.voiceGesture(0f, -80f))
+        assertEquals(VoiceGesture.CANCEL, ComposerRules.voiceGesture(-80f, 0f))
+        assertEquals(VoiceGesture.HOLD, ComposerRules.voiceGesture(-20f, -20f))
+        assertEquals(VoiceGesture.LOCK, ComposerRules.voiceGesture(-40f, -100f))
+        assertEquals(VoiceGesture.CANCEL, ComposerRules.voiceGesture(-100f, -40f))
+        assertTrue(ComposerRules.shouldLockVoice(-80f))
+        assertTrue(ComposerRules.shouldCancelVoice(-80f))
+        assertFalse(ComposerRules.shouldLockVoice(-20f))
     }
 
     @Test
@@ -276,7 +294,61 @@ class Stage2UxTest {
         assertEquals(null, CallSignal.parse("""{"kind":"ring"}"""))
         assertTrue(CallMedia.STUN_URLS.any { it.startsWith("stun:") })
         assertEquals("WebRTC · DTLS-SRTP", CallMedia.label("CONNECTED"))
+        assertEquals("WebRTC · через сервер", CallMedia.label("CONNECTED", viaRelay = true))
         assertTrue(CallMedia.label("FAILED").contains("TURN"))
         assertEquals("WebRTC", CallMedia.PROTOCOL)
+        assertTrue(CallMedia.isRelayCandidate("candidate:1 1 udp 1 1.2.3.4 3478 typ relay raddr 10.0.0.2"))
+        assertFalse(CallMedia.isRelayCandidate("candidate:1 1 udp 1 1.2.3.4 3478 typ host"))
+    }
+
+    @Test
+    fun iceServersParseCredentialsAndNullIds() {
+        val raw = """
+            [
+              {"urls":["stun:vps.example:3478"]},
+              {
+                "urls":["turns:vps.example:443?transport=tcp","turn:vps.example:3478"],
+                "username":"1700000000:rope",
+                "credential":"abc"
+              }
+            ]
+        """.trimIndent()
+        val parsed = IceServers.parse(raw)
+        assertEquals(2, parsed.size)
+        assertEquals(listOf("stun:vps.example:3478"), parsed[0].urls)
+        assertEquals(null, parsed[0].username)
+        assertEquals("1700000000:rope", parsed[1].username)
+        assertEquals("abc", parsed[1].credential)
+        assertTrue(parsed[1].hasTurn)
+
+        val androidNull = IceServers.parse(
+            """[{"urls":["turn:vps:3478"],"username":"null","credential":"null"}]""",
+        )
+        assertEquals(1, androidNull.size)
+        assertEquals(null, androidNull[0].username)
+        assertEquals(null, androidNull[0].credential)
+        assertEquals(null, JsonIds.optional("null"))
+
+        val fromInfo = IceServers.fromInfo(
+            JSONObject("""{"server_id":"x","ice_servers":[{"urls":"stun:vps:3478"}]}"""),
+        )
+        assertEquals(listOf("stun:vps:3478"), fromInfo[0].urls)
+
+        assertEquals(emptyList<IceServerSpec>(), IceServers.parse(null))
+        assertEquals(emptyList<IceServerSpec>(), IceServers.parse("null"))
+        assertEquals(emptyList<IceServerSpec>(), IceServers.parse(""))
+    }
+
+    @Test
+    fun iceServersDropGoogleWhenVpsPresent() {
+        val vps = IceServers.parse("""[{"urls":["stun:203.0.113.9:3478","turn:203.0.113.9:3478"],"username":"u","credential":"c"}]""")
+        val resolved = IceServers.resolve(vps)
+        assertEquals(vps[0].urls, resolved[0].urls)
+        assertFalse(IceServers.usesPublicStunFallback(resolved))
+        assertTrue(resolved.none { spec -> spec.urls.any { it.contains("google") || it.contains("cloudflare") } })
+
+        val fallback = IceServers.resolve(emptyList())
+        assertTrue(IceServers.usesPublicStunFallback(fallback))
+        assertEquals(CallMedia.STUN_URLS, fallback.flatMap { it.urls })
     }
 }

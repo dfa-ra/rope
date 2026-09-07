@@ -142,11 +142,15 @@ func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{
-		"server_id":         s.Cfg.ServerID,
-		"protocol_version":  config.ProtocolVersion,
-		"fingerprint":       s.FP,
-	})
+	out := map[string]any{
+		"server_id":        s.Cfg.ServerID,
+		"protocol_version": config.ProtocolVersion,
+		"fingerprint":      s.FP,
+	}
+	if ice := s.Cfg.IceServers(time.Now()); len(ice) > 0 {
+		out["ice_servers"] = ice
+	}
+	writeJSON(w, 200, out)
 }
 
 type bootstrapReq struct {
@@ -363,18 +367,22 @@ func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request, a authed, _
 	obytes, _ := s.Store.ObjectBytesSum()
 	gc, _ := s.Store.GroupCount()
 	writeJSON(w, 200, map[string]any{
-		"server_id":         s.Cfg.ServerID,
-		"version":           config.ServerVersion,
-		"protocol_version":  config.ProtocolVersion,
-		"member_count":      mc,
-		"device_count":      dc,
-		"mailbox_count":     box,
-		"object_count":      oc,
-		"object_bytes":      obytes,
-		"group_count":       gc,
-		"listen":            s.Cfg.Listen,
-		"max_object_bytes":  s.objectLimit(),
-		"online_devices":    len(s.Hub.Online()),
+		"server_id":        s.Cfg.ServerID,
+		"version":          config.ServerVersion,
+		"protocol_version": config.ProtocolVersion,
+		"member_count":     mc,
+		"device_count":     dc,
+		"mailbox_count":    box,
+		"object_count":     oc,
+		"object_bytes":     obytes,
+		"group_count":      gc,
+		"listen":           s.Cfg.Listen,
+		"max_object_bytes": s.objectLimit(),
+		"online_devices":   len(s.Hub.Online()),
+		"public_host":      s.Cfg.PublicHost,
+		"turn_port":        s.Cfg.EffectiveTurnPort(),
+		"turns_port":       s.Cfg.EffectiveTurnsPort(),
+		"ice_enabled":      s.Cfg.IceEnabled(),
 	})
 }
 

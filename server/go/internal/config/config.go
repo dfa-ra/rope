@@ -12,7 +12,7 @@ import (
 )
 
 const ProtocolVersion uint16 = 1
-const ServerVersion = "0.2.0"
+const ServerVersion = "0.2.7"
 const HTTPDevFingerprintSeed = "rope-http-dev"
 
 type Config struct {
@@ -29,6 +29,11 @@ type Config struct {
 	ObjectQuotaBytes    int64  `json:"object_quota_bytes"`
 	AllowHTTP           bool   `json:"allow_http"`
 	FingerprintOverride string `json:"fingerprint,omitempty"`
+	PublicHost          string `json:"public_host,omitempty"`
+	TurnSecret          string `json:"turn_secret,omitempty"`
+	TurnPort            int    `json:"turn_port,omitempty"`
+	TurnsPort           int    `json:"turns_port,omitempty"`
+	TurnTTLSeconds      int    `json:"turn_ttl_seconds,omitempty"`
 }
 
 func Default() Config {

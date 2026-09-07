@@ -6,7 +6,7 @@
 - Message plaintext (only on endpoints)
 - Invite tokens (single use, short TTL)
 - SSH credentials used only during VPS provisioning
-- Server TLS private key and `setup_token`
+- Server TLS private key, `setup_token`, and coturn HMAC `turn_secret`
 
 ## Trusted
 
@@ -32,7 +32,7 @@
 
 ## Non-guarantees (honest limitations)
 
-- The server and network provider see IP addresses, connection times, and traffic volume.
+- The server and network provider see IP addresses, connection times, and traffic volume. When a call uses TURN, the VPS also sees relayed (still DTLS-SRTP encrypted) media bytes.
 - The server sees envelope metadata needed for routing: version, type, message id, timestamp, sender device, recipient device, and ciphertext length.
 - A compromised organizer device or a leaked SSH credential can take over the VPS.
 - Self-signed TLS plus fingerprint pinning does not replace a public CA after a user ignores a mismatch warning.

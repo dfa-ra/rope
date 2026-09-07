@@ -4,19 +4,27 @@ import android.content.Context
 import android.util.Log
 import app.rope.android.data.CallMedia
 import app.rope.android.data.CallSignal
+import app.rope.android.data.IceServerSpec
+import app.rope.android.data.IceServers
+import app.rope.android.net.PinnedClient
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
+import org.webrtc.CandidatePairChangeEvent
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
+import org.webrtc.PeerConnectionDependencies
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.SSLCertificateVerifier
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 
 class WebRtcSession(
     context: Context,
+    iceServers: List<IceServerSpec> = emptyList(),
+    private val pinnedFingerprint: String = "",
     private val onLocalSignal: (CallSignal) -> Unit,
     private val onMedia: (String) -> Unit,
 ) {
@@ -29,9 +37,12 @@ class WebRtcSession(
     private val pendingIce = mutableListOf<IceCandidate>()
     private var remoteSet = false
     private var haveRemoteSdp = false
+    private var viaRelay = false
+    private val resolvedIce = IceServers.resolve(iceServers)
 
     private val observer = object : PeerConnection.Observer {
         override fun onIceCandidate(candidate: IceCandidate) {
+            if (CallMedia.isRelayCandidate(candidate.sdp)) viaRelay = true
             onLocalSignal(
                 CallSignal(
                     CallSignal.ICE,
@@ -43,7 +54,12 @@ class WebRtcSession(
         }
 
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-            onMedia(CallMedia.label(state.name, state == PeerConnection.IceConnectionState.FAILED))
+            onMedia(CallMedia.label(state.name, state == PeerConnection.IceConnectionState.FAILED, viaRelay))
+        }
+
+        override fun onSelectedCandidatePairChanged(event: CandidatePairChangeEvent) {
+            viaRelay = CallMedia.isRelayCandidate(event.local.sdp) || CallMedia.isRelayCandidate(event.remote.sdp)
+            pc?.iceConnectionState()?.let { onIceConnectionChange(it) }
         }
 
         override fun onSignalingChange(p0: PeerConnection.SignalingState) = Unit
@@ -60,7 +76,15 @@ class WebRtcSession(
     init {
         ensureInit(app)
         factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
-        pc = factory.createPeerConnection(rtcConfig(), observer)
+        val deps = PeerConnectionDependencies.builder(observer).apply {
+            if (pinnedFingerprint.isNotBlank()) {
+                setSSLCertificateVerifier(SSLCertificateVerifier { der ->
+                    PinnedClient.fingerprintHex(der).equals(pinnedFingerprint, ignoreCase = true)
+                })
+            }
+        }.createPeerConnectionDependencies()
+        pc = factory.createPeerConnection(rtcConfig(resolvedIce), deps)
+            ?: factory.createPeerConnection(rtcConfig(resolvedIce), observer)
         val source = factory.createAudioSource(MediaConstraints())
         audioSource = source
         val track = factory.createAudioTrack("rope-audio", source)
@@ -113,6 +137,7 @@ class WebRtcSession(
             }
             CallSignal.ICE -> {
                 if (signal.candidate.isBlank()) return
+                if (CallMedia.isRelayCandidate(signal.candidate)) viaRelay = true
                 val ice = IceCandidate(signal.sdpMid, signal.sdpMLineIndex, signal.candidate)
                 if (!remoteSet) pendingIce += ice else pc?.addIceCandidate(ice)
             }
@@ -156,8 +181,16 @@ class WebRtcSession(
             }
         }
 
-        private fun rtcConfig(): PeerConnection.RTCConfiguration {
-            val ice = CallMedia.STUN_URLS.map { PeerConnection.IceServer.builder(it).createIceServer() }
+        fun rtcConfig(specs: List<IceServerSpec>): PeerConnection.RTCConfiguration {
+            val ice = IceServers.resolve(specs).map { spec ->
+                val builder = PeerConnection.IceServer.builder(spec.urls)
+                val user = spec.username
+                val cred = spec.credential
+                if (!user.isNullOrBlank() && !cred.isNullOrBlank()) {
+                    builder.setUsername(user).setPassword(cred)
+                }
+                builder.createIceServer()
+            }
             return PeerConnection.RTCConfiguration(ice).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
                 continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY

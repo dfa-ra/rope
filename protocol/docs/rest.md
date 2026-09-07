@@ -27,7 +27,7 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 ### `GET /version`
 
 ```json
-{ "server": "0.2.0", "protocol": 1 }
+{ "server": "0.2.7", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -36,11 +36,25 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 {
   "server_id": "hex",
   "protocol_version": 1,
-  "fingerprint": "hex sha256 of TLS cert DER"
+  "fingerprint": "hex sha256 of TLS cert DER",
+  "ice_servers": [
+    { "urls": ["stun:HOST:3478"] },
+    {
+      "urls": [
+        "turns:HOST:443?transport=tcp",
+        "turn:HOST:3478",
+        "turn:HOST:3478?transport=tcp"
+      ],
+      "username": "<unix_expiry>:rope",
+      "credential": "base64(HMAC-SHA1(turn_secret, username))"
+    }
+  ]
 }
 ```
 
 On `--allow-http` debug servers `fingerprint` is the SHA-256 of the ASCII string `rope-http-dev`.
+
+`ice_servers` is present when the VPS has coturn (`public_host` + `turn_secret` in `/etc/rope/config.json`). Guests and the owner both read this unauthenticated endpoint. Credentials are time-limited (coturn REST / HMAC-SHA1); the long-term secret never leaves the VPS. If 443 is already taken, installer uses TURNS on 5349 and advertises that port. Without TURN (local `--allow-http`) the field is omitted.
 
 ### `POST /v1/bootstrap`
 
@@ -98,7 +112,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.2.0",
+  "version": "0.2.7",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,
@@ -108,7 +122,11 @@ Public identities of non-revoked devices so clients can encrypt.
   "group_count": 0,
   "listen": "0.0.0.0:8443",
   "max_object_bytes": 26214400,
-  "online_devices": 1
+  "online_devices": 1,
+  "public_host": "203.0.113.9",
+  "turn_port": 3478,
+  "turns_port": 443,
+  "ice_enabled": true
 }
 ```
 

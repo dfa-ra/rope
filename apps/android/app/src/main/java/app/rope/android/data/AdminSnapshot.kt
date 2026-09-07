@@ -25,6 +25,15 @@ data class AdminSnapshot(
                 AdminCard("Группы", n("group_count")),
                 AdminCard("Лимит файла", formatBytes(obj.optLong("max_object_bytes"))),
                 AdminCard("Listen", n("listen")),
+                AdminCard(
+                    "TURN",
+                    if (obj.optBoolean("ice_enabled")) "на этом VPS" else "нет",
+                    if (obj.optBoolean("ice_enabled")) {
+                        "stun/turn ${n("turn_port")} · turns ${n("turns_port")}"
+                    } else {
+                        "обновите ядро, чтобы звонки шли через сервер"
+                    },
+                ),
             )
             return AdminSnapshot(cards, obj.toString(2))
         }

@@ -26,6 +26,7 @@ data class ServerProfile(
     val memberId: String,
     val deviceId: String,
     val displayName: String = "",
+    val iceServersJson: String = "",
 )
 
 data class SshTarget(

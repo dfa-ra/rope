@@ -23,7 +23,7 @@ On connect the server:
 
 `group_send`: sender must be a current member; every envelope recipient must be a current member. Each envelope then follows the normal mailbox path.
 
-`call` is live-only. If `to` is offline the sender gets `not_found`. The server does not store SDP.
+`call` is live-only. If `to` is offline the sender gets `not_found`. The server does not store SDP. ICE servers (STUN/TURN on the same host) are advertised on REST `GET /v1/info`, not as a new WSS type.
 
 ## Server → client
 

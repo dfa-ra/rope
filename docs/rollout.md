@@ -30,8 +30,9 @@
    - кладёт бинарник в `/opt/rope/bin/rope-server`
    - пишет `/etc/rope/config.json`, SQLite в `/var/lib/rope/data.db`
    - выпускает self-signed TLS и считает fingerprint
-   - ставит `systemd` unit `rope.service`
-   - открывает порт (если есть `ufw`)
+   - ставит `systemd` unit `rope.service` и coturn (TURN 3478, TURNS 443 или 5349)
+   - пишет HMAC `turn_secret` в `/etc/rope/config.json` (не в репозиторий)
+   - открывает порты Rope + TURN (если есть `ufw`)
    - ждёт `GET /health`
    - печатает `SERVER_ID`, `FINGERPRINT`, одноразовый `SETUP_TOKEN`
 5. Приложение пинит TLS fingerprint, меняет `SETUP_TOKEN` на owner-устройство и больше не использует SSH.
@@ -54,7 +55,7 @@ SSH-пароль/ключ остаются только на телефоне о
 ## Обновление ядра на уже живом VPS
 
 На том же экране **Сервер**: SSH-пароль или ключ и кнопка **Обновить ядро**. Не открывает «Создать сервер».  
-Installer заменяет `/opt/rope/bin/rope-server`, `systemctl restart rope`, **не** трогает `data.db` и TLS. Повторный запуск на уже установленном Rope — то же самое (не пишет «на сервере уже есть Rope»).
+Installer заменяет `/opt/rope/bin/rope-server`, ставит/обновляет coturn на том же IP, дописывает `public_host` / `turn_secret` в config если их не было, `systemctl restart rope` (+ coturn), **не** трогает `data.db` и TLS. Повторный запуск на уже установленном Rope — то же самое (не пишет «на сервере уже есть Rope»). После обновления ядра звонки берут ICE с `GET /v1/info`.
 
 Если телефон-owner потерян или приложение поставили заново: **Создать сервер → Дополнительно → Стереть старое и стать владельцем** (`--reinstall`). Стирает `data.db` и `config.json`, ставит новое ядро, выдаёт новый `SETUP_TOKEN`. TLS остаётся.
 

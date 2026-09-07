@@ -105,6 +105,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             .put("memberId", p.memberId)
             .put("deviceId", p.deviceId)
             .put("displayName", p.displayName)
+            .put("iceServersJson", p.iceServersJson)
         put("profile", o.toString())
     }
 
@@ -121,6 +122,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             memberId = o.getString("memberId"),
             deviceId = o.getString("deviceId"),
             displayName = o.optString("displayName"),
+            iceServersJson = JsonIds.optional(o.optString("iceServersJson")).orEmpty(),
         )
     }
 

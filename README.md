@@ -40,7 +40,7 @@ sudo ./deployment/scripts/install.sh \
   --port 8443
 ```
 
-Re-run with `--upgrade` to replace the binary and keep `data.db`.  
+Re-run with `--upgrade` to replace the binary, keep `data.db`, and (from 0.2.7) install/refresh coturn on the same host so calls get TURN.  
 `--reinstall` wipes `data.db` + config and issues a new owner `SETUP_TOKEN` (lost-phone recovery).
 
 Раскатка у пользователя (телефон → SSH → VPS): [docs/rollout.md](docs/rollout.md).
@@ -59,7 +59,7 @@ Stage 2 (v0.2): photos/files, hold-to-record voice, groups, call signaling, encr
 
 ## What is not in this tree
 
-iOS, TURN relay in production, federation, web/desktop.
+iOS, federation, web/desktop. TURN/TURNS runs on the same VPS as `rope-server` (coturn; advertised on `GET /v1/info`).
 
 ## License
 

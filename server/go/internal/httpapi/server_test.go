@@ -146,6 +146,49 @@ func TestHealthAndInfo(t *testing.T) {
 	if info["fingerprint"] != config.HTTPDevFingerprint() {
 		t.Fatalf("fp %v", info["fingerprint"])
 	}
+	if _, ok := info["ice_servers"]; ok {
+		t.Fatal("debug server without TURN must not advertise ice_servers")
+	}
+}
+
+func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "198.51.100.20"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		ServerID   string `json:"server_id"`
+		IceServers []config.IceServer `json:"ice_servers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if len(info.IceServers) != 2 {
+		t.Fatalf("%+v", info.IceServers)
+	}
+	if info.IceServers[0].URLs[0] != "stun:198.51.100.20:3478" {
+		t.Fatalf("stun %v", info.IceServers[0].URLs)
+	}
+	turn := info.IceServers[1]
+	if turn.Username == "" || turn.Credential == "" {
+		t.Fatal("missing time-limited TURN creds")
+	}
+	if turn.Credential != config.TurnCredential("hmac-from-install", turn.Username) {
+		t.Fatal("HMAC mismatch")
+	}
+	joined := strings.Join(turn.URLs, " ")
+	if !strings.Contains(joined, "turns:198.51.100.20:443?transport=tcp") {
+		t.Fatalf("missing turns: %s", joined)
+	}
+	if !strings.Contains(joined, "turn:198.51.100.20:3478") {
+		t.Fatalf("missing turn: %s", joined)
+	}
 }
 
 func TestInviteSingleUseAndExpiry(t *testing.T) {

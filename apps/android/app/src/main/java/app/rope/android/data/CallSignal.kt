@@ -48,15 +48,24 @@ data class CallSignal(
 object CallMedia {
     const val PROTOCOL = "WebRTC"
     const val SECURITY = "DTLS-SRTP"
+    const val RELAY = "WebRTC · через сервер"
+    const val DIRECT = "WebRTC · DTLS-SRTP"
 
     val STUN_URLS = listOf(
         "stun:stun.l.google.com:19302",
         "stun:stun.cloudflare.com:3478",
     )
 
-    fun label(ice: String, failed: Boolean = false): String = when {
-        failed || ice.equals("FAILED", true) -> "нет прямого пути · нужен TURN"
-        ice.equals("CONNECTED", true) || ice.equals("COMPLETED", true) -> "WebRTC · DTLS-SRTP"
+    fun isRelayCandidate(sdp: String): Boolean {
+        val t = sdp.lowercase()
+        return t.contains(" typ relay") || t.contains(" typ=relay")
+    }
+
+    fun label(ice: String, failed: Boolean = false, viaRelay: Boolean = false): String = when {
+        failed || ice.equals("FAILED", true) ->
+            if (viaRelay) "нет пути · TURN не соединил" else "нет прямого пути · нужен TURN"
+        ice.equals("CONNECTED", true) || ice.equals("COMPLETED", true) ->
+            if (viaRelay) RELAY else DIRECT
         ice.equals("CHECKING", true) -> "WebRTC · ищем путь…"
         else -> "WebRTC · соединяем"
     }

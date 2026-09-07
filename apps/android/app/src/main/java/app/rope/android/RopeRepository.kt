@@ -39,6 +39,7 @@ import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
+import app.rope.android.data.IceServers
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
@@ -720,6 +721,7 @@ class RopeRepository(private val app: Application) {
         recordCall(peer.deviceId, "Исходящий звонок", outgoing = true)
         sendCall(call.callId, peer.deviceId, "ring", "")
         sendCallEnvelope(peer, call.callId, "ring")
+        prefetchIce()
         attachRtc(asCaller = true)
         startTone(true)
         audioMode(true)
@@ -732,6 +734,7 @@ class RopeRepository(private val app: Application) {
         _state.value.devices.find { it.deviceId == call.peerDeviceId }?.let {
             sendCallEnvelope(it, call.callId, "accept")
         }
+        prefetchIce()
         attachRtc(asCaller = false)
         stopTone()
         audioMode(true)
@@ -1139,16 +1142,34 @@ class RopeRepository(private val app: Application) {
     private fun attached(profile: ServerProfile) {
         store.saveProfile(profile)
         api = ServerApi(profile, identity!!)
+        val withIce = refreshIceServers(profile)
+        store.saveProfile(withIce)
+        api = ServerApi(withIce, identity!!)
         _state.value = _state.value.copy(
-            profile = profile,
+            profile = withIce,
             screen = Screen.Chats,
             busy = false,
             error = null,
             pendingInvite = null,
         )
         refreshDirectory()
-        connectSocket(profile)
+        connectSocket(withIce)
         checkAppUpdate(openStatus = false)
+    }
+
+    private fun refreshIceServers(profile: ServerProfile): ServerProfile {
+        val info = runCatching { api?.info() }.getOrNull() ?: return profile
+        val ice = info.optJSONArray("ice_servers")?.toString().orEmpty()
+        return profile.copy(iceServersJson = ice)
+    }
+
+    private fun prefetchIce() {
+        scope.launch {
+            val cur = store.profile() ?: return@launch
+            val updated = refreshIceServers(cur)
+            store.saveProfile(updated)
+            _state.value = _state.value.copy(profile = updated)
+        }
     }
 
     private fun checkAppUpdate(openStatus: Boolean) {
@@ -1655,6 +1676,7 @@ class RopeRepository(private val app: Application) {
                 )
                 recordCall(from, "Входящий звонок", outgoing = false)
                 notifier.incomingCall(name)
+                prefetchIce()
                 startTone(false)
                 audioMode(true)
             }
@@ -1683,9 +1705,13 @@ class RopeRepository(private val app: Application) {
             queuedSignals.toList().also { queuedSignals.clear() }.forEach { rtc?.handleRemote(it) }
             return
         }
+        val profile = store.profile() ?: _state.value.profile
+        val ice = IceServers.parse(profile?.iceServersJson)
         val session = try {
             WebRtcSession(
                 app,
+                iceServers = ice,
+                pinnedFingerprint = profile?.fingerprint.orEmpty(),
                 onLocalSignal = { sig ->
                     val call = _state.value.call ?: return@WebRtcSession
                     val peer = _state.value.devices.find { it.deviceId == call.peerDeviceId }
