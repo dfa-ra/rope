@@ -1,5 +1,6 @@
 package app.rope.android.data
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class MediaPayload(
@@ -101,6 +102,97 @@ object EnvelopeTypes {
         CALL -> MessageKind.CALL
         RECEIPT -> MessageKind.TEXT
         else -> MessageKind.UNKNOWN
+    }
+}
+
+object ReactionCodec {
+    fun parse(raw: String?): List<Reaction> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val emoji = o.optString("emoji").trim()
+                    val deviceId = o.optString("device_id")
+                    if (emoji.isNotEmpty() && deviceId.isNotBlank()) {
+                        add(Reaction(emoji, deviceId, o.optString("name")))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun toJson(items: List<Reaction>): String {
+        val arr = JSONArray()
+        items.forEach { r ->
+            arr.put(
+                JSONObject()
+                    .put("emoji", r.emoji)
+                    .put("device_id", r.deviceId)
+                    .put("name", r.displayName),
+            )
+        }
+        return arr.toString()
+    }
+
+    fun grouped(items: List<Reaction>): List<Pair<String, List<Reaction>>> =
+        items.groupBy { it.emoji }.entries.map { it.key to it.value }
+}
+
+data class Reaction(
+    val emoji: String,
+    val deviceId: String,
+    val displayName: String = "",
+)
+
+data class ReactionPayload(
+    val targetId: String,
+    val emoji: String,
+    val op: String,
+) {
+    fun toJson(): String = JSONObject()
+        .put("v", 1)
+        .put("kind", "reaction")
+        .put("target", targetId)
+        .put("emoji", emoji)
+        .put("op", op)
+        .toString()
+
+    companion object {
+        const val SET = "set"
+        const val CLEAR = "clear"
+        val EMOJIS = listOf("👍", "❤️", "😂", "🔥", "😮", "😢", "👏")
+
+        fun parse(raw: String): ReactionPayload? {
+            val o = JSONObject(raw)
+            if (o.optString("kind") != "reaction") return null
+            val target = JsonIds.optional(o.optString("target")) ?: return null
+            val emoji = o.optString("emoji").trim()
+            if (emoji.isEmpty()) return null
+            val op = o.optString("op").ifBlank { SET }
+            return ReactionPayload(target, emoji, op)
+        }
+    }
+}
+
+object MessageTime {
+    fun label(ms: Long, now: Long = System.currentTimeMillis()): String {
+        if (ms <= 0L) return ""
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = ms }
+        val today = java.util.Calendar.getInstance().apply { timeInMillis = now }
+        val hm = "%02d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
+        val sameDay = cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+            cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
+        return if (sameDay) hm else "${cal.get(java.util.Calendar.DAY_OF_MONTH)}.${cal.get(java.util.Calendar.MONTH) + 1} $hm"
+    }
+
+    fun meta(status: MessageStatus, outgoing: Boolean, timestampMs: Long, now: Long = System.currentTimeMillis()): String {
+        val time = label(timestampMs, now)
+        val mark = ComposerRules.statusLabel(status, outgoing)
+        return listOf(time, mark).filter { it.isNotBlank() }.joinToString(" · ")
     }
 }
 

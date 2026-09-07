@@ -4,6 +4,7 @@ import android.app.Application
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
@@ -19,6 +20,7 @@ import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
+import app.rope.android.data.ReactionPayload
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -26,6 +28,7 @@ import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
+import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
 import app.rope.android.net.ServerApi
@@ -113,6 +116,7 @@ class RopeRepository(private val app: Application) {
     private var recordJob: Job? = null
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
+    private val mediaAttempts = mutableSetOf<String>()
 
     fun start(pendingLink: String?) {
         scope.launch {
@@ -309,6 +313,7 @@ class RopeRepository(private val app: Application) {
             group = null,
             messages = store.messages(device.deviceId),
         )
+        prefetchMedia(_state.value.messages)
     }
 
     fun openGroup(group: RopeGroup) {
@@ -318,6 +323,7 @@ class RopeRepository(private val app: Application) {
             group = group,
             messages = store.messages(ChatIds.group(group.groupId)),
         )
+        prefetchMedia(_state.value.messages)
     }
 
     fun openConversation(c: Conversation) {
@@ -378,12 +384,17 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             try {
                 val cr = app.contentResolver
-                val mime = forcedMime ?: cr.getType(uri) ?: "application/octet-stream"
-                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
-                val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
+                var mime = forcedMime ?: cr.getType(uri) ?: "application/octet-stream"
+                val name = attachmentName(uri, mime)
+                var bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
                 if (bytes.size > 25 * 1024 * 1024) {
                     _state.value = _state.value.copy(error = "Файл больше 25 МБ")
                     return@launch
+                }
+                if (mime.startsWith("image/") || looksLikeImage(name, mime)) {
+                    val normalized = ImageCodec.normalizeForSend(bytes, if (mime.startsWith("image/")) mime else "image/jpeg")
+                    bytes = normalized.first
+                    mime = normalized.second
                 }
                 val kind = when {
                     mime.startsWith("image/") -> "image"
@@ -454,9 +465,29 @@ class RopeRepository(private val app: Application) {
     }
 
     fun retryMedia(msg: ChatMessage) {
+        ensureMedia(msg, force = true)
+    }
+
+    fun react(message: ChatMessage, emoji: String) {
+        val id = identity ?: return
+        val mine = id.deviceId()
+        val name = _state.value.profile?.displayName.orEmpty()
+        val already = message.reactions.any { it.deviceId == mine && it.emoji == emoji }
+        val op = if (already) ReactionPayload.CLEAR else ReactionPayload.SET
+        store.applyReaction(message.id, emoji, mine, name, already)
+        refreshOpenChat()
+        val payload = ReactionPayload(message.id, emoji, op)
+        sendControl(EnvelopeTypes.RECEIPT, payload.toJson().toByteArray())
+    }
+
+    fun ensureMedia(msg: ChatMessage, force: Boolean = false) {
         if (msg.extra.isBlank()) return
+        if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE) return
+        val path = msg.localPath
+        if (!force && path != null && File(path).isFile && File(path).length() > 8) return
+        if (!force && !mediaAttempts.add(msg.id)) return
+        mediaAttempts.add(msg.id)
         scope.launch {
-            _state.value = _state.value.copy(error = null, updateText = "скачиваем вложение…")
             downloadMedia(msg.id, MediaPayload.parse(msg.extra))
         }
     }
@@ -743,7 +774,7 @@ class RopeRepository(private val app: Application) {
                 durationMs = durationMs,
                 groupId = if (inKnownGroup) group?.groupId else null,
             )
-            val cache = persistPlain(objectId, name, bytes)
+            val cache = persistPlain(objectId, name, mime, bytes)
             if (inKnownGroup && group != null) {
                 sendGroupPayload(group, EnvelopeTypes.MEDIA, payload.toJson().toByteArray(), payload.preview(), payload.messageKind(), payload.toJson(), cache)
                 return
@@ -848,13 +879,66 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    private fun persistPlain(objectId: String, name: String, bytes: ByteArray): File {
-        val dir = File(app.cacheDir, "media")
-        dir.mkdirs()
-        val ext = name.substringAfterLast('.', MimeTypeMap.getSingleton().getExtensionFromMimeType("application/octet-stream") ?: "bin")
-        val dest = File(dir, "$objectId.$ext")
-        dest.writeBytes(bytes)
-        return dest
+    private fun persistPlain(objectId: String, name: String, mime: String, bytes: ByteArray): File {
+        return ImageCodec.persist(File(app.filesDir, "media"), objectId, mime, name, bytes)
+    }
+
+    private fun prefetchMedia(messages: List<ChatMessage>) {
+        messages.forEach { ensureMedia(it) }
+    }
+
+    private fun attachmentName(uri: Uri, mime: String): String {
+        app.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val n = c.getString(0).orEmpty()
+                if (n.isNotBlank()) return File(n).name
+            }
+        }
+        val last = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+        return if (last.contains('.')) File(last).name else "photo.${ImageCodec.extensionFor(mime, last)}"
+    }
+
+    private fun looksLikeImage(name: String, mime: String): Boolean {
+        val n = name.lowercase()
+        return mime.startsWith("image/") || n.endsWith(".jpg") || n.endsWith(".jpeg") ||
+            n.endsWith(".png") || n.endsWith(".webp") || n.endsWith(".heic") || n.endsWith(".gif")
+    }
+
+    private fun sendControl(type: UByte, body: ByteArray) {
+        val id = identity ?: return
+        val group = _state.value.group
+        if (group != null) {
+            scope.launch {
+                val devices = currentDevices()
+                val envelopes = JSONArray()
+                for (memberId in group.members.filter { it != id.deviceId() }) {
+                    val peer = devices.find { it.deviceId == memberId } ?: continue
+                    val env = runCatching {
+                        id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), type, body)
+                    }.getOrNull() ?: continue
+                    envelopes.put(Base64.encodeToString(env.bytes, Base64.NO_WRAP))
+                }
+                if (envelopes.length() > 0) {
+                    socket?.send(
+                        JSONObject()
+                            .put("type", "group_send")
+                            .put("group_id", group.groupId)
+                            .put("envelopes", envelopes)
+                            .toString(),
+                    )
+                }
+            }
+            return
+        }
+        val peer = _state.value.peer ?: return
+        if (peer.publicIdentity.isEmpty()) return
+        scope.launch {
+            try {
+                val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), type, body)
+                pushEnvelope(env.bytes)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun attached(profile: ServerProfile) {
@@ -1099,6 +1183,21 @@ class RopeRepository(private val app: Application) {
                 notifyIfHidden(sender.displayName, payload.preview(), chatId)
                 scope.launch { downloadMedia(msg.id, payload) }
             }
+            EnvelopeTypes.RECEIPT -> {
+                val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
+                val reaction = ReactionPayload.parse(String(typed.body))
+                if (reaction != null) {
+                    store.applyReaction(
+                        reaction.targetId,
+                        reaction.emoji,
+                        sender.deviceId,
+                        sender.displayName,
+                        reaction.op == ReactionPayload.CLEAR,
+                    )
+                    refreshOpenChat()
+                }
+                ack(typed.messageId)
+            }
             EnvelopeTypes.CALL -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
                 val body = JSONObject(String(typed.body))
@@ -1126,7 +1225,7 @@ class RopeRepository(private val app: Application) {
             val expected = payload.sha256.ifBlank { headerHash }
             val key = Base64.decode(payload.keyB64, Base64.DEFAULT)
             val plain = decryptObject(key, blob, expected)
-            val dest = persistPlain(payload.objectId, payload.name, plain)
+            val dest = persistPlain(payload.objectId, payload.name, payload.mime, plain)
             store.updateLocalPath(messageId, dest.absolutePath)
             _state.value = _state.value.copy(updateText = "")
             refreshOpenChat()

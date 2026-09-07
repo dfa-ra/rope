@@ -112,6 +112,8 @@ class MainActivity : AppCompatActivity() {
                     onVoiceFinish = repo::finishVoice,
                     onCall = repo::startCall,
                     onPlay = repo::toggleVoice,
+                    onReact = repo::react,
+                    onEnsureMedia = repo::ensureMedia,
                     onGroupName = repo::setGroupName,
                     onToggleMember = repo::toggleMember,
                     onCreateGroup = repo::createGroup,

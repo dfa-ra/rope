@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 3) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 4) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -38,7 +38,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
               group_id TEXT,
               local_path TEXT,
               sender_id TEXT NOT NULL DEFAULT '',
-              sender_name TEXT NOT NULL DEFAULT ''
+              sender_name TEXT NOT NULL DEFAULT '',
+              reactions TEXT NOT NULL DEFAULT '[]'
             )
             """.trimIndent(),
         )
@@ -84,6 +85,9 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 """.trimIndent(),
             )
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN reactions TEXT NOT NULL DEFAULT '[]'")
+        }
     }
 
     fun saveProfile(p: ServerProfile) {
@@ -117,29 +121,66 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     }
 
     fun insertMessage(msg: ChatMessage) {
+        val existing = message(msg.id)
+        val merged = if (existing == null) {
+            msg
+        } else {
+            msg.copy(
+                reactions = msg.reactions.ifEmpty { existing.reactions },
+                localPath = msg.localPath ?: existing.localPath,
+            )
+        }
         writableDatabase.execSQL(
             """
             INSERT OR REPLACE INTO messages(
               id, peer_id, outgoing, body_enc, status, ts, envelope,
-              kind, extra, group_id, local_path, sender_id, sender_name
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+              kind, extra, group_id, local_path, sender_id, sender_name, reactions
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """.trimIndent(),
             arrayOf(
-                msg.id,
-                msg.peerDeviceId,
-                if (msg.outgoing) 1 else 0,
-                encrypt(msg.text),
-                msg.status.name,
-                msg.timestampMs,
-                msg.envelope,
-                msg.kind.name,
-                msg.extra,
-                msg.groupId,
-                msg.localPath,
-                msg.senderId,
-                msg.senderName,
+                merged.id,
+                merged.peerDeviceId,
+                if (merged.outgoing) 1 else 0,
+                encrypt(merged.text),
+                merged.status.name,
+                merged.timestampMs,
+                merged.envelope,
+                merged.kind.name,
+                merged.extra,
+                merged.groupId,
+                merged.localPath,
+                merged.senderId,
+                merged.senderName,
+                ReactionCodec.toJson(merged.reactions),
             ),
         )
+    }
+
+    fun message(id: String): ChatMessage? {
+        val c = readableDatabase.rawQuery(
+            """
+            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions
+            FROM messages WHERE id = ?
+            """.trimIndent(),
+            arrayOf(id),
+        )
+        c.use { return if (it.moveToFirst()) row(it) else null }
+    }
+
+    fun applyReaction(targetId: String, emoji: String, deviceId: String, displayName: String, clear: Boolean): Boolean {
+        val msg = message(targetId) ?: return false
+        val next = if (clear) {
+            msg.reactions.filterNot { it.deviceId == deviceId && it.emoji == emoji }
+        } else {
+            msg.reactions.filterNot { it.deviceId == deviceId && it.emoji == emoji } +
+                Reaction(emoji, deviceId, displayName)
+        }
+        writableDatabase.execSQL(
+            "UPDATE messages SET reactions = ? WHERE id = ?",
+            arrayOf(ReactionCodec.toJson(next), targetId),
+        )
+        return true
     }
 
     fun updateStatus(id: String, status: MessageStatus) {
@@ -154,7 +195,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val c = readableDatabase.rawQuery(
             """
             SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions
             FROM messages WHERE peer_id = ? ORDER BY ts ASC
             """.trimIndent(),
             arrayOf(peerId),
@@ -179,7 +220,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val c = readableDatabase.rawQuery(
             """
             SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions
             FROM messages WHERE outgoing = 1 AND status = ?
             """.trimIndent(),
             arrayOf(MessageStatus.CREATED.name),
@@ -331,6 +372,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             localPath = if (it.isNull(10)) null else it.getString(10),
             senderId = it.getString(11).orEmpty(),
             senderName = it.getString(12).orEmpty(),
+            reactions = if (it.columnCount > 13 && !it.isNull(13)) ReactionCodec.parse(it.getString(13)) else emptyList(),
         )
     }
 

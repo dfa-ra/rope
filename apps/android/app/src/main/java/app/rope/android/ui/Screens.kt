@@ -84,6 +84,8 @@ fun RopeScaffold(
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
     onPlay: (app.rope.android.data.ChatMessage) -> Unit,
+    onReact: (app.rope.android.data.ChatMessage, String) -> Unit,
+    onEnsureMedia: (app.rope.android.data.ChatMessage) -> Unit,
     onGroupName: (String) -> Unit,
     onToggleMember: (String) -> Unit,
     onCreateGroup: () -> Unit,
@@ -157,6 +159,7 @@ fun RopeScaffold(
                     Screen.Chats -> app.rope.android.ui.ChatsPane(state, onOpenConversation) { onGo(Screen.NewGroup) }
                     Screen.Chat -> app.rope.android.ui.ChatPane(
                         state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
+                        onReact, onEnsureMedia,
                     ) { onGo(Screen.GroupInfo) }
                     Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
                     Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore)

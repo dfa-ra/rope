@@ -10,6 +10,11 @@ import app.rope.android.data.JsonIds
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
+import app.rope.android.data.MessageTime
+import app.rope.android.data.Reaction
+import app.rope.android.data.ReactionCodec
+import app.rope.android.data.ReactionPayload
+import app.rope.android.media.ImageCodec
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -104,5 +109,34 @@ class Stage2UxTest {
         assertEquals("ожидает", ComposerRules.statusLabel(MessageStatus.CREATED, true))
         assertEquals("на сервере", ComposerRules.statusLabel(MessageStatus.SENT_TO_SERVER, true))
         assertEquals("доставлено", ComposerRules.statusLabel(MessageStatus.DELIVERED_TO_DEVICE, true))
+    }
+
+    @Test
+    fun photoFileNamesStaySafe() {
+        assertEquals("jpg", ImageCodec.extensionFor("image/jpeg", "msf:39"))
+        assertEquals("abc.jpg", ImageCodec.fileName("abc", "image/jpeg", "primary:DCIM/Camera/x"))
+        assertFalse(ImageCodec.fileName("id", "image/png", "a/b/c.png").contains("/"))
+        assertEquals(4, ImageCodec.sampleSize(4000, 3000, 1200))
+    }
+
+    @Test
+    fun messageTimeAndReactions() {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 14)
+            set(java.util.Calendar.MINUTE, 5)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        assertEquals("14:05", MessageTime.label(cal.timeInMillis, cal.timeInMillis))
+        assertEquals("14:05 · доставлено", MessageTime.meta(MessageStatus.DELIVERED_TO_DEVICE, true, cal.timeInMillis, cal.timeInMillis))
+        val raw = ReactionPayload("mid", "👍", ReactionPayload.SET).toJson()
+        val parsed = ReactionPayload.parse(raw)!!
+        assertEquals("mid", parsed.targetId)
+        assertEquals("👍", parsed.emoji)
+        val json = ReactionCodec.toJson(listOf(Reaction("❤️", "dev", "Ann")))
+        val back = ReactionCodec.parse(json)
+        assertEquals(1, back.size)
+        assertEquals("❤️", back[0].emoji)
+        assertEquals(null, ReactionPayload.parse("""{"kind":"other"}"""))
     }
 }

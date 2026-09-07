@@ -1,9 +1,10 @@
 package app.rope.android.ui
 
-import android.graphics.BitmapFactory
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -46,6 +47,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,9 +63,13 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ComposerRules
+import app.rope.android.data.MessageTime
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
+import app.rope.android.data.ReactionCodec
+import app.rope.android.data.ReactionPayload
+import app.rope.android.media.ImageCodec
 
 private val OutBubbleLight = Color(0xFF2563EB)
 private val OutBubbleDark = Color(0xFF00D4FF)
@@ -122,7 +131,7 @@ private fun ConversationRow(c: Conversation, onClick: () -> Unit) {
                 Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 c.last?.let {
                     Text(
-                        timeLabel(it.timestampMs),
+                        MessageTime.label(it.timestampMs),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -149,6 +158,8 @@ fun ChatPane(
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
     onPlay: (ChatMessage) -> Unit,
+    onReact: (ChatMessage, String) -> Unit,
+    onEnsureMedia: (ChatMessage) -> Unit,
     onGroupInfo: () -> Unit,
 ) {
     val title = state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -193,22 +204,31 @@ fun ChatPane(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(state.messages, key = { it.id }) { m ->
-                MessageBubble(m, state, onPlay)
+                MessageBubble(m, state, onPlay, onReact, onEnsureMedia)
             }
         }
         ComposerBar(state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish)
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(m: ChatMessage, state: UiState, onPlay: (ChatMessage) -> Unit) {
+private fun MessageBubble(
+    m: ChatMessage,
+    state: UiState,
+    onPlay: (ChatMessage) -> Unit,
+    onReact: (ChatMessage, String) -> Unit,
+    onEnsureMedia: (ChatMessage) -> Unit,
+) {
     val mine = m.outgoing
     val dark = MaterialTheme.colorScheme.background == Color(0xFF0B0F19)
     val outBg = if (dark) OutBubbleDark else OutBubbleLight
     val outFg = if (dark) Color(0xFF0B0F19) else Color.White
-    Row(
+    var picker by remember(m.id) { mutableStateOf(false) }
+    val me = state.profile?.deviceId.orEmpty()
+    Column(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
+        horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
         Surface(
             color = if (mine) outBg else if (dark) InBubbleDark else InBubbleLight,
@@ -219,7 +239,9 @@ private fun MessageBubble(m: ChatMessage, state: UiState, onPlay: (ChatMessage) 
                 bottomStart = if (mine) 16.dp else 4.dp,
                 bottomEnd = if (mine) 4.dp else 16.dp,
             ),
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .combinedClickable(onClick = {}, onLongClick = { picker = !picker }),
         ) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 if (!mine && state.group != null) {
@@ -227,20 +249,79 @@ private fun MessageBubble(m: ChatMessage, state: UiState, onPlay: (ChatMessage) 
                 }
                 when (m.kind) {
                     MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
-                    MessageKind.IMAGE -> ImageBubble(m, onPlay)
+                    MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia)
                     MessageKind.FILE -> FileBubble(m)
                     MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                     MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                     else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
                 }
-                val mark = ComposerRules.statusLabel(m.status, m.outgoing)
-                if (mark.isNotBlank()) {
+                val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs)
+                if (meta.isNotBlank()) {
                     Text(
-                        mark,
+                        meta,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (mine) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+        if (picker) {
+            ReactionPicker { emoji ->
+                onReact(m, emoji)
+                picker = false
+            }
+        }
+        if (m.reactions.isNotEmpty()) {
+            ReactionRow(m, me, mine, onReact)
+        }
+    }
+}
+
+@Composable
+private fun ReactionPicker(onPick: (String) -> Unit) {
+    Surface(
+        tonalElevation = 4.dp,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+            ReactionPayload.EMOJIS.forEach { emoji ->
+                Text(
+                    emoji,
+                    modifier = Modifier
+                        .clickable { onPick(emoji) }
+                        .padding(6.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReactionRow(
+    m: ChatMessage,
+    myId: String,
+    mine: Boolean,
+    onReact: (ChatMessage, String) -> Unit,
+) {
+    Row(
+        Modifier.padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ReactionCodec.grouped(m.reactions).forEach { (emoji, people) ->
+            val mineHere = people.any { it.deviceId == myId }
+            Surface(
+                color = if (mineHere) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.clickable { onReact(m, emoji) },
+            ) {
+                Text(
+                    "$emoji ${people.size}",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (mine) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
     }
@@ -274,8 +355,11 @@ private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) 
 }
 
 @Composable
-private fun ImageBubble(m: ChatMessage, onRetry: (ChatMessage) -> Unit) {
-    val bmp = m.localPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
+private fun ImageBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit) {
+    LaunchedEffect(m.id, m.localPath) {
+        onEnsure(m)
+    }
+    val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
     if (bmp != null) {
         Image(
             bitmap = bmp.asImageBitmap(),
@@ -288,9 +372,9 @@ private fun ImageBubble(m: ChatMessage, onRetry: (ChatMessage) -> Unit) {
         )
     } else {
         Text(
-            if (m.extra.isNotBlank()) "Фото · нажмите, чтобы скачать" else m.text,
+            if (m.extra.isNotBlank()) "Фото · загружается…" else m.text,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.clickable { onRetry(m) },
+            modifier = Modifier.clickable { onEnsure(m) },
         )
     }
 }
@@ -406,7 +490,3 @@ fun InitialsAvatar(title: String, group: Boolean, online: Boolean) {
     }
 }
 
-private fun timeLabel(ms: Long): String {
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = ms }
-    return "%02d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
-}

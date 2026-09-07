@@ -58,6 +58,7 @@ data class ChatMessage(
     val localPath: String? = null,
     val senderId: String = "",
     val senderName: String = "",
+    val reactions: List<Reaction> = emptyList(),
 )
 
 data class RopeGroup(
