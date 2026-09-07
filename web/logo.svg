@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="Rope">
+  <g transform="rotate(-16 64 64)">
+    <path d="M22 64 C22 34 50 30 64 64 C78 98 106 94 106 64 C106 34 78 30 64 64 C50 98 22 94 22 64" stroke="#3F3F46" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path class="rope-draw" d="M22 64 C22 34 50 30 64 64 C78 98 106 94 106 64 C106 34 78 30 64 64 C50 98 22 94 22 64" stroke="#D4D4D8" stroke-width="8.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

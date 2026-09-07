@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rope — свой мессенджер на своём сервере</title>
+  <meta name="description" content="Приватный self-hosted мессенджер с E2EE: свой VPS, группы, голос, звонки WebRTC и фото. Сервер не видит переписку.">
+  <meta name="theme-color" content="#09090B">
+  <meta property="og:title" content="Rope — свой мессенджер на своём сервере">
+  <meta property="og:description" content="Private self-hosted E2EE messenger on your VPS.">
+  <meta property="og:image" content="logo-icon.svg">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="mesh" aria-hidden="true"></div>
+  <div class="orb orb-a" aria-hidden="true"></div>
+  <div class="orb orb-b" aria-hidden="true"></div>
+  <div class="orb orb-c" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <svg class="rope-line" viewBox="0 0 1440 900" preserveAspectRatio="none" aria-hidden="true">
+    <path class="rope-line-path" d="M-40 220 C 220 80, 380 360, 640 240 S 1040 80, 1480 280"/>
+  </svg>
+
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="Rope">
+      <svg class="brand-mark" viewBox="0 0 128 128" fill="none" aria-hidden="true">
+        <g transform="rotate(-16 64 64)">
+          <path class="rope-draw" d="M22 64 C22 34 50 30 64 64 C78 98 106 94 106 64 C106 34 78 30 64 64 C50 98 22 94 22 64" stroke="#D8DADD" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </svg>
+      <span>Rope</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#why">Почему</a>
+      <a href="#features">Возможности</a>
+      <a href="#start">Как начать</a>
+      <a href="#host">Самохост</a>
+      <a href="#download">Скачать</a>
+    </nav>
+    <a class="nav-git" href="https://github.com/dfa-ra/rope" rel="noopener">GitHub</a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy reveal in">
+        <p class="eyebrow">self-hosted · E2EE</p>
+        <h1>Свой мессенджер.<br>На своём сервере.</h1>
+        <p class="en">Private messenger on your VPS.</p>
+        <p class="lead">Rope ставит личный сервер на ваш VPS и шифрует переписку на устройстве. Релей видит только шифротекст — не облако и не чужая компания.</p>
+        <div class="cta">
+          <a class="btn magnetic" href="https://github.com/dfa-ra/rope/releases">Скачать APK</a>
+          <a class="btn ghost magnetic" href="#start">Как начать</a>
+        </div>
+      </div>
+      <div class="hero-art reveal in">
+        <div class="mark-orbit">
+          <svg class="logo-hero" viewBox="0 0 128 128" role="img" aria-label="Логотип Rope — узел каната">
+            <g transform="rotate(-16 64 64)">
+              <path class="draw-under" d="M22 64 C22 34 50 30 64 64 C78 98 106 94 106 64 C106 34 78 30 64 64 C50 98 22 94 22 64"/>
+              <path class="draw" d="M22 64 C22 34 50 30 64 64 C78 98 106 94 106 64 C106 34 78 30 64 64 C50 98 22 94 22 64"/>
+            </g>
+          </svg>
+        </div>
+        <div class="phone" aria-hidden="true">
+          <div class="phone-top">
+            <span class="phone-dot"></span>
+            <span>Аня</span>
+          </div>
+          <div class="bubble in">Сервер у тебя на VPS. Не в чужом облаке.</div>
+          <div class="bubble out">Ключи только на телефоне.</div>
+          <div class="bubble in">QR — и человек уже в чате.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="why" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">почему Rope</p>
+        <h2>Узел, который принадлежит вам.</h2>
+        <p class="en">Your server. Your keys. No foreign cloud.</p>
+      </div>
+      <div class="grid">
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Не чужое облако</h3>
+          <p>Переписка идёт через ваш VPS. Нет общей очереди «для всех пользователей мира» и нет чужого аккаунта как точки отказа.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Ключи на телефоне</h3>
+          <p>Текст, фото и голос упакованы в конверты на устройстве. Go-релей хранит то, чего не понимает.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Телефон ↔ VPS</h3>
+          <p>Клиент поднимает сервер по SSH. Друзья входят по QR. Сервер связывает устройства, но не читает содержимое.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">возможности</p>
+        <h2>Тихий мессенджер, который вы сами держите.</h2>
+        <p class="en">E2EE, groups, voice, WebRTC calls, photos.</p>
+      </div>
+      <div class="grid">
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Сквозное шифрование</h3>
+          <p>Текст, голос, фото и файлы закрываются на устройстве. Rust-ядро держит ключи; сервер хранит непрозрачные конверты.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Группы</h3>
+          <p>Общие чаты на вашем сервере. Состав группы меняется на реле; содержимое по-прежнему попарно зашифровано.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Голосовые</h3>
+          <p>Зажали — говорите. Запись уходит как зашифрованный объект, без облачной распознавалки.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Звонки WebRTC</h3>
+          <p>Аудио по DTLS-SRTP. Если дырку в NAT не пробить, тот же VPS даёт TURN и только ретранслирует шифротекст.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Фото и файлы</h3>
+          <p>Вложения режутся и шифруются на телефоне. На диске сервера лежат только объекты с истечением срока.</p>
+        </article>
+        <article class="card reveal">
+          <div class="icon-knot" aria-hidden="true"></div>
+          <h3>Свой VPS</h3>
+          <p>Вы выбираете машину и домен. Приложение ставит <code>rope-server</code> по SSH — без чужого backend.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="start" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">как начать</p>
+        <h2>Сервер заводится с телефона. Люди входят по QR.</h2>
+        <p class="en">Create a server, then join with a QR invite.</p>
+      </div>
+      <ol class="steps">
+        <li class="reveal">
+          <span class="step-n">01</span>
+          <div>
+            <h3>Создайте сервер</h3>
+            <p>В приложении вводите SSH к Ubuntu/Debian VPS. Rope заливает бинарь и <code>install.sh</code>: TLS, владелец, systemd. Первый вход с setup-токеном становится хозяином.</p>
+          </div>
+        </li>
+        <li class="reveal">
+          <span class="step-n">02</span>
+          <div>
+            <h3>Пригласите по QR</h3>
+            <p>Одноразовая ссылка несёт адрес, id сервера и отпечаток TLS. Чужой endpoint с подменённым сертификатом приложение отвергнет.</p>
+          </div>
+        </li>
+        <li class="reveal">
+          <span class="step-n">03</span>
+          <div>
+            <h3>Переписывайтесь</h3>
+            <p>Чаты идут по WSS. История живёт на устройствах. Сервер — почтовый ящик для шифротекста, не читатель переписки.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="host" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">самохост</p>
+        <h2>Один скрипт на Ubuntu.</h2>
+        <p class="en">Phone → SSH → VPS, or the same installer from a machine.</p>
+      </div>
+      <div class="host-panel reveal">
+        <div class="host-grid">
+          <div>
+            <p>С телефона VPS поднимается из приложения. С машины — тот же installer:</p>
+            <pre>sudo ./deployment/scripts/install.sh \
+  --binary ./rope-server-linux-amd64 \
+  --host YOUR.IP \
+  --port 8443</pre>
+          </div>
+          <div>
+            <p>Первый bootstrap с <code>SETUP_TOKEN</code> становится владельцем. <code>--upgrade</code> меняет бинарник и coturn, базу оставляет. <code>--reinstall</code> — чистый узел и новый токен.</p>
+            <p><a href="https://github.com/dfa-ra/rope/blob/main/docs/rollout.md">Как раскатать с телефона →</a></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="section download">
+      <div class="download-panel reveal">
+        <img class="download-mark" src="logo-icon.svg" width="72" height="72" alt="">
+        <h2>Скачать для Android</h2>
+        <p>APK и бинарь сервера публикуются в GitHub Releases — без зафиксированной здесь версии, всегда свежая сборка.</p>
+        <p class="en">Android APK on the latest GitHub Release.</p>
+        <div class="cta">
+          <a class="btn magnetic" href="https://github.com/dfa-ra/rope/releases">Открыть Releases</a>
+          <a class="btn ghost magnetic" href="https://github.com/dfa-ra/rope">Исходный код</a>
+        </div>
+        <p class="fine">Сейчас есть Android. iOS и веб-клиент в этом дереве не обещаем.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a class="brand" href="#top">
+      <svg class="brand-mark" viewBox="0 0 128 128" fill="none" aria-hidden="true">
+        <g transform="rotate(-16 64 64)">
+          <path d="M22 64 C22 34 50 30 64 64 C78 98 106 94 106 64 C106 34 78 30 64 64 C50 98 22 94 22 64" stroke="#D8DADD" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </svg>
+      <span>Rope</span>
+    </a>
+    <p>Приватный self-hosted мессенджер. Без чужой статистики и без выдуманных отзывов.</p>
+    <div class="foot-links">
+      <a href="https://github.com/dfa-ra/rope">GitHub</a>
+      <a href="https://github.com/dfa-ra/rope/releases">Releases</a>
+      <a href="https://github.com/dfa-ra/rope/blob/main/docs/architecture.md">Архитектура</a>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
