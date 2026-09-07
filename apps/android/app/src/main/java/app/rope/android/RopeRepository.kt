@@ -104,6 +104,9 @@ data class UiState(
     val recording: Boolean = false,
     val recordMs: Long = 0,
     val playingVoiceId: String? = null,
+    val voiceProgressId: String? = null,
+    val voicePositionMs: Long = 0,
+    val voiceDurationMs: Long = 0,
     val call: CallInfo? = null,
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
@@ -139,6 +142,7 @@ class RopeRepository(private val app: Application) {
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var recordJob: Job? = null
+    private var voiceProgressJob: Job? = null
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
     private val mediaAttempts = mutableSetOf<String>()
@@ -626,7 +630,26 @@ class RopeRepository(private val app: Application) {
             return
         }
         voicePlayer.toggle(msg.id, path)
-        _state.value = _state.value.copy(playingVoiceId = voicePlayer.playingId)
+        publishVoiceProgress()
+        voiceProgressJob?.cancel()
+        if (voicePlayer.playingId != null) {
+            voiceProgressJob = scope.launch {
+                while (voicePlayer.playingId != null) {
+                    delay(80)
+                    publishVoiceProgress()
+                }
+                publishVoiceProgress()
+            }
+        }
+    }
+
+    private fun publishVoiceProgress() {
+        _state.value = _state.value.copy(
+            playingVoiceId = voicePlayer.playingId,
+            voiceProgressId = voicePlayer.activeId,
+            voicePositionMs = voicePlayer.positionMs(),
+            voiceDurationMs = voicePlayer.durationMs(),
+        )
     }
 
     fun retryMedia(msg: ChatMessage) {

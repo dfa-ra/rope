@@ -85,10 +85,47 @@ class VoicePlayer {
     private var player: MediaPlayer? = null
     var playingId: String? = null
         private set
+    var loadedId: String? = null
+        private set
+
+    /** Playing now, or paused with a kept position. */
+    val activeId: String? get() = playingId ?: loadedId.takeIf { player != null }
+
+    fun positionMs(): Long = try {
+        player?.currentPosition?.toLong()?.coerceAtLeast(0L) ?: 0L
+    } catch (_: Exception) {
+        0L
+    }
+
+    fun durationMs(): Long = try {
+        val d = player?.duration ?: 0
+        if (d > 0) d.toLong() else 0L
+    } catch (_: Exception) {
+        0L
+    }
+
+    private fun isPlayingNow(): Boolean = try {
+        player?.isPlaying == true
+    } catch (_: Exception) {
+        false
+    }
 
     fun toggle(id: String, path: String) {
-        if (playingId == id) {
-            stop()
+        if (loadedId == id && player != null) {
+            if (isPlayingNow()) {
+                try {
+                    player?.pause()
+                } catch (_: Exception) {
+                }
+                playingId = null
+            } else {
+                try {
+                    player?.start()
+                    playingId = id
+                } catch (_: Exception) {
+                    stop()
+                }
+            }
             return
         }
         stop()
@@ -98,6 +135,7 @@ class VoicePlayer {
         p.prepare()
         p.start()
         player = p
+        loadedId = id
         playingId = id
     }
 
@@ -106,8 +144,12 @@ class VoicePlayer {
             player?.stop()
         } catch (_: Exception) {
         }
-        player?.release()
+        try {
+            player?.release()
+        } catch (_: Exception) {
+        }
         player = null
         playingId = null
+        loadedId = null
     }
 }
