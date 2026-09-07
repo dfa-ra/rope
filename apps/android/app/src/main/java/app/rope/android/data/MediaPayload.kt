@@ -277,8 +277,17 @@ data class ChatPrefs(
     }
 }
 
+enum class ChatListMode { ALL, GROUPS, CALLS }
+
 object ChatListRules {
-    fun matches(c: Conversation, query: String): Boolean {
+    fun visible(c: Conversation, mode: ChatListMode): Boolean = when (mode) {
+        ChatListMode.ALL -> true
+        ChatListMode.GROUPS -> c.isGroup
+        ChatListMode.CALLS -> c.last?.kind == MessageKind.CALL
+    }
+
+    fun matches(c: Conversation, query: String, mode: ChatListMode = ChatListMode.ALL): Boolean {
+        if (!visible(c, mode)) return false
         if (query.isBlank()) return true
         val q = query.trim().lowercase()
         return c.title.lowercase().contains(q) ||
