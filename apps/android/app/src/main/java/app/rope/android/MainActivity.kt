@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
                 startedInstallFor = null
                 if (state.pendingApkPath != null) tryInstallPending()
             }
-            RopeTheme {
+            RopeTheme(mode = state.theme) {
                 RopeScaffold(
                     state = state,
                     onGo = repo::go,
@@ -120,6 +120,7 @@ class MainActivity : AppCompatActivity() {
                     onAcceptCall = repo::acceptCall,
                     onRejectCall = repo::rejectCall,
                     onHangup = repo::hangup,
+                    onToggleTheme = repo::toggleTheme,
                 )
             }
         }

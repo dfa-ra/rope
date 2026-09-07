@@ -62,9 +62,10 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 
-private val OutBubble = Color(0xFF2AABEE)
-private val InBubbleLight = Color(0xFFE8EDF2)
-private val InBubbleDark = Color(0xFF182533)
+private val OutBubbleLight = Color(0xFF2563EB)
+private val OutBubbleDark = Color(0xFF00D4FF)
+private val InBubbleLight = Color(0xFFF1F5F9)
+private val InBubbleDark = Color(0xFF1E293B)
 
 @Composable
 fun ChatsPane(
@@ -202,14 +203,16 @@ fun ChatPane(
 @Composable
 private fun MessageBubble(m: ChatMessage, state: UiState, onPlay: (ChatMessage) -> Unit) {
     val mine = m.outgoing
-    val dark = MaterialTheme.colorScheme.background == Color(0xFF17212B)
+    val dark = MaterialTheme.colorScheme.background == Color(0xFF0B0F19)
+    val outBg = if (dark) OutBubbleDark else OutBubbleLight
+    val outFg = if (dark) Color(0xFF0B0F19) else Color.White
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         Surface(
-            color = if (mine) OutBubble else if (dark) InBubbleDark else InBubbleLight,
-            contentColor = if (mine) Color.White else MaterialTheme.colorScheme.onSurface,
+            color = if (mine) outBg else if (dark) InBubbleDark else InBubbleLight,
+            contentColor = if (mine) outFg else MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
@@ -220,12 +223,13 @@ private fun MessageBubble(m: ChatMessage, state: UiState, onPlay: (ChatMessage) 
         ) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 if (!mine && state.group != null) {
-                    Text(m.senderName.ifBlank { m.senderId.take(8) }, style = MaterialTheme.typography.labelMedium, color = OutBubble)
+                    Text(m.senderName.ifBlank { m.senderId.take(8) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
                 when (m.kind) {
                     MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
-                    MessageKind.IMAGE -> ImageBubble(m)
+                    MessageKind.IMAGE -> ImageBubble(m, onPlay)
                     MessageKind.FILE -> FileBubble(m)
+                    MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                     MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                     else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
                 }
@@ -246,7 +250,7 @@ private fun MessageBubble(m: ChatMessage, state: UiState, onPlay: (ChatMessage) 
 private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) -> Unit) {
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        IconButton(onClick = { if (m.localPath != null) onPlay(m) }, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = { onPlay(m) }, modifier = Modifier.size(36.dp)) {
             Icon(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, contentDescription = "Голос")
         }
         Column {
@@ -258,7 +262,11 @@ private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) 
                     .background(Color.White.copy(alpha = 0.25f)),
             )
             Text(
-                extra?.let { MediaPayload.formatDuration(it.durationMs) } ?: m.text,
+                when {
+                    extra != null && m.localPath == null -> "скачивается…"
+                    extra != null -> MediaPayload.formatDuration(extra.durationMs)
+                    else -> m.text
+                },
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -266,7 +274,7 @@ private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) 
 }
 
 @Composable
-private fun ImageBubble(m: ChatMessage) {
+private fun ImageBubble(m: ChatMessage, onRetry: (ChatMessage) -> Unit) {
     val bmp = m.localPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
     if (bmp != null) {
         Image(
@@ -279,7 +287,11 @@ private fun ImageBubble(m: ChatMessage) {
                 .clip(RoundedCornerShape(8.dp)),
         )
     } else {
-        Text(m.text, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            if (m.extra.isNotBlank()) "Фото · нажмите, чтобы скачать" else m.text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.clickable { onRetry(m) },
+        )
     }
 }
 
@@ -376,13 +388,13 @@ fun InitialsAvatar(title: String, group: Boolean, online: Boolean) {
             Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(if (group) Color(0xFF0088CC) else Color(0xFF2AABEE)),
+                .background(if (group) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
             if (group) {
-                Icon(Icons.Outlined.Groups, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                Icon(Icons.Outlined.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp))
             } else {
-                Text(letter, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Text(letter, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
             }
         }
         Box(

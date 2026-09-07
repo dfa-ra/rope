@@ -23,6 +23,9 @@ import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
 import app.rope.android.data.SshTarget
+import app.rope.android.data.ThemeMode
+import app.rope.android.data.ChatRouting
+import app.rope.android.data.JsonIds
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
 import app.rope.android.net.ServerApi
@@ -88,6 +91,7 @@ data class UiState(
     val call: CallInfo? = null,
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
+    val theme: ThemeMode = ThemeMode.DARK,
 )
 
 enum class Screen { Start, Provision, Join, Chats, Chat, Invite, Status, Settings, NewGroup, GroupInfo }
@@ -113,6 +117,11 @@ class RopeRepository(private val app: Application) {
     fun start(pendingLink: String?) {
         scope.launch {
             try {
+                val night = app.resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+                _state.value = _state.value.copy(theme = store.themeMode(night))
+                store.rehomeMisroutedMedia()
                 if (!vault.exists()) tryRestoreBackup()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
                     vault.save(it.toBytes())
@@ -312,7 +321,22 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openConversation(c: Conversation) {
-        if (c.isGroup && c.group != null) openGroup(c.group) else c.peer?.let { openChat(it) }
+        when {
+            c.group != null -> openGroup(c.group)
+            c.peer != null -> openChat(c.peer)
+            !c.isGroup -> openChat(
+                DirectoryDevice(c.id, "", c.title, ByteArray(0), "", c.online),
+            )
+            else -> _state.value = _state.value.copy(
+                error = "Этой группы нет. Голосовые и фото вернулись в личный чат.",
+            )
+        }
+    }
+
+    fun toggleTheme() {
+        val next = if (_state.value.theme == ThemeMode.DARK) ThemeMode.LIGHT else ThemeMode.DARK
+        store.saveTheme(next)
+        _state.value = _state.value.copy(theme = next)
     }
 
     fun sendDraft() {
@@ -420,9 +444,21 @@ class RopeRepository(private val app: Application) {
     }
 
     fun toggleVoice(msg: ChatMessage) {
-        val path = msg.localPath ?: return
+        val path = msg.localPath
+        if (path.isNullOrBlank()) {
+            retryMedia(msg)
+            return
+        }
         voicePlayer.toggle(msg.id, path)
         _state.value = _state.value.copy(playingVoiceId = voicePlayer.playingId)
+    }
+
+    fun retryMedia(msg: ChatMessage) {
+        if (msg.extra.isBlank()) return
+        scope.launch {
+            _state.value = _state.value.copy(error = null, updateText = "скачиваем вложение…")
+            downloadMedia(msg.id, MediaPayload.parse(msg.extra))
+        }
     }
 
     fun createGroup() {
@@ -486,7 +522,9 @@ class RopeRepository(private val app: Application) {
             phase = CallPhase.RINGING_OUT,
         )
         _state.value = _state.value.copy(call = call)
+        recordCall(peer.deviceId, "Исходящий звонок", outgoing = true)
         sendCall(call.callId, peer.deviceId, "ring", "")
+        sendCallEnvelope(peer, call.callId, "ring")
         startTone(true)
         audioMode(true)
     }
@@ -495,6 +533,9 @@ class RopeRepository(private val app: Application) {
         val call = _state.value.call ?: return
         _state.value = _state.value.copy(call = call.copy(phase = CallPhase.ACTIVE))
         sendCall(call.callId, call.peerDeviceId, "accept", "")
+        _state.value.devices.find { it.deviceId == call.peerDeviceId }?.let {
+            sendCallEnvelope(it, call.callId, "accept")
+        }
         stopTone()
         audioMode(true)
         notifier.clearCall()
@@ -503,12 +544,18 @@ class RopeRepository(private val app: Application) {
     fun rejectCall() {
         val call = _state.value.call ?: return
         sendCall(call.callId, call.peerDeviceId, "reject", "")
+        _state.value.devices.find { it.deviceId == call.peerDeviceId }?.let {
+            sendCallEnvelope(it, call.callId, "reject")
+        }
         endCall()
     }
 
     fun hangup() {
         val call = _state.value.call ?: return
         sendCall(call.callId, call.peerDeviceId, "hangup", "")
+        _state.value.devices.find { it.deviceId == call.peerDeviceId }?.let {
+            sendCallEnvelope(it, call.callId, "hangup")
+        }
         endCall()
     }
 
@@ -674,45 +721,55 @@ class RopeRepository(private val app: Application) {
     private fun sendMediaBytes(bytes: ByteArray, mime: String, name: String, kind: String, durationMs: Long) {
         val id = identity ?: return
         val api = api ?: throw IllegalStateException("нет сети")
-        val enc = encryptObject(bytes)
-        val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
-        val objectId = uploaded.getString("object_id")
         val group = _state.value.group
-        val payload = MediaPayload(
-            kind = kind,
-            objectId = objectId,
-            sha256 = enc.sha256,
-            keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
-            mime = mime,
-            name = name,
-            size = bytes.size.toLong(),
-            durationMs = durationMs,
-            groupId = group?.groupId,
-        )
-        val cache = persistPlain(objectId, name, bytes)
-        if (group != null) {
-            sendGroupPayload(group, EnvelopeTypes.MEDIA, payload.toJson().toByteArray(), payload.preview(), payload.messageKind(), payload.toJson(), cache)
-            return
+        val peer = _state.value.peer
+        if (group == null && peer == null) {
+            throw IllegalStateException("откройте чат, чтобы отправить вложение")
         }
-        val peer = _state.value.peer ?: return
-        val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.MEDIA, payload.toJson().toByteArray())
-        val local = ChatMessage(
-            id = env.messageId,
-            peerDeviceId = peer.deviceId,
-            outgoing = true,
-            text = payload.preview(),
-            status = MessageStatus.CREATED,
-            timestampMs = env.timestampMs.toLong(),
-            envelope = env.bytes,
-            kind = payload.messageKind(),
-            extra = payload.toJson(),
-            localPath = cache.absolutePath,
-            senderId = id.deviceId(),
-            senderName = _state.value.profile?.displayName.orEmpty(),
-        )
-        store.insertMessage(local)
-        refreshMessages(peer.deviceId)
-        pushEnvelope(env.bytes)
+        busy(true)
+        try {
+            val enc = encryptObject(bytes)
+            val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
+            val objectId = uploaded.getString("object_id")
+            val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
+            val payload = MediaPayload(
+                kind = kind,
+                objectId = objectId,
+                sha256 = enc.sha256,
+                keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
+                mime = mime,
+                name = name,
+                size = bytes.size.toLong(),
+                durationMs = durationMs,
+                groupId = if (inKnownGroup) group?.groupId else null,
+            )
+            val cache = persistPlain(objectId, name, bytes)
+            if (inKnownGroup && group != null) {
+                sendGroupPayload(group, EnvelopeTypes.MEDIA, payload.toJson().toByteArray(), payload.preview(), payload.messageKind(), payload.toJson(), cache)
+                return
+            }
+            val dest = peer ?: throw IllegalStateException("откройте личный чат")
+            val env = id.encryptTyped(publicIdentityFromBlob(dest.publicIdentity), EnvelopeTypes.MEDIA, payload.toJson().toByteArray())
+            val local = ChatMessage(
+                id = env.messageId,
+                peerDeviceId = dest.deviceId,
+                outgoing = true,
+                text = payload.preview(),
+                status = MessageStatus.CREATED,
+                timestampMs = env.timestampMs.toLong(),
+                envelope = env.bytes,
+                kind = payload.messageKind(),
+                extra = payload.toJson(),
+                localPath = cache.absolutePath,
+                senderId = id.deviceId(),
+                senderName = _state.value.profile?.displayName.orEmpty(),
+            )
+            store.insertMessage(local)
+            refreshMessages(dest.deviceId)
+            pushEnvelope(env.bytes)
+        } finally {
+            _state.value = _state.value.copy(busy = false)
+        }
     }
 
     private fun sendGroupText(group: RopeGroup, text: String) {
@@ -827,10 +884,12 @@ class RopeRepository(private val app: Application) {
                     store.groups()
                 }
                 store.saveGroups(groups)
+                store.rehomeMisroutedMedia()
                 val peer = _state.value.peer?.let { cur -> devices.find { it.deviceId == cur.deviceId } ?: cur }
                 val group = _state.value.group?.let { cur -> groups.find { it.groupId == cur.groupId } ?: cur }
                 _state.value = _state.value.copy(devices = devices, groups = groups, peer = peer, group = group)
                 refreshConversations()
+                refreshOpenChat()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(offline = true, error = e.message)
             }
@@ -866,15 +925,20 @@ class RopeRepository(private val app: Application) {
             )
         }
         val leftover = lastBy.keys
-            .filter { id -> dms.none { it.id == id } && gs.none { it.id == id } }
+            .filter { id ->
+                ChatRouting.showLeftoverThread(id) &&
+                    dms.none { it.id == id } &&
+                    gs.none { it.id == id }
+            }
             .map { id ->
                 Conversation(
                     id = id,
-                    title = if (ChatIds.isGroup(id)) "Группа" else id.take(8),
+                    title = id.take(8),
                     subtitle = lastBy[id]?.text.orEmpty(),
-                    isGroup = ChatIds.isGroup(id),
+                    isGroup = false,
                     online = id in _state.value.onlineIds,
                     last = lastBy[id],
+                    peer = devices.find { it.deviceId == id },
                 )
             }
         _state.value = _state.value.copy(
@@ -989,7 +1053,12 @@ class RopeRepository(private val app: Application) {
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
                 val payload = GroupTextPayload.parse(String(typed.body))
-                val chatId = ChatIds.group(payload.groupId)
+                val gid = JsonIds.optional(payload.groupId)
+                if (gid == null) {
+                    ack(typed.messageId)
+                    return
+                }
+                val chatId = ChatIds.group(gid)
                 val msg = ChatMessage(
                     id = typed.messageId,
                     peerDeviceId = chatId,
@@ -998,7 +1067,7 @@ class RopeRepository(private val app: Application) {
                     status = MessageStatus.DELIVERED_TO_DEVICE,
                     timestampMs = typed.timestampMs.toLong(),
                     kind = MessageKind.GROUP_TEXT,
-                    groupId = payload.groupId,
+                    groupId = gid,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
                 )
@@ -1009,7 +1078,9 @@ class RopeRepository(private val app: Application) {
             EnvelopeTypes.MEDIA -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
                 val payload = MediaPayload.parse(String(typed.body))
-                val chatId = payload.groupId?.let { ChatIds.group(it) } ?: sender.deviceId
+                val known = _state.value.groups.map { it.groupId }.toSet()
+                val chatId = ChatRouting.mediaChatId(payload.groupId, sender.deviceId, known)
+                val routedGroup = JsonIds.optional(payload.groupId)?.takeIf { it in known }
                 val msg = ChatMessage(
                     id = typed.messageId,
                     peerDeviceId = chatId,
@@ -1019,7 +1090,7 @@ class RopeRepository(private val app: Application) {
                     timestampMs = typed.timestampMs.toLong(),
                     kind = payload.messageKind(),
                     extra = payload.toJson(),
-                    groupId = payload.groupId,
+                    groupId = routedGroup,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
                 )
@@ -1027,6 +1098,18 @@ class RopeRepository(private val app: Application) {
                 ack(typed.messageId)
                 notifyIfHidden(sender.displayName, payload.preview(), chatId)
                 scope.launch { downloadMedia(msg.id, payload) }
+            }
+            EnvelopeTypes.CALL -> {
+                val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
+                val body = JSONObject(String(typed.body))
+                handleCallEvent(
+                    JSONObject()
+                        .put("from", sender.deviceId)
+                        .put("event", body.optString("event"))
+                        .put("call_id", body.optString("call_id"))
+                        .put("payload", body.optString("payload")),
+                )
+                ack(typed.messageId)
             }
             else -> {
                 ack(meta.messageId)
@@ -1045,6 +1128,7 @@ class RopeRepository(private val app: Application) {
             val plain = decryptObject(key, blob, expected)
             val dest = persistPlain(payload.objectId, payload.name, plain)
             store.updateLocalPath(messageId, dest.absolutePath)
+            _state.value = _state.value.copy(updateText = "")
             refreshOpenChat()
         } catch (e: Exception) {
             _state.value = _state.value.copy(error = "не скачалось вложение: ${e.message}")
@@ -1055,23 +1139,62 @@ class RopeRepository(private val app: Application) {
         val from = obj.optString("from")
         val event = obj.optString("event")
         val callId = obj.optString("call_id")
+        if (from.isBlank() || callId.isBlank()) return
         val name = _state.value.devices.find { it.deviceId == from }?.displayName ?: from.take(8)
+        val current = _state.value.call
         when (event) {
             "ring" -> {
+                if (current?.callId == callId) return
                 _state.value = _state.value.copy(
                     call = CallInfo(callId, from, name, outgoing = false, phase = CallPhase.RINGING_IN, payload = obj.optString("payload")),
                 )
+                recordCall(from, "Входящий звонок", outgoing = false)
                 notifier.incomingCall(name)
                 startTone(false)
                 audioMode(true)
             }
             "accept" -> {
-                val cur = _state.value.call ?: return
+                val cur = current ?: return
+                if (cur.callId != callId) return
                 _state.value = _state.value.copy(call = cur.copy(phase = CallPhase.ACTIVE))
                 stopTone()
             }
-            "reject", "hangup" -> endCall()
+            "reject", "hangup" -> {
+                if (current == null || current.callId == callId || current.peerDeviceId == from) endCall()
+            }
         }
+    }
+
+    private fun sendCallEnvelope(peer: DirectoryDevice, callId: String, event: String) {
+        val id = identity ?: return
+        if (peer.publicIdentity.isEmpty()) return
+        scope.launch {
+            try {
+                val body = JSONObject().put("call_id", callId).put("event", event).toString().toByteArray()
+                val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.CALL, body)
+                pushEnvelope(env.bytes)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun recordCall(peerId: String, text: String, outgoing: Boolean) {
+        val id = identity ?: return
+        store.insertMessage(
+            ChatMessage(
+                id = UUID.randomUUID().toString(),
+                peerDeviceId = peerId,
+                outgoing = outgoing,
+                text = text,
+                status = MessageStatus.DELIVERED_TO_DEVICE,
+                timestampMs = System.currentTimeMillis(),
+                kind = MessageKind.CALL,
+                senderId = if (outgoing) id.deviceId() else peerId,
+                senderName = if (outgoing) _state.value.profile?.displayName.orEmpty()
+                else _state.value.devices.find { it.deviceId == peerId }?.displayName.orEmpty(),
+            ),
+        )
+        refreshMessages(peerId)
     }
 
     private fun sendCall(callId: String, to: String, event: String, payload: String) {

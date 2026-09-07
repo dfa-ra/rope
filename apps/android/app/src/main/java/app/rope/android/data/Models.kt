@@ -97,4 +97,29 @@ object ChatIds {
     fun isGroup(id: String): Boolean = id.startsWith(GROUP_PREFIX)
 
     fun rawGroupId(id: String): String = id.removePrefix(GROUP_PREFIX)
+
+    fun isOpenableGroup(id: String): Boolean {
+        if (!isGroup(id)) return false
+        return JsonIds.optional(rawGroupId(id)) != null
+    }
 }
+
+/** Android org.json.optString(JSONObject.NULL) returns the literal "null". */
+object JsonIds {
+    fun optional(raw: String?): String? {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty() || v.equals("null", ignoreCase = true)) return null
+        return v
+    }
+}
+
+object ChatRouting {
+    fun mediaChatId(groupId: String?, senderDeviceId: String, knownGroups: Set<String>): String {
+        val gid = JsonIds.optional(groupId)
+        return if (gid != null && gid in knownGroups) ChatIds.group(gid) else senderDeviceId
+    }
+
+    fun showLeftoverThread(id: String): Boolean = !ChatIds.isGroup(id)
+}
+
+enum class ThemeMode { LIGHT, DARK }

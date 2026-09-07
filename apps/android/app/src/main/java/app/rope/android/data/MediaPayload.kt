@@ -22,7 +22,9 @@ data class MediaPayload(
         .put("name", name)
         .put("size", size)
         .put("duration_ms", durationMs)
-        .put("group_id", groupId ?: JSONObject.NULL)
+        .apply {
+            JsonIds.optional(groupId)?.let { put("group_id", it) }
+        }
         .toString()
 
     fun messageKind(): MessageKind = when (kind) {
@@ -51,7 +53,7 @@ data class MediaPayload(
                 name = o.optString("name"),
                 size = o.optLong("size"),
                 durationMs = o.optLong("duration_ms"),
-                groupId = o.optString("group_id").takeIf { it.isNotBlank() },
+                groupId = JsonIds.optional(o.optString("group_id")),
             )
         }
 

@@ -2,9 +2,11 @@ package app.rope.android
 
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.ChatIds
+import app.rope.android.data.ChatRouting
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.GroupTextPayload
+import app.rope.android.data.JsonIds
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
@@ -40,6 +42,29 @@ class Stage2UxTest {
         assertEquals(MessageKind.VOICE, got.messageKind())
         assertTrue(got.preview().contains("Голосовое"))
         assertEquals("0:03", MediaPayload.formatDuration(3400))
+    }
+
+    @Test
+    fun androidNullGroupIdStaysInDirectChat() {
+        assertEquals(null, JsonIds.optional("null"))
+        assertEquals(null, JsonIds.optional(null))
+        assertEquals(null, JsonIds.optional(""))
+        val fromNullJson = MediaPayload.parse(
+            """{"kind":"voice","object_id":"o","sha256":"ab","key_b64":"KEY","mime":"audio/mp4","name":"v.m4a","size":1,"duration_ms":1000,"group_id":null}""",
+        )
+        assertEquals(null, fromNullJson.groupId)
+        val fromAndroidOptString = MediaPayload.parse(
+            """{"kind":"image","object_id":"o","sha256":"ab","key_b64":"KEY","mime":"image/jpeg","name":"p.jpg","size":1,"group_id":"null"}""",
+        )
+        assertEquals(null, fromAndroidOptString.groupId)
+        val dm = MediaPayload("image", "o", "ab", "KEY", "image/jpeg", "p.jpg", 1)
+        assertFalse(dm.toJson().contains("group_id"))
+        assertEquals("peer-1", ChatRouting.mediaChatId("null", "peer-1", setOf("real-group")))
+        assertEquals("peer-1", ChatRouting.mediaChatId(null, "peer-1", emptySet()))
+        assertEquals(ChatIds.group("real-group"), ChatRouting.mediaChatId("real-group", "peer-1", setOf("real-group")))
+        assertFalse(ChatIds.isOpenableGroup("g:null"))
+        assertFalse(ChatRouting.showLeftoverThread("g:null"))
+        assertTrue(ChatRouting.showLeftoverThread("peer-1"))
     }
 
     @Test

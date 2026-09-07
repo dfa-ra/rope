@@ -26,7 +26,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +56,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.rope.android.data.ThemeMode
 import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.ServerTarget
 import com.google.zxing.BarcodeFormat
@@ -89,6 +92,7 @@ fun RopeScaffold(
     onAcceptCall: () -> Unit,
     onRejectCall: () -> Unit,
     onHangup: () -> Unit,
+    onToggleTheme: () -> Unit,
 ) {
     Box {
     Scaffold(
@@ -104,6 +108,12 @@ fun RopeScaffold(
                     Text(title)
                 },
                 actions = {
+                    IconButton(onClick = onToggleTheme) {
+                        Icon(
+                            if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                            contentDescription = if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
+                        )
+                    }
                     if (state.profile != null) {
                         IconButton(onClick = onInvite) {
                             Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")

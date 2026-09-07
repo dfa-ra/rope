@@ -38,7 +38,7 @@ fun CallOverlay(
     Column(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF0E1621))
+            .background(MaterialTheme.colorScheme.background)
             .padding(28.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -51,26 +51,26 @@ fun CallOverlay(
                     CallPhase.ACTIVE -> "Разговор"
                     CallPhase.ENDED -> "Завершён"
                 },
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.titleMedium,
             )
             Box(
                 Modifier
                     .size(112.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF2AABEE)),
+                    .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     call.peerName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     style = MaterialTheme.typography.displaySmall,
                 )
             }
-            Text(call.peerName, color = Color.White, style = MaterialTheme.typography.headlineSmall)
+            Text(call.peerName, color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.headlineSmall)
             Text(
                 if (call.phase == CallPhase.ACTIVE) "аудио · E2EE сигналинг" else "один тап — ответить",
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -107,6 +107,6 @@ private fun CircleAction(label: String, color: Color, onClick: () -> Unit) {
         ) {
             Icon(if (label == "Ответить") Icons.Outlined.Call else Icons.Outlined.CallEnd, contentDescription = label)
         }
-        Text(label, color = Color.White, modifier = Modifier.padding(top = 8.dp))
+        Text(label, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(top = 8.dp))
     }
 }

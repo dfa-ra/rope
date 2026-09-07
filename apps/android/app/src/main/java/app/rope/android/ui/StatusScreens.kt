@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
 import app.rope.android.data.AdminSnapshot
+import app.rope.android.data.ThemeMode
 
 @Composable
 fun StatusPane(
@@ -49,6 +50,15 @@ fun StatusPane(
         Text(
             "Приложение ${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            if (state.theme == ThemeMode.DARK) {
+                "Тема: тёмная · иконка солнца в шапке включает светлую"
+            } else {
+                "Тема: светлая · иконка луны в шапке включает тёмную"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         val cards = state.admin?.cards.orEmpty()
         if (cards.isEmpty()) {

@@ -13,6 +13,10 @@ import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import app.rope.android.update.DeviceBackup
+import app.rope.android.data.ThemeMode
+import app.rope.android.data.JsonIds
+import app.rope.android.data.ChatIds
+import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
 class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 3) {
@@ -253,6 +257,50 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             user = o.optString("user", "root"),
             listenPort = o.optInt("listenPort", 8443),
         )
+    }
+
+    fun saveTheme(mode: ThemeMode) {
+        put("theme", mode.name)
+    }
+
+    fun themeMode(defaultDark: Boolean): ThemeMode {
+        return when (get("theme")?.lowercase()) {
+            "light" -> ThemeMode.LIGHT
+            "dark" -> ThemeMode.DARK
+            else -> if (defaultDark) ThemeMode.DARK else ThemeMode.LIGHT
+        }
+    }
+
+    fun rehomeMisroutedMedia() {
+        val c = readableDatabase.rawQuery(
+            """
+            SELECT id, peer_id, outgoing, kind, extra, group_id, sender_id
+            FROM messages
+            """.trimIndent(),
+            null,
+        )
+        val fixes = mutableListOf<Pair<String, String>>()
+        c.use {
+            while (it.moveToNext()) {
+                val id = it.getString(0)
+                val peerId = it.getString(1)
+                val outgoing = it.getInt(2) == 1
+                val extra = it.getString(4).orEmpty()
+                val storedGroup = JsonIds.optional(if (it.isNull(5)) null else it.getString(5))
+                val senderId = it.getString(6).orEmpty()
+                val extraGroup = runCatching { JsonIds.optional(MediaPayload.parse(extra).groupId) }.getOrNull()
+                val claimed = storedGroup ?: extraGroup ?: if (ChatIds.isGroup(peerId)) JsonIds.optional(ChatIds.rawGroupId(peerId)) else null
+                val misrouted = ChatIds.isGroup(peerId) && claimed == null
+                if (!misrouted || outgoing || senderId.isBlank()) continue
+                fixes += id to senderId
+            }
+        }
+        for ((id, senderId) in fixes) {
+            writableDatabase.execSQL(
+                "UPDATE messages SET peer_id = ?, group_id = NULL WHERE id = ?",
+                arrayOf(senderId, id),
+            )
+        }
     }
 
     fun applyBackup(backup: DeviceBackup) {
