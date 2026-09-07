@@ -69,7 +69,11 @@ fun CallOverlay(
             }
             Text(call.peerName, color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.headlineSmall)
             Text(
-                if (call.phase == CallPhase.ACTIVE) "аудио · E2EE сигналинг" else "один тап — ответить",
+                when {
+                    call.media.isNotBlank() -> call.media
+                    call.phase == CallPhase.ACTIVE -> "WebRTC · DTLS-SRTP"
+                    else -> "один тап — ответить"
+                },
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodyMedium,
             )

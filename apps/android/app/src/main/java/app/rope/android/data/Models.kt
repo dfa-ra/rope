@@ -102,6 +102,7 @@ data class CallInfo(
     val outgoing: Boolean,
     val phase: CallPhase,
     val payload: String = "",
+    val media: String = "",
 )
 
 object ChatIds {

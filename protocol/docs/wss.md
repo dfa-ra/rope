@@ -18,7 +18,7 @@ On connect the server:
 { "type": "send", "envelope": "<standard base64>" }
 { "type": "ack", "message_id": "<uuid hex>" }
 { "type": "group_send", "group_id": "<uuid>", "envelopes": ["<base64>", "..."] }
-{ "type": "call", "call_id": "<uuid>", "to": "<device_hex>", "event": "ring|accept|reject|hangup", "payload": "" }
+{ "type": "call", "call_id": "<uuid>", "to": "<device_hex>", "event": "ring|accept|reject|hangup|offer|answer|ice", "payload": "" }
 ```
 
 `group_send`: sender must be a current member; every envelope recipient must be a current member. Each envelope then follows the normal mailbox path.

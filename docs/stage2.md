@@ -8,7 +8,7 @@ Server stays a transport: encrypted envelopes, encrypted object blobs, group mem
 2. Encrypted object store: `POST/GET /v1/objects`, 25 MB, 7-day TTL, 512 MB quota
 3. Photos, files, voice notes on Android (hold-to-record)
 4. Local notifications + WSS reconnect (no FCM — the VPS is private)
-5. 1-to-1 audio signaling (`type=call` over WSS). Media path is device audio mode + signaling; TURN can be added later via `ice_servers` without a protocol break
+5. 1-to-1 audio: WebRTC (DTLS-SRTP) over existing `type=call` WSS. Events `offer`/`answer`/`ice` carry SDP; STUN by default, TURN later via `ice_servers` without a protocol break
 6. Groups: REST membership, pairwise `group_send`, epoch bump on add/remove
 7. Group attachments use the same media payload with `group_id`
 8. Admin health cards (objects, groups, online, quota)
@@ -38,4 +38,4 @@ Not MLS. Each group message is a fan-out of pairwise envelopes. The server check
 
 ## Calls
 
-WSS events: `ring`, `accept`, `reject`, `hangup`. Offline callee → `not_found` (no mailbox for rings — a missed call must not sit on disk). Incoming UI is full-screen.
+WSS events: `ring`, `accept`, `reject`, `hangup`, plus WebRTC `offer`, `answer`, `ice`. Offline callee → `not_found` (no mailbox for rings — a missed call must not sit on disk). Incoming UI is full-screen. Media is peer-to-peer DTLS-SRTP; the server relays signaling and never sees the voice path.

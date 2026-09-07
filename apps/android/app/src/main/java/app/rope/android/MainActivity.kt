@@ -42,8 +42,18 @@ class MainActivity : AppCompatActivity() {
         (application as RopeApp).repo.restoreFromFile(bytes)
     }
 
+    private var afterAudio: String? = null
+
     private val audioPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) (application as RopeApp).repo.startVoice()
+        val next = afterAudio
+        afterAudio = null
+        if (!granted) return@registerForActivityResult
+        val repo = (application as RopeApp).repo
+        when (next) {
+            "call" -> repo.startCall()
+            "accept" -> repo.acceptCall()
+            else -> repo.startVoice()
+        }
     }
 
     private val notifyPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -100,17 +110,9 @@ class MainActivity : AppCompatActivity() {
                     onUpgradeCore = repo::upgradeCore,
                     onRestoreBackup = { restorePicker.launch("*/*") },
                     onAttach = { picker.launch("*/*") },
-                    onVoiceStart = {
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-                            PackageManager.PERMISSION_GRANTED
-                        ) {
-                            repo.startVoice()
-                        } else {
-                            audioPerm.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
+                    onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
-                    onCall = repo::startCall,
+                    onCall = { withMic("call") { repo.startCall() } },
                     onPlay = repo::toggleVoice,
                     onReact = repo::react,
                     onEnsureMedia = repo::ensureMedia,
@@ -119,7 +121,7 @@ class MainActivity : AppCompatActivity() {
                     onCreateGroup = repo::createGroup,
                     onAddMember = repo::addMemberToOpenGroup,
                     onRemoveMember = repo::removeMemberFromOpenGroup,
-                    onAcceptCall = repo::acceptCall,
+                    onAcceptCall = { withMic("accept") { repo.acceptCall() } },
                     onRejectCall = repo::rejectCall,
                     onHangup = repo::hangup,
                     onToggleTheme = repo::toggleTheme,
@@ -199,6 +201,17 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             startedInstallFor = null
             repo.onApkInstallFailed(e.message ?: "не удалось начать установку", -1)
+        }
+    }
+
+    private fun withMic(action: String, granted: () -> Unit) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            granted()
+        } else {
+            afterAudio = action
+            audioPerm.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 

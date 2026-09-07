@@ -12,7 +12,9 @@ import android.util.Base64
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.CallInfo
+import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
+import app.rope.android.data.CallSignal
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
@@ -40,6 +42,7 @@ import app.rope.android.data.JsonIds
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
+import app.rope.android.media.WebRtcSession
 import app.rope.android.net.ServerApi
 import app.rope.android.notify.RopeNotifier
 import app.rope.android.protocol.InviteCodec
@@ -141,6 +144,8 @@ class RopeRepository(private val app: Application) {
     private var lastTypingSentAt = 0L
     private val typingUntil = mutableMapOf<String, Pair<String, Long>>()
     private var typingJob: Job? = null
+    private var rtc: WebRtcSession? = null
+    private val queuedSignals = mutableListOf<CallSignal>()
 
     fun start(pendingLink: String?) {
         scope.launch {
@@ -711,21 +716,23 @@ class RopeRepository(private val app: Application) {
             outgoing = true,
             phase = CallPhase.RINGING_OUT,
         )
-        _state.value = _state.value.copy(call = call)
+        _state.value = _state.value.copy(call = call.copy(media = CallMedia.label("NEW")))
         recordCall(peer.deviceId, "Исходящий звонок", outgoing = true)
         sendCall(call.callId, peer.deviceId, "ring", "")
         sendCallEnvelope(peer, call.callId, "ring")
+        attachRtc(asCaller = true)
         startTone(true)
         audioMode(true)
     }
 
     fun acceptCall() {
         val call = _state.value.call ?: return
-        _state.value = _state.value.copy(call = call.copy(phase = CallPhase.ACTIVE))
+        _state.value = _state.value.copy(call = call.copy(phase = CallPhase.ACTIVE, media = CallMedia.label("CHECKING")))
         sendCall(call.callId, call.peerDeviceId, "accept", "")
         _state.value.devices.find { it.deviceId == call.peerDeviceId }?.let {
             sendCallEnvelope(it, call.callId, "accept")
         }
+        attachRtc(asCaller = false)
         stopTone()
         audioMode(true)
         notifier.clearCall()
@@ -1640,7 +1647,11 @@ class RopeRepository(private val app: Application) {
             "ring" -> {
                 if (current?.callId == callId) return
                 _state.value = _state.value.copy(
-                    call = CallInfo(callId, from, name, outgoing = false, phase = CallPhase.RINGING_IN, payload = obj.optString("payload")),
+                    call = CallInfo(
+                        callId, from, name, outgoing = false, phase = CallPhase.RINGING_IN,
+                        payload = obj.optString("payload"),
+                        media = CallMedia.label("NEW"),
+                    ),
                 )
                 recordCall(from, "Входящий звонок", outgoing = false)
                 notifier.incomingCall(name)
@@ -1650,21 +1661,64 @@ class RopeRepository(private val app: Application) {
             "accept" -> {
                 val cur = current ?: return
                 if (cur.callId != callId) return
-                _state.value = _state.value.copy(call = cur.copy(phase = CallPhase.ACTIVE))
+                _state.value = _state.value.copy(call = cur.copy(phase = CallPhase.ACTIVE, media = CallMedia.label("CHECKING")))
+                if (cur.outgoing) attachRtc(asCaller = true)
                 stopTone()
             }
             "reject", "hangup" -> {
                 if (current == null || current.callId == callId || current.peerDeviceId == from) endCall()
             }
+            in CallSignal.EVENTS -> {
+                if (current != null && current.callId != callId) return
+                val sig = CallSignal.parse(obj.optString("payload")) ?: return
+                val session = rtc
+                if (session == null) queuedSignals += sig else session.handleRemote(sig)
+            }
         }
     }
 
-    private fun sendCallEnvelope(peer: DirectoryDevice, callId: String, event: String) {
+    private fun attachRtc(asCaller: Boolean) {
+        if (rtc != null) {
+            if (asCaller) return
+            queuedSignals.toList().also { queuedSignals.clear() }.forEach { rtc?.handleRemote(it) }
+            return
+        }
+        val session = try {
+            WebRtcSession(
+                app,
+                onLocalSignal = { sig ->
+                    val call = _state.value.call ?: return@WebRtcSession
+                    val peer = _state.value.devices.find { it.deviceId == call.peerDeviceId }
+                        ?: _state.value.peer
+                        ?: return@WebRtcSession
+                    sendCall(call.callId, peer.deviceId, sig.kind, sig.toJson())
+                    sendCallEnvelope(peer, call.callId, sig.kind, sig.toJson())
+                },
+                onMedia = { label ->
+                    val cur = _state.value.call ?: return@WebRtcSession
+                    _state.value = _state.value.copy(call = cur.copy(media = label))
+                },
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(error = "WebRTC: ${e.message}")
+            return
+        }
+        rtc = session
+        if (asCaller) session.createOffer() else session.prepareCallee()
+        queuedSignals.toList().also { queuedSignals.clear() }.forEach { session.handleRemote(it) }
+    }
+
+    private fun sendCallEnvelope(peer: DirectoryDevice, callId: String, event: String, payload: String = "") {
         val id = identity ?: return
         if (peer.publicIdentity.isEmpty()) return
         scope.launch {
             try {
-                val body = JSONObject().put("call_id", callId).put("event", event).toString().toByteArray()
+                val body = JSONObject()
+                    .put("call_id", callId)
+                    .put("event", event)
+                    .put("payload", payload)
+                    .toString()
+                    .toByteArray()
                 val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.CALL, body)
                 pushEnvelope(env.bytes)
             } catch (_: Exception) {
@@ -1711,6 +1765,12 @@ class RopeRepository(private val app: Application) {
         stopTone()
         audioMode(false)
         notifier.clearCall()
+        try {
+            rtc?.close()
+        } catch (_: Exception) {
+        }
+        rtc = null
+        queuedSignals.clear()
         _state.value = _state.value.copy(call = null)
     }
 

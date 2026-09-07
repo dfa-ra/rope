@@ -11,8 +11,8 @@ android {
         applicationId = "app.rope.android"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.2.5"
+        versionCode = 14
+        versionName = "0.2.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -94,6 +94,7 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.14.0@aar")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("io.getstream:stream-webrtc-android:1.3.10")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

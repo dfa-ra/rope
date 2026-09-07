@@ -59,7 +59,7 @@ Stage 2 (v0.2): photos/files, hold-to-record voice, groups, call signaling, encr
 
 ## What is not in this tree
 
-iOS, WebRTC media/TURN in production, federation, web/desktop.
+iOS, TURN relay in production, federation, web/desktop.
 
 ## License
 

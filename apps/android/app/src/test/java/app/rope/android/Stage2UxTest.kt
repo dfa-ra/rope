@@ -1,6 +1,8 @@
 package app.rope.android
 
 import app.rope.android.data.AdminSnapshot
+import app.rope.android.data.CallMedia
+import app.rope.android.data.CallSignal
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatIds
@@ -261,5 +263,20 @@ class Stage2UxTest {
         }
         val rfc = java.time.Instant.ofEpochMilli(seen.timeInMillis).toString()
         assertEquals("был(а) 14:05", MessageTime.lastSeenLabel(rfc, false, seen.timeInMillis))
+    }
+
+    @Test
+    fun webrtcSignalsStayInCallPayload() {
+        val offer = CallSignal.parse(CallSignal(CallSignal.OFFER, sdp = "v=0").toJson())!!
+        assertEquals(CallSignal.OFFER, offer.kind)
+        assertEquals("v=0", offer.sdp)
+        val ice = CallSignal.parse(CallSignal(CallSignal.ICE, candidate = "typ host", sdpMid = "0", sdpMLineIndex = 0).toJson())!!
+        assertEquals(CallSignal.ICE, ice.kind)
+        assertEquals("typ host", ice.candidate)
+        assertEquals(null, CallSignal.parse("""{"kind":"ring"}"""))
+        assertTrue(CallMedia.STUN_URLS.any { it.startsWith("stun:") })
+        assertEquals("WebRTC · DTLS-SRTP", CallMedia.label("CONNECTED"))
+        assertTrue(CallMedia.label("FAILED").contains("TURN"))
+        assertEquals("WebRTC", CallMedia.PROTOCOL)
     }
 }
