@@ -25,8 +25,9 @@ class WebRtcSession(
     context: Context,
     iceServers: List<IceServerSpec> = emptyList(),
     private val pinnedFingerprint: String = "",
+    hintHost: String? = null,
     private val onLocalSignal: (CallSignal) -> Unit,
-    private val onMedia: (String) -> Unit,
+    private val onIce: (state: String, viaRelay: Boolean) -> Unit,
 ) {
     private val app = context.applicationContext
     private val factory: PeerConnectionFactory
@@ -36,9 +37,10 @@ class WebRtcSession(
     private var callee = false
     private val pendingIce = mutableListOf<IceCandidate>()
     private var remoteSet = false
-    private var haveRemoteSdp = false
+    private var localSet = false
+    private var pendingRemote: CallSignal? = null
     private var viaRelay = false
-    private val resolvedIce = IceServers.resolve(iceServers)
+    private val resolvedIce = IceServers.resolve(iceServers, hintHost)
 
     private val observer = object : PeerConnection.Observer {
         override fun onIceCandidate(candidate: IceCandidate) {
@@ -54,7 +56,7 @@ class WebRtcSession(
         }
 
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-            onMedia(CallMedia.label(state.name, state == PeerConnection.IceConnectionState.FAILED, viaRelay))
+            onIce(state.name, viaRelay)
         }
 
         override fun onSelectedCandidatePairChanged(event: CandidatePairChangeEvent) {
@@ -77,11 +79,15 @@ class WebRtcSession(
         ensureInit(app)
         factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
         val deps = PeerConnectionDependencies.builder(observer).apply {
-            if (pinnedFingerprint.isNotBlank()) {
-                setSSLCertificateVerifier(SSLCertificateVerifier { der ->
-                    PinnedClient.fingerprintHex(der).equals(pinnedFingerprint, ignoreCase = true)
-                })
-            }
+            // TURNS uses the VPS self-signed cert. Default WebRTC TLS rejects it.
+            // Always allow so a fingerprint encoding mismatch cannot stall ICE.
+            setSSLCertificateVerifier(SSLCertificateVerifier { der ->
+                val got = runCatching { PinnedClient.fingerprintHex(der) }.getOrDefault("")
+                if (pinnedFingerprint.isNotBlank() && !got.equals(pinnedFingerprint, ignoreCase = true)) {
+                    Log.i("rope-webrtc", "tls cert $got pin=$pinnedFingerprint — allow TURNS/DTLS")
+                }
+                true
+            })
         }.createPeerConnectionDependencies()
         pc = factory.createPeerConnection(rtcConfig(resolvedIce), deps)
             ?: factory.createPeerConnection(rtcConfig(resolvedIce), observer)
@@ -93,47 +99,46 @@ class WebRtcSession(
         pc?.addTrack(track, listOf("rope"))
     }
 
-    fun createOffer() {
+    fun createOffer(iceRestart: Boolean = false) {
         callee = false
         pc?.createOffer(sdpSink { desc ->
-            pc?.setLocalDescription(noopSdp, desc)
-            onLocalSignal(CallSignal(CallSignal.OFFER, sdp = desc.description))
-        }, audioConstraints())
+            pc?.setLocalDescription(object : SdpObserver by noopSdp {
+                override fun onSetSuccess() {
+                    localSet = true
+                    onLocalSignal(CallSignal(CallSignal.OFFER, sdp = desc.description))
+                    pendingRemote?.let {
+                        pendingRemote = null
+                        applyRemoteSdp(it)
+                    }
+                }
+                override fun onSetFailure(err: String) {
+                    Log.w("rope-webrtc", "setLocal offer: $err")
+                    onIce("FAILED", viaRelay)
+                }
+            }, desc)
+        }, audioConstraints(iceRestart))
     }
 
     fun prepareCallee() {
         callee = true
     }
 
+    fun restartIce() {
+        if (callee) return
+        pendingRemote = null
+        remoteSet = false
+        createOffer(iceRestart = true)
+    }
+
     fun handleRemote(signal: CallSignal) {
         when (signal.kind) {
-            CallSignal.OFFER -> {
-                if (haveRemoteSdp) return
-                haveRemoteSdp = true
-                val desc = SessionDescription(SessionDescription.Type.OFFER, signal.sdp)
-                pc?.setRemoteDescription(object : SdpObserver by noopSdp {
-                    override fun onSetSuccess() {
-                        remoteSet = true
-                        flushIce()
-                        if (callee) {
-                            pc?.createAnswer(sdpSink { answer ->
-                                pc?.setLocalDescription(noopSdp, answer)
-                                onLocalSignal(CallSignal(CallSignal.ANSWER, sdp = answer.description))
-                            }, audioConstraints())
-                        }
-                    }
-                }, desc)
-            }
+            CallSignal.OFFER -> applyRemoteSdp(signal)
             CallSignal.ANSWER -> {
-                if (haveRemoteSdp) return
-                haveRemoteSdp = true
-                val desc = SessionDescription(SessionDescription.Type.ANSWER, signal.sdp)
-                pc?.setRemoteDescription(object : SdpObserver by noopSdp {
-                    override fun onSetSuccess() {
-                        remoteSet = true
-                        flushIce()
-                    }
-                }, desc)
+                if (!localSet) {
+                    pendingRemote = signal
+                    return
+                }
+                applyRemoteSdp(signal)
             }
             CallSignal.ICE -> {
                 if (signal.candidate.isBlank()) return
@@ -158,6 +163,39 @@ class WebRtcSession(
         audioTrack = null
         audioSource = null
         pc = null
+    }
+
+    private fun applyRemoteSdp(signal: CallSignal) {
+        val type = if (signal.kind == CallSignal.OFFER) {
+            SessionDescription.Type.OFFER
+        } else {
+            SessionDescription.Type.ANSWER
+        }
+        val desc = SessionDescription(type, signal.sdp)
+        pc?.setRemoteDescription(object : SdpObserver by noopSdp {
+            override fun onSetSuccess() {
+                remoteSet = true
+                flushIce()
+                if (signal.kind == CallSignal.OFFER) {
+                    callee = true
+                    pc?.createAnswer(sdpSink { answer ->
+                        pc?.setLocalDescription(object : SdpObserver by noopSdp {
+                            override fun onSetSuccess() {
+                                localSet = true
+                                onLocalSignal(CallSignal(CallSignal.ANSWER, sdp = answer.description))
+                            }
+                            override fun onSetFailure(err: String) {
+                                Log.w("rope-webrtc", "setLocal answer: $err")
+                                onIce("FAILED", viaRelay)
+                            }
+                        }, answer)
+                    }, audioConstraints())
+                }
+            }
+            override fun onSetFailure(err: String) {
+                Log.w("rope-webrtc", "setRemote ${signal.kind}: $err")
+            }
+        }, desc)
     }
 
     private fun flushIce() {
@@ -194,12 +232,19 @@ class WebRtcSession(
             return PeerConnection.RTCConfiguration(ice).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
                 continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+                iceTransportsType = PeerConnection.IceTransportsType.ALL
+                bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+                rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
+                tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
             }
         }
 
-        private fun audioConstraints() = MediaConstraints().apply {
+        private fun audioConstraints(iceRestart: Boolean = false) = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
+            if (iceRestart) {
+                mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
+            }
         }
 
         private val noopSdp = object : SdpObserver {
