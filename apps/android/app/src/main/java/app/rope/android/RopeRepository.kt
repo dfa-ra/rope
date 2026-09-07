@@ -21,6 +21,9 @@ import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
+import app.rope.android.data.ChatControl
+import app.rope.android.data.RoleRules
+import app.rope.android.data.TextBody
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -95,6 +98,11 @@ data class UiState(
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
+    val appUpdateAvailable: Boolean = false,
+    val latestAppVersion: String = "",
+    val replyTo: ChatMessage? = null,
+    val editTarget: ChatMessage? = null,
+    val forwarding: ChatMessage? = null,
 )
 
 enum class Screen { Start, Provision, Join, Chats, Chat, Invite, Status, Settings, NewGroup, GroupInfo }
@@ -131,6 +139,7 @@ class RopeRepository(private val app: Application) {
                     vault.save(it.toBytes())
                 }
                 store.profile()?.let { attached(it) }
+                checkAppUpdate(openStatus = false)
                 if (!pendingLink.isNullOrBlank() && store.profile() == null) {
                     prepareJoin(pendingLink)
                 }
@@ -327,6 +336,10 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openConversation(c: Conversation) {
+        if (_state.value.forwarding != null) {
+            completeForward(c)
+            return
+        }
         when {
             c.group != null -> openGroup(c.group)
             c.peer != null -> openChat(c.peer)
@@ -348,17 +361,25 @@ class RopeRepository(private val app: Application) {
     fun sendDraft() {
         val text = _state.value.draftText
         if (text.isBlank() || _state.value.recording) return
-        _state.value = _state.value.copy(draftText = "")
+        val edit = _state.value.editTarget
+        if (edit != null) {
+            _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null)
+            applyEdit(edit, text)
+            return
+        }
+        val reply = _state.value.replyTo
+        _state.value = _state.value.copy(draftText = "", replyTo = null)
         val group = _state.value.group
         if (group != null) {
-            sendGroupText(group, text)
+            sendGroupText(group, text, reply)
             return
         }
         val peer = _state.value.peer ?: return
         scope.launch {
             val id = identity ?: return@launch
             try {
-                val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), text)
+                val packed = TextBody.encode(text, reply?.id, reply?.preview().orEmpty(), replyName(reply))
+                val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
                 val local = ChatMessage(
                     id = env.messageId,
                     peerDeviceId = peer.deviceId,
@@ -370,10 +391,71 @@ class RopeRepository(private val app: Application) {
                     kind = MessageKind.TEXT,
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
+                    replyToId = reply?.id,
+                    replyPreview = reply?.preview().orEmpty(),
+                    replyName = replyName(reply),
                 )
                 store.insertMessage(local)
                 refreshMessages(peer.deviceId)
                 pushEnvelope(env.bytes)
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun startReply(msg: ChatMessage) {
+        if (msg.deleted) return
+        _state.value = _state.value.copy(replyTo = msg, editTarget = null)
+    }
+
+    fun startEdit(msg: ChatMessage) {
+        if (!msg.outgoing || msg.deleted) return
+        if (msg.kind != MessageKind.TEXT && msg.kind != MessageKind.GROUP_TEXT) return
+        _state.value = _state.value.copy(editTarget = msg, replyTo = null, draftText = msg.text)
+    }
+
+    fun cancelComposerExtra() {
+        _state.value = _state.value.copy(replyTo = null, editTarget = null)
+    }
+
+    fun deleteMessage(msg: ChatMessage) {
+        if (!msg.outgoing || msg.deleted) return
+        store.markDeleted(msg.id)
+        refreshOpenChat()
+        sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.DELETE, msg.id).toJson().toByteArray())
+    }
+
+    fun startForward(msg: ChatMessage) {
+        if (msg.deleted) return
+        _state.value = _state.value.copy(
+            forwarding = msg,
+            screen = Screen.Chats,
+            replyTo = null,
+            editTarget = null,
+        )
+    }
+
+    fun cancelForward() {
+        _state.value = _state.value.copy(forwarding = null)
+    }
+
+    fun completeForward(c: Conversation) {
+        val src = _state.value.forwarding ?: return
+        _state.value = _state.value.copy(forwarding = null)
+        scope.launch {
+            try {
+                when {
+                    c.group != null -> {
+                        forwardToGroup(c.group, src)
+                        openGroup(c.group)
+                    }
+                    c.peer != null -> {
+                        forwardToPeer(c.peer, src)
+                        openChat(c.peer)
+                    }
+                    else -> _state.value = _state.value.copy(error = "некуда переслать")
+                }
             } catch (e: Exception) {
                 error(e)
             }
@@ -616,24 +698,28 @@ class RopeRepository(private val app: Application) {
 
     fun refreshStatus() {
         scope.launch {
-            try {
-                val st = api?.status()
-                val latest = runCatching { AppUpdater().latestApk(store.githubToken()) }.getOrNull()
-                val updateHint = when {
-                    latest == null -> _state.value.updateText
-                    !AppRelease.isNewer(latest.version, BuildConfig.VERSION_NAME) ->
-                        "Уже стоит ${BuildConfig.VERSION_NAME}"
-                    else -> "Доступно приложение ${latest.version}. Поставится поверх, без удаления."
-                }
-                _state.value = _state.value.copy(
-                    screen = Screen.Status,
-                    statusText = st?.toString(2) ?: "нет прав владельца или офлайн",
-                    admin = st?.let { AdminSnapshot.from(it) },
-                    updateText = updateHint,
-                )
-            } catch (e: Exception) {
-                error(e)
+            val latest = runCatching { AppUpdater().latestApk(store.githubToken()) }.getOrNull()
+            val newer = latest != null && AppRelease.isNewer(latest.version, BuildConfig.VERSION_NAME)
+            val updateHint = when {
+                latest == null -> "Не удалось проверить GitHub. Можно нажать «Обновить приложение» ещё раз."
+                !newer -> "Уже стоит ${BuildConfig.VERSION_NAME}"
+                else -> "Доступно приложение ${latest.version}. Поставится поверх, без удаления."
             }
+            val st = runCatching { api?.status() }.getOrNull()
+            val owner = RoleRules.isOwner(_state.value.profile?.role)
+            _state.value = _state.value.copy(
+                screen = Screen.Status,
+                error = null,
+                statusText = when {
+                    st != null -> st.toString(2)
+                    owner -> "ядро сейчас недоступно"
+                    else -> "Вы гость. Приложение обновляется здесь, без прав owner."
+                },
+                admin = st?.let { AdminSnapshot.from(it) },
+                updateText = updateHint,
+                appUpdateAvailable = newer,
+                latestAppVersion = latest?.version.orEmpty(),
+            )
         }
     }
 
@@ -641,6 +727,10 @@ class RopeRepository(private val app: Application) {
         val profile = store.profile()
         if (profile == null) {
             _state.value = _state.value.copy(error = "сначала подключитесь к серверу")
+            return
+        }
+        if (!RoleRules.canUpgradeCore(profile.role)) {
+            _state.value = _state.value.copy(error = "Ядро на VPS обновляет только owner")
             return
         }
         if (password.isBlank() && keyPem.isBlank()) {
@@ -685,6 +775,7 @@ class RopeRepository(private val app: Application) {
                         busy = false,
                         screen = Screen.Status,
                         updateText = "Уже стоит $local",
+                        appUpdateAvailable = false,
                     )
                     return@launch
                 }
@@ -803,9 +894,25 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    private fun sendGroupText(group: RopeGroup, text: String) {
-        val body = GroupTextPayload(group.groupId, text, group.epoch).toJson().toByteArray()
-        sendGroupPayload(group, EnvelopeTypes.GROUP_TEXT, body, text, MessageKind.GROUP_TEXT, "", null)
+    private fun sendGroupText(group: RopeGroup, text: String, reply: ChatMessage? = null) {
+        val body = GroupTextPayload(
+            group.groupId,
+            text,
+            group.epoch,
+            reply?.id,
+            reply?.preview().orEmpty(),
+            replyName(reply),
+        ).toJson().toByteArray()
+        sendGroupPayload(
+            group,
+            EnvelopeTypes.GROUP_TEXT,
+            body,
+            text,
+            MessageKind.GROUP_TEXT,
+            "",
+            null,
+            reply,
+        )
     }
 
     private fun sendGroupPayload(
@@ -816,6 +923,7 @@ class RopeRepository(private val app: Application) {
         kind: MessageKind,
         extra: String,
         localFile: File?,
+        reply: ChatMessage? = null,
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -859,6 +967,9 @@ class RopeRepository(private val app: Application) {
                     localPath = localFile?.absolutePath,
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
+                    replyToId = reply?.id,
+                    replyPreview = reply?.preview().orEmpty(),
+                    replyName = replyName(reply),
                 )
                 store.insertMessage(local)
                 refreshMessages(chatId)
@@ -953,6 +1064,112 @@ class RopeRepository(private val app: Application) {
         )
         refreshDirectory()
         connectSocket(profile)
+        checkAppUpdate(openStatus = false)
+    }
+
+    private fun checkAppUpdate(openStatus: Boolean) {
+        scope.launch {
+            val latest = runCatching { AppUpdater().latestApk(store.githubToken()) }.getOrNull() ?: return@launch
+            val newer = AppRelease.isNewer(latest.version, BuildConfig.VERSION_NAME)
+            _state.value = _state.value.copy(
+                appUpdateAvailable = newer,
+                latestAppVersion = latest.version,
+                updateText = if (newer) {
+                    "Доступно приложение ${latest.version}. Обновление не требует прав owner."
+                } else {
+                    _state.value.updateText
+                },
+                screen = if (openStatus) Screen.Status else _state.value.screen,
+            )
+        }
+    }
+
+    private fun replyName(msg: ChatMessage?): String {
+        if (msg == null) return ""
+        return msg.senderName.ifBlank {
+            if (msg.outgoing) _state.value.profile?.displayName.orEmpty() else "сообщение"
+        }
+    }
+
+    private fun applyEdit(msg: ChatMessage, text: String) {
+        store.editMessage(msg.id, text)
+        refreshOpenChat()
+        sendControl(
+            EnvelopeTypes.RECEIPT,
+            ChatControl(ChatControl.EDIT, msg.id, text = text).toJson().toByteArray(),
+        )
+    }
+
+    private fun forwardToPeer(peer: DirectoryDevice, src: ChatMessage) {
+        val id = identity ?: return
+        if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
+            val packed = TextBody.encode(src.text, src.id, src.preview(), "Переслано · ${replyName(src)}")
+            val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
+            store.insertMessage(
+                ChatMessage(
+                    id = env.messageId,
+                    peerDeviceId = peer.deviceId,
+                    outgoing = true,
+                    text = src.text,
+                    status = MessageStatus.CREATED,
+                    timestampMs = env.timestampMs.toLong(),
+                    envelope = env.bytes,
+                    kind = MessageKind.TEXT,
+                    senderId = id.deviceId(),
+                    senderName = _state.value.profile?.displayName.orEmpty(),
+                    replyToId = src.id,
+                    replyPreview = src.preview(),
+                    replyName = "Переслано · ${replyName(src)}",
+                ),
+            )
+            refreshMessages(peer.deviceId)
+            pushEnvelope(env.bytes)
+            return
+        }
+        if (src.extra.isBlank()) {
+            _state.value = _state.value.copy(error = "это вложение уже нельзя переслать")
+            return
+        }
+        val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.MEDIA, src.extra.toByteArray())
+        store.insertMessage(
+            src.copy(
+                id = env.messageId,
+                peerDeviceId = peer.deviceId,
+                outgoing = true,
+                status = MessageStatus.CREATED,
+                timestampMs = env.timestampMs.toLong(),
+                envelope = env.bytes,
+                senderId = id.deviceId(),
+                senderName = _state.value.profile?.displayName.orEmpty(),
+                replyToId = src.id,
+                replyPreview = src.preview(),
+                replyName = "Переслано · ${replyName(src)}",
+                reactions = emptyList(),
+            ),
+        )
+        refreshMessages(peer.deviceId)
+        pushEnvelope(env.bytes)
+    }
+
+    private fun forwardToGroup(group: RopeGroup, src: ChatMessage) {
+        if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
+            sendGroupText(group, src.text, src.copy(senderName = "Переслано · ${replyName(src)}"))
+            return
+        }
+        if (src.extra.isBlank()) {
+            _state.value = _state.value.copy(error = "это вложение уже нельзя переслать")
+            return
+        }
+        sendGroupPayload(
+            group,
+            EnvelopeTypes.MEDIA,
+            src.extra.toByteArray(),
+            src.preview(),
+            src.kind,
+            src.extra,
+            src.localPath?.let { File(it) },
+            src,
+        )
     }
 
     private fun refreshDirectory() {
@@ -989,7 +1206,7 @@ class RopeRepository(private val app: Application) {
             Conversation(
                 id = d.deviceId,
                 title = d.displayName.ifBlank { d.deviceId.take(8) },
-                subtitle = last?.text ?: if (d.online) "в сети" else "не в сети",
+                subtitle = last?.preview() ?: if (d.online) "в сети" else "не в сети",
                 isGroup = false,
                 online = d.online,
                 last = last,
@@ -1001,7 +1218,7 @@ class RopeRepository(private val app: Application) {
             Conversation(
                 id = ChatIds.group(g.groupId),
                 title = g.name,
-                subtitle = last?.text ?: "${g.members.size} участников",
+                subtitle = last?.preview() ?: "${g.members.size} участников",
                 isGroup = true,
                 online = g.members.any { it in _state.value.onlineIds && it != identity?.deviceId() },
                 last = last,
@@ -1018,7 +1235,7 @@ class RopeRepository(private val app: Application) {
                 Conversation(
                     id = id,
                     title = id.take(8),
-                    subtitle = lastBy[id]?.text.orEmpty(),
+                    subtitle = lastBy[id]?.preview().orEmpty(),
                     isGroup = false,
                     online = id in _state.value.onlineIds,
                     last = lastBy[id],
@@ -1119,20 +1336,24 @@ class RopeRepository(private val app: Application) {
         when (meta.msgType) {
             EnvelopeTypes.TEXT -> {
                 val plain = id.decryptMessage(publicIdentityFromBlob(sender.publicIdentity), env)
+                val (body, replyId, replyPair) = TextBody.decode(plain.text)
                 val msg = ChatMessage(
                     id = plain.messageId,
                     peerDeviceId = sender.deviceId,
                     outgoing = false,
-                    text = plain.text,
+                    text = body,
                     status = MessageStatus.DELIVERED_TO_DEVICE,
                     timestampMs = plain.timestampMs.toLong(),
                     kind = MessageKind.TEXT,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
+                    replyToId = replyId,
+                    replyPreview = replyPair.first,
+                    replyName = replyPair.second,
                 )
                 store.insertMessage(msg)
                 ack(plain.messageId)
-                notifyIfHidden(sender.displayName, plain.text, sender.deviceId)
+                notifyIfHidden(sender.displayName, body, sender.deviceId)
             }
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -1154,6 +1375,9 @@ class RopeRepository(private val app: Application) {
                     groupId = gid,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
+                    replyToId = payload.replyTo,
+                    replyPreview = payload.replyPreview,
+                    replyName = payload.replyName,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
@@ -1185,17 +1409,21 @@ class RopeRepository(private val app: Application) {
             }
             EnvelopeTypes.RECEIPT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
-                val reaction = ReactionPayload.parse(String(typed.body))
-                if (reaction != null) {
-                    store.applyReaction(
+                val raw = String(typed.body)
+                val control = ChatControl.parse(raw)
+                val reaction = ReactionPayload.parse(raw)
+                when {
+                    control?.kind == ChatControl.EDIT -> store.editMessage(control.targetId, control.text)
+                    control?.kind == ChatControl.DELETE -> store.markDeleted(control.targetId)
+                    reaction != null -> store.applyReaction(
                         reaction.targetId,
                         reaction.emoji,
                         sender.deviceId,
                         sender.displayName,
                         reaction.op == ReactionPayload.CLEAR,
                     )
-                    refreshOpenChat()
                 }
+                refreshOpenChat()
                 ack(typed.messageId)
             }
             EnvelopeTypes.CALL -> {

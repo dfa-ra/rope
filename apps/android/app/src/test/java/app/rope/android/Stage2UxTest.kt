@@ -1,7 +1,10 @@
 package app.rope.android
 
 import app.rope.android.data.AdminSnapshot
+import app.rope.android.data.ChatActions
+import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatIds
+import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.EnvelopeTypes
@@ -9,11 +12,14 @@ import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.JsonIds
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
+import app.rope.android.data.MessageMeta
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.MessageTime
 import app.rope.android.data.Reaction
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.ReactionPayload
+import app.rope.android.data.RoleRules
+import app.rope.android.data.TextBody
 import app.rope.android.media.ImageCodec
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -128,7 +134,11 @@ class Stage2UxTest {
             set(java.util.Calendar.MILLISECOND, 0)
         }
         assertEquals("14:05", MessageTime.label(cal.timeInMillis, cal.timeInMillis))
-        assertEquals("14:05 · доставлено", MessageTime.meta(MessageStatus.DELIVERED_TO_DEVICE, true, cal.timeInMillis, cal.timeInMillis))
+        assertEquals("14:05 · доставлено", MessageTime.meta(MessageStatus.DELIVERED_TO_DEVICE, true, cal.timeInMillis, now = cal.timeInMillis))
+        assertEquals(
+            "14:05 · изм. · доставлено",
+            MessageTime.meta(MessageStatus.DELIVERED_TO_DEVICE, true, cal.timeInMillis, edited = true, now = cal.timeInMillis),
+        )
         val raw = ReactionPayload("mid", "👍", ReactionPayload.SET).toJson()
         val parsed = ReactionPayload.parse(raw)!!
         assertEquals("mid", parsed.targetId)
@@ -138,5 +148,74 @@ class Stage2UxTest {
         assertEquals(1, back.size)
         assertEquals("❤️", back[0].emoji)
         assertEquals(null, ReactionPayload.parse("""{"kind":"other"}"""))
+    }
+
+    @Test
+    fun guestsCanUpdateAppButNotCore() {
+        assertTrue(RoleRules.canUpdateApp("guest"))
+        assertTrue(RoleRules.canUpdateApp("member"))
+        assertTrue(RoleRules.canUpdateApp("owner"))
+        assertFalse(RoleRules.canUpgradeCore("guest"))
+        assertFalse(RoleRules.canUpgradeCore("member"))
+        assertFalse(RoleRules.isOwner(null))
+        assertTrue(RoleRules.canUpgradeCore("owner"))
+        assertTrue(RoleRules.isOwner("OWNER"))
+    }
+
+    @Test
+    fun textBodyKeepsPlainAndPacksReply() {
+        assertEquals("привет", TextBody.encode("привет", null, "", ""))
+        val packed = TextBody.encode("ответ", "mid-1", "цитата", "Анна")
+        val (text, replyId, pair) = TextBody.decode(packed)
+        assertEquals("ответ", text)
+        assertEquals("mid-1", replyId)
+        assertEquals("цитата", pair.first)
+        assertEquals("Анна", pair.second)
+        val plain = TextBody.decode("просто текст")
+        assertEquals("просто текст", plain.first)
+        assertEquals(null, plain.second)
+        val notReplyJson = TextBody.decode("""{"hello":"world"}""")
+        assertEquals("""{"hello":"world"}""", notReplyJson.first)
+        assertEquals(null, JsonIds.optional("null"))
+    }
+
+    @Test
+    fun chatControlEditDeleteAndMeta() {
+        val edit = ChatControl.parse(ChatControl(ChatControl.EDIT, "m1", text = "новое").toJson())!!
+        assertEquals(ChatControl.EDIT, edit.kind)
+        assertEquals("m1", edit.targetId)
+        assertEquals("новое", edit.text)
+        val del = ChatControl.parse(ChatControl(ChatControl.DELETE, "m2").toJson())!!
+        assertEquals(ChatControl.DELETE, del.kind)
+        assertEquals(null, ChatControl.parse("""{"kind":"other","target":"x"}"""))
+        assertEquals(null, ChatControl.parse("""{"kind":"edit"}"""))
+        val meta = MessageMeta.parse(MessageMeta("r1", "prev", "Имя", edited = true).toJson())
+        assertEquals("r1", meta.replyToId)
+        assertEquals("prev", meta.replyPreview)
+        assertTrue(meta.edited)
+        assertFalse(meta.deleted)
+        val group = GroupTextPayload.parse(GroupTextPayload("g", "hi", 1, "r", "цитата", "Боб").toJson())
+        assertEquals("r", group.replyTo)
+        assertEquals("цитата", group.replyPreview)
+        assertEquals("Боб", group.replyName)
+    }
+
+    @Test
+    fun chatActionsFollowOwnership() {
+        val incoming = ChatMessage("1", "p", false, "hi", MessageStatus.DELIVERED_TO_DEVICE, 1L)
+        val mine = incoming.copy(id = "2", outgoing = true)
+        val deleted = mine.copy(deleted = true)
+        val photo = mine.copy(kind = MessageKind.IMAGE)
+        assertTrue(ChatActions.canReply(incoming))
+        assertTrue(ChatActions.canForward(incoming))
+        assertFalse(ChatActions.canEdit(incoming))
+        assertFalse(ChatActions.canDelete(incoming))
+        assertTrue(ChatActions.canEdit(mine))
+        assertTrue(ChatActions.canDelete(mine))
+        assertFalse(ChatActions.canEdit(photo))
+        assertFalse(ChatActions.canReply(deleted))
+        assertFalse(ChatActions.canForward(deleted))
+        assertFalse(ChatActions.canEdit(deleted))
+        assertEquals("Сообщение удалено", deleted.preview())
     }
 }

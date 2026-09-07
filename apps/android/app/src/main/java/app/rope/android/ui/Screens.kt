@@ -95,6 +95,12 @@ fun RopeScaffold(
     onRejectCall: () -> Unit,
     onHangup: () -> Unit,
     onToggleTheme: () -> Unit,
+    onReply: (app.rope.android.data.ChatMessage) -> Unit,
+    onEdit: (app.rope.android.data.ChatMessage) -> Unit,
+    onDelete: (app.rope.android.data.ChatMessage) -> Unit,
+    onForward: (app.rope.android.data.ChatMessage) -> Unit,
+    onCancelComposer: () -> Unit,
+    onCancelForward: () -> Unit,
 ) {
     Box {
     Scaffold(
@@ -156,11 +162,23 @@ fun RopeScaffold(
                     Screen.Start -> StartPane(onGo, onRestoreBackup)
                     Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onGo(Screen.Start) }
                     Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
-                    Screen.Chats -> app.rope.android.ui.ChatsPane(state, onOpenConversation) { onGo(Screen.NewGroup) }
+                    Screen.Chats -> app.rope.android.ui.ChatsPane(
+                        state,
+                        onOpenConversation,
+                        { onGo(Screen.NewGroup) },
+                        onUpdateApp,
+                        onCancelForward,
+                    )
                     Screen.Chat -> app.rope.android.ui.ChatPane(
                         state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
                         onReact, onEnsureMedia,
-                    ) { onGo(Screen.GroupInfo) }
+                        onGroupInfo = { onGo(Screen.GroupInfo) },
+                        onReply = onReply,
+                        onEdit = onEdit,
+                        onDelete = onDelete,
+                        onForward = onForward,
+                        onCancelComposer = onCancelComposer,
+                    )
                     Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
                     Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore)
                     Screen.Settings -> Text("Settings", modifier = Modifier.padding(16.dp))

@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 4) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 5) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -39,7 +39,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
               local_path TEXT,
               sender_id TEXT NOT NULL DEFAULT '',
               sender_name TEXT NOT NULL DEFAULT '',
-              reactions TEXT NOT NULL DEFAULT '[]'
+              reactions TEXT NOT NULL DEFAULT '[]',
+              meta TEXT NOT NULL DEFAULT '{}'
             )
             """.trimIndent(),
         )
@@ -88,6 +89,9 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE messages ADD COLUMN reactions TEXT NOT NULL DEFAULT '[]'")
         }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'")
+        }
     }
 
     fun saveProfile(p: ServerProfile) {
@@ -128,14 +132,19 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             msg.copy(
                 reactions = msg.reactions.ifEmpty { existing.reactions },
                 localPath = msg.localPath ?: existing.localPath,
+                replyToId = msg.replyToId ?: existing.replyToId,
+                replyPreview = msg.replyPreview.ifBlank { existing.replyPreview },
+                replyName = msg.replyName.ifBlank { existing.replyName },
+                edited = msg.edited || existing.edited,
+                deleted = msg.deleted || existing.deleted,
             )
         }
         writableDatabase.execSQL(
             """
             INSERT OR REPLACE INTO messages(
               id, peer_id, outgoing, body_enc, status, ts, envelope,
-              kind, extra, group_id, local_path, sender_id, sender_name, reactions
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """.trimIndent(),
             arrayOf(
                 merged.id,
@@ -152,6 +161,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 merged.senderId,
                 merged.senderName,
                 ReactionCodec.toJson(merged.reactions),
+                MessageMeta.of(merged).toJson(),
             ),
         )
     }
@@ -160,7 +170,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val c = readableDatabase.rawQuery(
             """
             SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name, reactions
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
             FROM messages WHERE id = ?
             """.trimIndent(),
             arrayOf(id),
@@ -191,11 +201,33 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         writableDatabase.execSQL("UPDATE messages SET local_path = ? WHERE id = ?", arrayOf(path, id))
     }
 
+    fun editMessage(id: String, text: String): Boolean {
+        val msg = message(id) ?: return false
+        writableDatabase.execSQL(
+            "UPDATE messages SET body_enc = ?, meta = ? WHERE id = ?",
+            arrayOf(encrypt(text), MessageMeta.of(msg.copy(text = text, edited = true)).toJson(), id),
+        )
+        return true
+    }
+
+    fun markDeleted(id: String): Boolean {
+        val msg = message(id) ?: return false
+        writableDatabase.execSQL(
+            "UPDATE messages SET body_enc = ?, extra = '', local_path = NULL, meta = ? WHERE id = ?",
+            arrayOf(
+                encrypt(""),
+                MessageMeta.of(msg.copy(deleted = true, text = "", extra = "")).toJson(),
+                id,
+            ),
+        )
+        return true
+    }
+
     fun messages(peerId: String): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
             """
             SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name, reactions
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
             FROM messages WHERE peer_id = ? ORDER BY ts ASC
             """.trimIndent(),
             arrayOf(peerId),
@@ -220,7 +252,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val c = readableDatabase.rawQuery(
             """
             SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name, reactions
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
             FROM messages WHERE outgoing = 1 AND status = ?
             """.trimIndent(),
             arrayOf(MessageStatus.CREATED.name),
@@ -356,23 +388,30 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun newId(): String = UUID.randomUUID().toString()
 
-    private fun row(it: android.database.Cursor): ChatMessage {
-        val kind = runCatching { MessageKind.valueOf(it.getString(7)) }.getOrDefault(MessageKind.TEXT)
+    private fun row(c: android.database.Cursor): ChatMessage {
+        val kind = runCatching { MessageKind.valueOf(c.getString(7)) }.getOrDefault(MessageKind.TEXT)
+        val meta = if (c.columnCount > 14 && !c.isNull(14)) MessageMeta.parse(c.getString(14)) else MessageMeta()
+        val text = if (meta.deleted) "" else decrypt(c.getBlob(3))
         return ChatMessage(
-            id = it.getString(0),
-            peerDeviceId = it.getString(1),
-            outgoing = it.getInt(2) == 1,
-            text = decrypt(it.getBlob(3)),
-            status = MessageStatus.valueOf(it.getString(4)),
-            timestampMs = it.getLong(5),
-            envelope = if (it.isNull(6)) null else it.getBlob(6),
+            id = c.getString(0),
+            peerDeviceId = c.getString(1),
+            outgoing = c.getInt(2) == 1,
+            text = text,
+            status = MessageStatus.valueOf(c.getString(4)),
+            timestampMs = c.getLong(5),
+            envelope = if (c.isNull(6)) null else c.getBlob(6),
             kind = kind,
-            extra = it.getString(8).orEmpty(),
-            groupId = if (it.isNull(9)) null else it.getString(9),
-            localPath = if (it.isNull(10)) null else it.getString(10),
-            senderId = it.getString(11).orEmpty(),
-            senderName = it.getString(12).orEmpty(),
-            reactions = if (it.columnCount > 13 && !it.isNull(13)) ReactionCodec.parse(it.getString(13)) else emptyList(),
+            extra = c.getString(8).orEmpty(),
+            groupId = if (c.isNull(9)) null else c.getString(9),
+            localPath = if (c.isNull(10)) null else c.getString(10),
+            senderId = c.getString(11).orEmpty(),
+            senderName = c.getString(12).orEmpty(),
+            reactions = if (c.columnCount > 13 && !c.isNull(13)) ReactionCodec.parse(c.getString(13)) else emptyList(),
+            replyToId = meta.replyToId,
+            replyPreview = meta.replyPreview,
+            replyName = meta.replyName,
+            edited = meta.edited,
+            deleted = meta.deleted,
         )
     }
 

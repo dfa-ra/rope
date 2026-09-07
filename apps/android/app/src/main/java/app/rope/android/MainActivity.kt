@@ -123,6 +123,12 @@ class MainActivity : AppCompatActivity() {
                     onRejectCall = repo::rejectCall,
                     onHangup = repo::hangup,
                     onToggleTheme = repo::toggleTheme,
+                    onReply = repo::startReply,
+                    onEdit = repo::startEdit,
+                    onDelete = repo::deleteMessage,
+                    onForward = repo::startForward,
+                    onCancelComposer = repo::cancelComposerExtra,
+                    onCancelForward = repo::cancelForward,
                 )
             }
         }

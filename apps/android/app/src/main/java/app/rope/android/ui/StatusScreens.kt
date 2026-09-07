@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
 import app.rope.android.data.AdminSnapshot
+import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 
 @Composable
@@ -60,10 +61,13 @@ fun StatusPane(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val cards = state.admin?.cards.orEmpty()
+        val owner = RoleRules.isOwner(state.profile?.role)
+        val cards = if (owner) state.admin?.cards.orEmpty() else emptyList()
         if (cards.isEmpty()) {
             Text(
-                state.statusText.ifBlank { "Статус сервера ещё не загружен." },
+                state.statusText.ifBlank {
+                    if (owner) "Статус сервера ещё не загружен." else "Вы гость. Приложение обновляется здесь, без прав owner."
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
         } else {
@@ -84,11 +88,18 @@ fun StatusPane(
             enabled = !state.busy,
             modifier = Modifier.fillMaxWidth().height(52.dp),
         ) {
-            Text(if (state.pendingApkPath != null) "Повторить установку APK" else "Обновить приложение")
+            Text(
+                when {
+                    state.pendingApkPath != null -> "Повторить установку APK"
+                    state.appUpdateAvailable && state.latestAppVersion.isNotBlank() ->
+                        "Обновить приложение ${state.latestAppVersion}"
+                    else -> "Обновить приложение"
+                },
+            )
         }
         Text(
             state.updateText.ifBlank {
-                "Скачает APK и поставит поверх, без удаления. Если система откажет из‑за старой подписи — ключ уже лежит в Загрузках как rope-device.backup."
+                "Скачает APK с GitHub и поставит поверх. Это может любой участник, owner для этого не нужен."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -99,43 +110,45 @@ fun StatusPane(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        Text("Обновить ядро на VPS", style = MaterialTheme.typography.titleMedium)
-        Text(
-            if (host.isNotBlank()) {
-                "Сервер $host. Бинарник заменится на месте, чаты и owner останутся. Не открывает экран «Создать сервер»."
-            } else {
-                "Нужен SSH к тому же VPS, где уже стоит Rope."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            sshPassword,
-            { sshPassword = it },
-            label = { Text("SSH-пароль") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        TextButton(onClick = { showKey = !showKey }) {
-            Text(if (showKey) "Скрыть SSH-ключ" else "Вставить SSH-ключ вместо пароля")
-        }
-        if (showKey) {
-            OutlinedTextField(
-                sshKey,
-                { sshKey = it },
-                label = { Text("SSH ключ") },
-                minLines = 3,
-                modifier = Modifier.fillMaxWidth().height(120.dp),
+        if (owner) {
+            Text("Обновить ядро на VPS", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (host.isNotBlank()) {
+                    "Сервер $host. Бинарник заменится на месте, чаты и owner останутся. Не открывает экран «Создать сервер»."
+                } else {
+                    "Нужен SSH к тому же VPS, где уже стоит Rope."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        Button(
-            onClick = { onUpgradeCore(sshPassword, sshKey) },
-            enabled = !state.busy && (sshPassword.isNotBlank() || sshKey.isNotBlank()),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Text("Обновить ядро")
+            OutlinedTextField(
+                sshPassword,
+                { sshPassword = it },
+                label = { Text("SSH-пароль") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(onClick = { showKey = !showKey }) {
+                Text(if (showKey) "Скрыть SSH-ключ" else "Вставить SSH-ключ вместо пароля")
+            }
+            if (showKey) {
+                OutlinedTextField(
+                    sshKey,
+                    { sshKey = it },
+                    label = { Text("SSH ключ") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                )
+            }
+            Button(
+                onClick = { onUpgradeCore(sshPassword, sshKey) },
+                enabled = !state.busy && (sshPassword.isNotBlank() || sshKey.isNotBlank()),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                Text("Обновить ядро")
+            }
         }
     }
 }

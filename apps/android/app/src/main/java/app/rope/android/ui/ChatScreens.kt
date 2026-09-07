@@ -11,6 +11,8 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,9 +60,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
+import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.MessageTime
@@ -81,36 +85,90 @@ fun ChatsPane(
     state: UiState,
     onOpen: (Conversation) -> Unit,
     onNewGroup: () -> Unit,
+    onUpdateApp: () -> Unit = {},
+    onCancelForward: () -> Unit = {},
 ) {
-    Box(Modifier.fillMaxSize()) {
-        if (state.conversations.isEmpty()) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text("Пока никого нет", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Пригласите человека QR-кодом или создайте группу.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    Column(Modifier.fillMaxSize()) {
+        val forwarding = state.forwarding
+        when {
+            forwarding != null -> {
+                Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Переслать в чат", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                forwarding.preview(),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = onCancelForward) { Text("Отмена") }
+                    }
+                }
             }
-        } else {
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(state.conversations, key = { it.id }) { c ->
-                    ConversationRow(c) { onOpen(c) }
+            state.appUpdateAvailable -> {
+                Surface(
+                    tonalElevation = 2.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onUpdateApp),
+                ) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Text(
+                            "Доступно приложение ${state.latestAppVersion.ifBlank { "новее" }}",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            "Нажмите, чтобы поставить поверх. Owner для этого не нужен.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
-        FloatingActionButton(
-            onClick = onNewGroup,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-        ) {
-            Icon(Icons.Outlined.Add, contentDescription = "Новая группа")
+        Box(Modifier.weight(1f).fillMaxSize()) {
+            if (state.conversations.isEmpty()) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("Пока никого нет", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (state.forwarding != null) {
+                            "Некуда переслать. Пригласите человека или создайте группу."
+                        } else {
+                            "Пригласите человека QR-кодом или создайте группу."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(state.conversations, key = { it.id }) { c ->
+                        ConversationRow(c) { onOpen(c) }
+                    }
+                }
+            }
+            if (state.forwarding == null) {
+                FloatingActionButton(
+                    onClick = onNewGroup,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                ) {
+                    Icon(Icons.Outlined.Add, contentDescription = "Новая группа")
+                }
+            }
         }
     }
 }
@@ -161,6 +219,11 @@ fun ChatPane(
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
     onGroupInfo: () -> Unit,
+    onReply: (ChatMessage) -> Unit = {},
+    onEdit: (ChatMessage) -> Unit = {},
+    onDelete: (ChatMessage) -> Unit = {},
+    onForward: (ChatMessage) -> Unit = {},
+    onCancelComposer: () -> Unit = {},
 ) {
     val title = state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
@@ -204,10 +267,10 @@ fun ChatPane(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(state.messages, key = { it.id }) { m ->
-                MessageBubble(m, state, onPlay, onReact, onEnsureMedia)
+                MessageBubble(m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward)
             }
         }
-        ComposerBar(state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish)
+        ComposerBar(state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCancelComposer)
     }
 }
 
@@ -219,6 +282,10 @@ private fun MessageBubble(
     onPlay: (ChatMessage) -> Unit,
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
+    onReply: (ChatMessage) -> Unit,
+    onEdit: (ChatMessage) -> Unit,
+    onDelete: (ChatMessage) -> Unit,
+    onForward: (ChatMessage) -> Unit,
 ) {
     val mine = m.outgoing
     val dark = MaterialTheme.colorScheme.background == Color(0xFF0B0F19)
@@ -241,21 +308,40 @@ private fun MessageBubble(
             ),
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .combinedClickable(onClick = {}, onLongClick = { picker = !picker }),
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { if (!m.deleted) picker = !picker },
+                ),
         ) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                if (!mine && state.group != null) {
+                if (!mine && state.group != null && !m.deleted) {
                     Text(m.senderName.ifBlank { m.senderId.take(8) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
-                when (m.kind) {
-                    MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
-                    MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia)
-                    MessageKind.FILE -> FileBubble(m)
-                    MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
-                    MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
-                    else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
+                if (!m.deleted && !m.replyToId.isNullOrBlank()) {
+                    ReplyQuote(
+                        name = m.replyName.ifBlank { "Ответ" },
+                        preview = m.replyPreview.ifBlank { "Сообщение" },
+                        accent = if (mine) outFg else MaterialTheme.colorScheme.primary,
+                    )
                 }
-                val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs)
+                if (m.deleted) {
+                    Text(
+                        "Сообщение удалено",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontStyle = FontStyle.Italic,
+                        color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    when (m.kind) {
+                        MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
+                        MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia)
+                        MessageKind.FILE -> FileBubble(m)
+                        MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
+                        MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
+                        else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
                 if (meta.isNotBlank()) {
                     Text(
                         meta,
@@ -265,14 +351,70 @@ private fun MessageBubble(
                 }
             }
         }
-        if (picker) {
+        if (picker && !m.deleted) {
             ReactionPicker { emoji ->
                 onReact(m, emoji)
                 picker = false
             }
+            MessageActionRow(
+                m,
+                onReply = { onReply(m); picker = false },
+                onForward = { onForward(m); picker = false },
+                onEdit = { onEdit(m); picker = false },
+                onDelete = { onDelete(m); picker = false },
+            )
         }
-        if (m.reactions.isNotEmpty()) {
+        if (m.reactions.isNotEmpty() && !m.deleted) {
             ReactionRow(m, me, mine, onReact)
+        }
+    }
+}
+
+@Composable
+private fun ReplyQuote(name: String, preview: String, accent: Color) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(accent.copy(alpha = 0.16f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Text(name, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(preview, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MessageActionRow(
+    m: ChatMessage,
+    onReply: () -> Unit,
+    onForward: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 4.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        FlowRow(
+            Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (ChatActions.canReply(m)) {
+                TextButton(onClick = onReply) { Text("Ответить") }
+            }
+            if (ChatActions.canForward(m)) {
+                TextButton(onClick = onForward) { Text("Переслать") }
+            }
+            if (ChatActions.canEdit(m)) {
+                TextButton(onClick = onEdit) { Text("Изменить") }
+            }
+            if (ChatActions.canDelete(m)) {
+                TextButton(onClick = onDelete) { Text("Удалить") }
+            }
         }
     }
 }
@@ -395,10 +537,25 @@ private fun ComposerBar(
     onAttach: () -> Unit,
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
+    onCancelComposer: () -> Unit,
 ) {
     val showSend = ComposerRules.showSendButton(state.draftText, state.recording)
     Surface(tonalElevation = 2.dp) {
-        Row(
+        Column(Modifier.fillMaxWidth()) {
+            state.editTarget?.let { target ->
+                ComposerHint(
+                    title = "Редактирование",
+                    body = target.text,
+                    onCancel = onCancelComposer,
+                )
+            } ?: state.replyTo?.let { target ->
+                ComposerHint(
+                    title = if (target.outgoing) "Ответ себе" else "Ответ · ${target.senderName.ifBlank { "сообщение" }}",
+                    body = target.preview(),
+                    onCancel = onCancelComposer,
+                )
+            }
+            Row(
             Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
@@ -461,6 +618,30 @@ private fun ComposerBar(
                 }
             }
         }
+        }
+    }
+}
+
+@Composable
+private fun ComposerHint(title: String, body: String, onCancel: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onCancel) { Text("Отмена") }
     }
 }
 

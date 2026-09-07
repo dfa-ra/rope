@@ -69,11 +69,19 @@ data class GroupTextPayload(
     val groupId: String,
     val text: String,
     val epoch: Int,
+    val replyTo: String? = null,
+    val replyPreview: String = "",
+    val replyName: String = "",
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
         .put("t", text)
         .put("e", epoch)
+        .apply {
+            JsonIds.optional(replyTo)?.let { put("r", it) }
+            if (replyPreview.isNotBlank()) put("rp", replyPreview)
+            if (replyName.isNotBlank()) put("rn", replyName)
+        }
         .toString()
 
     companion object {
@@ -83,9 +91,144 @@ data class GroupTextPayload(
                 groupId = o.optString("g"),
                 text = o.optString("t"),
                 epoch = o.optInt("e"),
+                replyTo = JsonIds.optional(o.optString("r")),
+                replyPreview = o.optString("rp"),
+                replyName = o.optString("rn"),
             )
         }
     }
+}
+
+data class MessageMeta(
+    val replyToId: String? = null,
+    val replyPreview: String = "",
+    val replyName: String = "",
+    val edited: Boolean = false,
+    val deleted: Boolean = false,
+) {
+    fun toJson(): String = JSONObject()
+        .put("reply_to", replyToId ?: JSONObject.NULL)
+        .put("reply_preview", replyPreview)
+        .put("reply_name", replyName)
+        .put("edited", edited)
+        .put("deleted", deleted)
+        .toString()
+
+    companion object {
+        fun parse(raw: String?): MessageMeta {
+            if (raw.isNullOrBlank()) return MessageMeta()
+            return try {
+                val o = JSONObject(raw)
+                MessageMeta(
+                    replyToId = JsonIds.optional(o.optString("reply_to")),
+                    replyPreview = o.optString("reply_preview"),
+                    replyName = o.optString("reply_name"),
+                    edited = o.optBoolean("edited"),
+                    deleted = o.optBoolean("deleted"),
+                )
+            } catch (_: Exception) {
+                MessageMeta()
+            }
+        }
+
+        fun of(msg: ChatMessage) = MessageMeta(
+            replyToId = msg.replyToId,
+            replyPreview = msg.replyPreview,
+            replyName = msg.replyName,
+            edited = msg.edited,
+            deleted = msg.deleted,
+        )
+    }
+}
+
+data class ChatControl(
+    val kind: String,
+    val targetId: String,
+    val emoji: String = "",
+    val op: String = "",
+    val text: String = "",
+) {
+    fun toJson(): String = JSONObject()
+        .put("v", 1)
+        .put("kind", kind)
+        .put("target", targetId)
+        .put("emoji", emoji)
+        .put("op", op)
+        .put("text", text)
+        .toString()
+
+    companion object {
+        const val REACTION = "reaction"
+        const val EDIT = "edit"
+        const val DELETE = "delete"
+
+        fun parse(raw: String): ChatControl? {
+            val o = try {
+                JSONObject(raw)
+            } catch (_: Exception) {
+                return null
+            }
+            val kind = o.optString("kind")
+            val target = JsonIds.optional(o.optString("target")) ?: return null
+            if (kind !in setOf(REACTION, EDIT, DELETE)) return null
+            return ChatControl(
+                kind = kind,
+                targetId = target,
+                emoji = o.optString("emoji").trim(),
+                op = o.optString("op").ifBlank { ReactionPayload.SET },
+                text = o.optString("text"),
+            )
+        }
+    }
+}
+
+object TextBody {
+    fun encode(text: String, replyTo: String?, replyPreview: String, replyName: String): String {
+        if (replyTo.isNullOrBlank()) return text
+        return JSONObject()
+            .put("t", text)
+            .put("r", replyTo)
+            .put("rp", replyPreview)
+            .put("rn", replyName)
+            .toString()
+    }
+
+    fun decode(raw: String): Triple<String, String?, Pair<String, String>> {
+        val trimmed = raw.trim()
+        if (!trimmed.startsWith("{")) return Triple(raw, null, "" to "")
+        return try {
+            val o = JSONObject(trimmed)
+            if (!o.has("t")) return Triple(raw, null, "" to "")
+            Triple(
+                o.optString("t"),
+                JsonIds.optional(o.optString("r")),
+                o.optString("rp") to o.optString("rn"),
+            )
+        } catch (_: Exception) {
+            Triple(raw, null, "" to "")
+        }
+    }
+}
+
+object RoleRules {
+    fun isOwner(role: String?): Boolean = role.equals("owner", ignoreCase = true)
+
+    fun canUpgradeCore(role: String?): Boolean = isOwner(role)
+
+    fun canUpdateApp(role: String?): Boolean = true
+}
+
+object ChatActions {
+    fun canReply(msg: ChatMessage): Boolean = !msg.deleted
+
+    fun canForward(msg: ChatMessage): Boolean = !msg.deleted
+
+    fun canEdit(msg: ChatMessage): Boolean =
+        msg.outgoing &&
+            !msg.deleted &&
+            (msg.kind == MessageKind.TEXT || msg.kind == MessageKind.GROUP_TEXT)
+
+    fun canDelete(msg: ChatMessage): Boolean = msg.outgoing && !msg.deleted
 }
 
 object EnvelopeTypes {
@@ -189,10 +332,17 @@ object MessageTime {
         return if (sameDay) hm else "${cal.get(java.util.Calendar.DAY_OF_MONTH)}.${cal.get(java.util.Calendar.MONTH) + 1} $hm"
     }
 
-    fun meta(status: MessageStatus, outgoing: Boolean, timestampMs: Long, now: Long = System.currentTimeMillis()): String {
+    fun meta(
+        status: MessageStatus,
+        outgoing: Boolean,
+        timestampMs: Long,
+        edited: Boolean = false,
+        now: Long = System.currentTimeMillis(),
+    ): String {
         val time = label(timestampMs, now)
         val mark = ComposerRules.statusLabel(status, outgoing)
-        return listOf(time, mark).filter { it.isNotBlank() }.joinToString(" · ")
+        val edit = if (edited) "изм." else ""
+        return listOf(time, edit, mark).filter { it.isNotBlank() }.joinToString(" · ")
     }
 }
 

@@ -59,7 +59,18 @@ data class ChatMessage(
     val senderId: String = "",
     val senderName: String = "",
     val reactions: List<Reaction> = emptyList(),
-)
+    val replyToId: String? = null,
+    val replyPreview: String = "",
+    val replyName: String = "",
+    val edited: Boolean = false,
+    val deleted: Boolean = false,
+) {
+    fun preview(): String = when {
+        deleted -> "Сообщение удалено"
+        text.isNotBlank() -> text
+        else -> "Сообщение"
+    }
+}
 
 data class RopeGroup(
     val groupId: String,
