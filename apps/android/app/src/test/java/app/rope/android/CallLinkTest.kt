@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallPhase
@@ -22,6 +23,8 @@ class CallLinkTest {
         assertEquals("Разговор", CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTED))
         assertEquals("Нет соединения", CallLink.heading(CallPhase.ACTIVE, CallLinkState.FAILED))
         assertEquals("Завершён", CallLink.heading(CallPhase.ENDED, CallLinkState.FAILED))
+        assertEquals("Нет ответа", CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.FAILED))
+        assertEquals("Не в сети", CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.FAILED, CallLink.offlineDetail()))
     }
 
     @Test
@@ -46,6 +49,10 @@ class CallLinkTest {
         assertTrue(CallLink.applyIce("DISCONNECTED").second.contains("прервалась"))
         assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("CHECKING").first)
         assertTrue(CallLink.applyIce("NEW", hasTurn = false).second.contains("TURN"))
+        assertTrue(CallLink.applyIce("FAILED").second.contains("ICE failed"))
+        assertTrue(CallLink.applyIce("FAILED", viaRelay = true).second.contains("через сервер"))
+        assertEquals("ICE FAILED", CallLink.iceCompact("failed"))
+        assertEquals("", CallLink.iceCompact(" "))
     }
 
     @Test
@@ -71,15 +78,57 @@ class CallLinkTest {
 
     @Test
     fun queuesAnswerAndIceUntilDescriptionsReady() {
-        assertTrue(CallLink.shouldQueueSignal(CallSignal.ANSWER, sessionReady = false, localOfferReady = false, remoteDescriptionReady = false))
-        assertTrue(CallLink.shouldQueueSignal(CallSignal.ANSWER, sessionReady = true, localOfferReady = false, remoteDescriptionReady = false))
-        assertFalse(CallLink.shouldQueueSignal(CallSignal.ANSWER, sessionReady = true, localOfferReady = true, remoteDescriptionReady = false))
-        assertTrue(CallLink.shouldQueueSignal(CallSignal.ICE, sessionReady = true, localOfferReady = true, remoteDescriptionReady = false))
-        assertFalse(CallLink.shouldQueueSignal(CallSignal.ICE, sessionReady = true, localOfferReady = true, remoteDescriptionReady = true))
-        assertFalse(CallLink.shouldQueueSignal(CallSignal.OFFER, sessionReady = true, localOfferReady = false, remoteDescriptionReady = false))
+        assertTrue(
+            CallLink.shouldQueueSignal(
+                CallSignal.ANSWER,
+                sessionReady = false,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
+        assertTrue(
+            CallLink.shouldQueueSignal(
+                CallSignal.ANSWER,
+                sessionReady = true,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.ANSWER,
+                sessionReady = true,
+                localOfferReady = true,
+                remoteDescriptionReady = false,
+            ),
+        )
+        assertTrue(
+            CallLink.shouldQueueSignal(
+                CallSignal.ICE,
+                sessionReady = true,
+                localOfferReady = true,
+                remoteDescriptionReady = false,
+            ),
+        )
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.ICE,
+                sessionReady = true,
+                localOfferReady = true,
+                remoteDescriptionReady = true,
+            ),
+        )
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.OFFER,
+                sessionReady = true,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
         assertTrue(CallLink.ringTimedOut(45_000, CallPhase.RINGING_OUT))
         assertFalse(CallLink.ringTimedOut(44_999, CallPhase.RINGING_IN))
-        assertEquals("нет ответа", CallLink.ringTimeoutDetail(true))
+        assertEquals("абонент не ответил", CallLink.ringTimeoutDetail(true))
     }
 
     @Test
@@ -105,5 +154,61 @@ class CallLinkTest {
         assertNull(IceServers.stunHint("localhost"))
         assertEquals(listOf("stun:[2001:db8::1]:3478"), IceServers.stunHint("2001:db8::1")!!.urls)
         assertFalse(IceServers.missingTurn(listOf(IceServerSpec(listOf("turn:vps:3478"), "u", "c"))))
+    }
+
+    @Test
+    fun missingIceServersShowsBeforeConnectTimeout() {
+        assertEquals("абонент не ответил", CallLink.noAnswerDetail())
+        assertEquals("абонент не в сети", CallLink.offlineDetail())
+        assertTrue(CallLink.missingIceServersDetail().contains("нет TURN"))
+        assertTrue(CallLink.missingIceServersDetail().contains("ice_servers"))
+        assertTrue(CallLink.missingTurnDetail().startsWith("нет TURN"))
+        assertFalse(CallLink.infoHasIceServers(""))
+        assertFalse(CallLink.infoHasIceServers("[]"))
+        assertTrue(CallLink.infoHasIceServers("""[{"urls":["stun:vps:3478"]}]"""))
+        assertTrue(CallLink.infoStatusLine("").contains("нет ice_servers"))
+        assertTrue(
+            CallLink.infoStatusLine("""[{"urls":["turn:vps:3478"],"username":"u","credential":"c"}]""")
+                .contains("TURN получен"),
+        )
+        val ringing = CallInfo("1", "p", "Анна", true, CallPhase.RINGING_OUT, media = "ожидаем ответа")
+        val warned = CallLink.applyInfo("", ringing)
+        assertTrue(warned.iceReady)
+        assertFalse(warned.hasTurn)
+        assertEquals(CallLink.missingIceServersDetail(), warned.media)
+        assertEquals(CallLink.missingIceServersDetail(), CallLink.subtitle(warned, ""))
+        assertFalse(CallLink.timedOut(5_000, CallLinkState.CONNECTING))
+    }
+
+    @Test
+    fun ringTimesOutAndClockStaysBounded() {
+        assertFalse(CallLink.ringTimedOut(44_999, CallPhase.RINGING_OUT, CallLinkState.RINGING))
+        assertTrue(CallLink.ringTimedOut(45_000, CallPhase.RINGING_OUT, CallLinkState.RINGING))
+        assertFalse(CallLink.ringTimedOut(45_000, CallPhase.RINGING_IN, CallLinkState.RINGING))
+        assertFalse(CallLink.ringTimedOut(45_000, CallPhase.RINGING_OUT, CallLinkState.FAILED))
+        assertEquals("12 с / 25 с", CallLink.clock(12_400, CallPhase.ACTIVE, CallLinkState.CONNECTING))
+        assertEquals("5 с / 45 с", CallLink.clock(5_000, CallPhase.RINGING_OUT, CallLinkState.RINGING))
+        assertNull(CallLink.clock(12_000, CallPhase.ACTIVE, CallLinkState.CONNECTED))
+    }
+
+    @Test
+    fun applyInfoDoesNotClobberFailedOrConnected() {
+        val failed = CallInfo(
+            "1", "p", "Боб", true, CallPhase.RINGING_OUT,
+            media = CallLink.noAnswerDetail(),
+            link = CallLinkState.FAILED,
+        )
+        assertEquals(CallLink.noAnswerDetail(), CallLink.applyInfo("[]", failed).media)
+        val connected = CallInfo(
+            "1", "p", "Боб", true, CallPhase.ACTIVE,
+            media = "WebRTC · через сервер",
+            link = CallLinkState.CONNECTED,
+            hasTurn = true,
+        )
+        assertEquals("WebRTC · через сервер", CallLink.applyInfo("", connected).media)
+        val incoming = CallInfo("1", "p", "Анна", false, CallPhase.RINGING_IN, media = "один тап — ответить")
+        val incomingWarned = CallLink.applyInfo("", incoming)
+        assertTrue(CallLink.subtitle(incomingWarned, "").contains("один тап — ответить"))
+        assertTrue(CallLink.subtitle(incomingWarned, "").contains("нет TURN"))
     }
 }

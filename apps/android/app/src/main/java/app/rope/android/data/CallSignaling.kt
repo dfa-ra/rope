@@ -19,6 +19,9 @@ data class CallMachineState(
     val ended: Boolean = true,
     val iceRestartUsed: Boolean = false,
     val rtcWanted: Boolean = false,
+    val iceReady: Boolean = false,
+    val lastIce: String = "",
+    val startedAtMs: Long = 0L,
 ) {
     val live: Boolean get() = !ended && callId.isNotBlank()
 }
@@ -73,6 +76,9 @@ class CallMachine {
             media = s.media,
             link = s.link,
             hasTurn = s.hasTurn,
+            iceReady = s.iceReady,
+            lastIce = s.lastIce,
+            startedAtMs = s.startedAtMs,
         )
     }
 
@@ -90,8 +96,9 @@ class CallMachine {
             outgoing = true,
             phase = CallPhase.RINGING_OUT,
             link = CallLinkState.RINGING,
-            media = "WebRTC · соединяем",
+            media = "ожидаем ответа",
             ended = false,
+            startedAtMs = System.currentTimeMillis(),
         )
         return listOf(
             CallEffect.Send(callId, peerId, CallSignal.RING),
@@ -135,8 +142,38 @@ class CallMachine {
 
     fun onHasTurn(hasTurn: Boolean, mediaIfMissing: String): List<CallEffect> = synchronized(lock) {
         if (!state.live) return emptyList()
-        val media = if (hasTurn) state.media else mediaIfMissing
-        state = state.copy(hasTurn = hasTurn, media = media)
+        val media = if (hasTurn) {
+            if (state.media.contains("нет TURN") || state.media.contains("ice_servers")) {
+                if (state.phase == CallPhase.ACTIVE) CallLink.connectingDetail(true) else "ожидаем ответа"
+            } else {
+                state.media
+            }
+        } else {
+            mediaIfMissing
+        }
+        state = state.copy(hasTurn = hasTurn, iceReady = true, media = media)
+        emptyList()
+    }
+
+    fun onIceServers(iceServersJson: String?): List<CallEffect> = synchronized(lock) {
+        if (!state.live) return emptyList()
+        val updated = CallLink.applyInfo(
+            iceServersJson,
+            CallInfo(
+                callId = state.callId,
+                peerDeviceId = state.peerDeviceId,
+                peerName = "",
+                outgoing = state.outgoing,
+                phase = state.phase,
+                media = state.media,
+                link = state.link,
+                hasTurn = state.hasTurn,
+                iceReady = state.iceReady,
+                lastIce = state.lastIce,
+                startedAtMs = state.startedAtMs,
+            ),
+        )
+        state = state.copy(hasTurn = updated.hasTurn, iceReady = updated.iceReady, media = updated.media)
         emptyList()
     }
 
@@ -144,7 +181,7 @@ class CallMachine {
         if (!state.live) return emptyList()
         if (state.phase == CallPhase.RINGING_IN || state.phase == CallPhase.RINGING_OUT) return emptyList()
         val (link, label) = CallLink.applyIce(name, viaRelay, state.hasTurn)
-        state = state.copy(link = link, media = label)
+        state = state.copy(link = link, media = label, lastIce = name, iceReady = true)
         val out = mutableListOf<CallEffect>()
         if (link == CallLinkState.CONNECTED) out += CallEffect.CancelWatch
         if (link == CallLinkState.FAILED && state.hasTurn && !state.iceRestartUsed && state.role == CallRtcRole.OFFERER) {
@@ -178,14 +215,30 @@ class CallMachine {
         val detail = CallLink.ringTimeoutDetail(outgoing)
         val event = if (outgoing) CallSignal.HANGUP else CallSignal.REJECT
         val send = CallEffect.Send(state.callId, state.peerDeviceId, event)
+        if (outgoing) {
+            state = state.copy(link = CallLinkState.FAILED, media = detail, rtcWanted = false)
+            return listOf(
+                send,
+                CallEffect.CancelWatch,
+                CallEffect.StopTone,
+                CallEffect.ClearNotify,
+                CallEffect.Notice(detail),
+            )
+        }
         hardEndLocked()
         return listOf(send, CallEffect.Notice(detail), CallEffect.TearDown)
     }
 
     fun onRingSendFailed(): List<CallEffect> = synchronized(lock) {
         if (!state.live) return emptyList()
-        hardEndLocked()
-        return listOf(CallEffect.Notice("собеседник не в сети"), CallEffect.TearDown)
+        val detail = CallLink.offlineDetail()
+        state = state.copy(link = CallLinkState.FAILED, media = detail, rtcWanted = false)
+        return listOf(
+            CallEffect.CancelWatch,
+            CallEffect.StopTone,
+            CallEffect.ClearNotify,
+            CallEffect.Notice(detail),
+        )
     }
 
     private fun localAcceptLocked(): List<CallEffect> {
@@ -219,8 +272,9 @@ class CallMachine {
             outgoing = false,
             phase = CallPhase.RINGING_IN,
             link = CallLinkState.RINGING,
-            media = "WebRTC · соединяем",
+            media = "один тап — ответить",
             ended = false,
+            startedAtMs = System.currentTimeMillis(),
         )
         return incomingRingEffects()
     }
@@ -268,9 +322,10 @@ class CallMachine {
                 outgoing = false,
                 phase = CallPhase.RINGING_IN,
                 link = CallLinkState.RINGING,
-                media = "WebRTC · соединяем",
+                media = "один тап — ответить",
                 ended = false,
                 queue = listOfNotNull(sig),
+                startedAtMs = System.currentTimeMillis(),
             )
             return incomingRingEffects()
         }

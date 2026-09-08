@@ -78,6 +78,7 @@ data class RopeGroup(
     val name: String,
     val epoch: Int,
     val members: List<String>,
+    val createdBy: String = "",
 )
 
 data class Conversation(
@@ -106,6 +107,9 @@ data class CallInfo(
     val media: String = "",
     val link: CallLinkState = CallLinkState.RINGING,
     val hasTurn: Boolean = false,
+    val iceReady: Boolean = false,
+    val lastIce: String = "",
+    val startedAtMs: Long = 0L,
 )
 
 object ChatIds {

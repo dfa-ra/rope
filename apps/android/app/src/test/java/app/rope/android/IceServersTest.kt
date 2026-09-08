@@ -134,6 +134,24 @@ class IceServersTest {
     }
 
     @Test
+    fun infoJsonKeepsPublicIpAndPlanAddsIpUrls() {
+        val obj = JSONObject(
+            """{"ice_servers":[
+              {"urls":["turns:vps.example:443?transport=tcp","turn:vps.example:3478"],
+               "username":"u","credential":"c","hostname":"vps.example"}
+            ],"public_ip":"203.0.113.9"}""",
+        )
+        val raw = IceServers.infoJson(obj)
+        assertEquals("203.0.113.9", IceServers.parsePublicIp(raw))
+        assertEquals("vps.example", IceServers.fromInfo(obj)[0].hostname)
+        val plan = IceServers.plan(IceServers.parse(raw), "vps.example", IceServers.parsePublicIp(raw))
+        assertTrue(plan.forceRelay)
+        assertEquals("vps.example", plan.servers[0].hostname)
+        assertTrue(plan.servers[0].urls.any { it.startsWith("turns:203.0.113.9:") })
+        assertTrue(plan.servers[0].urls.any { it.startsWith("turn:203.0.113.9:") })
+    }
+
+    @Test
     fun infoJsonKeepsArrayForCache() {
         val obj = JSONObject(
             """{"ice_servers":[{"urls":["turn:vps:3478"],"username":"u","credential":"c"}]}""",

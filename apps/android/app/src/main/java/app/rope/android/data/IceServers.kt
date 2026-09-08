@@ -51,11 +51,24 @@ object IceServers {
 
     fun fromInfo(obj: JSONObject): List<IceServerSpec> = parseArray(iceArray(obj))
 
-    /** Raw `ice_servers` JSON array, or null when the field is missing/empty/JSON null. */
+    /** Cached /v1/info ICE payload. Includes top-level `public_ip` when present. */
     fun infoJson(obj: JSONObject): String? {
         val arr = iceArray(obj) ?: return null
         if (arr.length() == 0) return null
-        return arr.toString()
+        val ip = jsonText(obj, "public_ip") ?: jsonText(obj, "publicIp")
+        if (ip == null) return arr.toString()
+        return JSONObject().put("ice_servers", arr).put("public_ip", ip).toString()
+    }
+
+    fun parsePublicIp(raw: String?): String? {
+        val text = raw?.trim().orEmpty()
+        if (!text.startsWith("{")) return null
+        return try {
+            val obj = JSONObject(text)
+            jsonText(obj, "public_ip") ?: jsonText(obj, "publicIp")
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun iceArray(obj: JSONObject?): JSONArray? {
@@ -109,9 +122,13 @@ object IceServers {
         return fallbackStun()
     }
 
-    fun plan(serverProvided: List<IceServerSpec>, hintHost: String? = null): IceRtcPlan {
+    fun plan(
+        serverProvided: List<IceServerSpec>,
+        hintHost: String? = null,
+        publicIp: String? = null,
+    ): IceRtcPlan {
         val resolved = resolve(serverProvided, hintHost)
-        val expanded = expandHosts(resolved, hintHost)
+        val expanded = expandHosts(resolved, hintHost, publicIp)
         val servers = expanded.map { spec ->
             val turns = spec.urls.any { isTurnsUrl(it) }
             IceRtcServer(
@@ -125,16 +142,20 @@ object IceServers {
         return IceRtcPlan(servers = servers, forceRelay = servers.any { spec -> spec.urls.any { isTurnUrl(it) } })
     }
 
-    fun expandHosts(specs: List<IceServerSpec>, hintHost: String?): List<IceServerSpec> {
-        val hint = JsonIds.optional(hintHost) ?: return specs
-        if (hint == "localhost" || hint == "127.0.0.1" || hint == "::1") return specs
+    fun expandHosts(specs: List<IceServerSpec>, vararg altHosts: String?): List<IceServerSpec> {
+        val hosts = altHosts.mapNotNull { JsonIds.optional(it) }
+            .filter { it != "localhost" && it != "127.0.0.1" && it != "::1" }
+            .distinct()
+        if (hosts.isEmpty()) return specs
         return specs.map { spec ->
             val extra = mutableListOf<String>()
-            for (url in spec.urls) {
-                val host = urlHost(url) ?: continue
-                if (host.equals(hint, ignoreCase = true)) continue
-                val alt = replaceUrlHost(url, hint)
-                if (alt != null && alt !in spec.urls && alt !in extra) extra += alt
+            for (host in hosts) {
+                for (url in spec.urls) {
+                    val current = urlHost(url) ?: continue
+                    if (current.equals(host, ignoreCase = true)) continue
+                    val alt = replaceUrlHost(url, host)
+                    if (alt != null && alt !in spec.urls && alt !in extra) extra += alt
+                }
             }
             if (extra.isEmpty()) spec else spec.copy(urls = spec.urls + extra)
         }

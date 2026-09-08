@@ -1249,6 +1249,7 @@ class RopeRepository(private val app: Application) {
             val updated = refreshIceServers(cur)
             store.saveProfile(updated)
             _state.value = _state.value.copy(profile = updated)
+            applyCallEffects(callMachine.onIceServers(updated.iceServersJson))
         }
     }
 
@@ -1565,7 +1566,14 @@ class RopeRepository(private val app: Application) {
             "deliver" -> handleDeliver(obj)
             "call" -> handleCallEvent(obj)
             "error" -> {
-                _state.value = _state.value.copy(error = obj.optString("message"))
+                val code = obj.optString("code")
+                val msg = obj.optString("message")
+                val call = _state.value.call
+                if (call != null && (code == "not_found" || msg.contains("offline", ignoreCase = true))) {
+                    failConnecting(CallLink.offlineDetail())
+                } else {
+                    _state.value = _state.value.copy(error = msg)
+                }
             }
         }
     }
@@ -1862,6 +1870,7 @@ class RopeRepository(private val app: Application) {
                     iceServers = ice,
                     pinnedFingerprint = profile?.fingerprint.orEmpty(),
                     hintHost = profile?.host,
+                    publicIp = IceServers.parsePublicIp(profile?.iceServersJson),
                     polite = !asCaller,
                     onLocalSignal = { sig ->
                         val callId = callMachine.state.callId

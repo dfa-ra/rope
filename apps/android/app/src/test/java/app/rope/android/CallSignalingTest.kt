@@ -207,6 +207,31 @@ class CallSignalingTest {
     }
 
     @Test
+    fun outgoingRingTimeoutStaysFailedOnScreen() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        val timed = m.onRingTimeout()
+        assertEquals(CallLinkState.FAILED, m.state.link)
+        assertEquals(CallLink.noAnswerDetail(), m.state.media)
+        assertTrue(m.state.live)
+        assertTrue(timed.any { it is CallEffect.Send && it.event == CallSignal.HANGUP })
+        assertFalse(timed.contains(CallEffect.TearDown))
+        assertEquals("Нет ответа", CallLink.heading(m.state.phase, m.state.link, m.state.media))
+    }
+
+    @Test
+    fun offlineRingStaysFailedOnScreen() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        val failed = m.onRingSendFailed()
+        assertEquals(CallLinkState.FAILED, m.state.link)
+        assertEquals(CallLink.offlineDetail(), m.state.media)
+        assertTrue(m.state.live)
+        assertFalse(failed.contains(CallEffect.TearDown))
+        assertEquals("Не в сети", CallLink.heading(m.state.phase, m.state.link, m.state.media))
+    }
+
+    @Test
     fun droppedRingRecoveredByEarlyOffer() {
         val m = CallMachine()
         val effects = m.media("alice", CallSignal.OFFER, "c1", offer(), "bob")

@@ -35,12 +35,13 @@ class WebRtcSession(
     iceServers: List<IceServerSpec> = emptyList(),
     private val pinnedFingerprint: String = "",
     hintHost: String? = null,
+    publicIp: String? = null,
     private val polite: Boolean = false,
     private val onLocalSignal: (CallSignal) -> Unit,
     private val onIce: (state: String, viaRelay: Boolean) -> Unit,
 ) {
     private val app = context.applicationContext
-    private val plan = IceServers.plan(iceServers, hintHost)
+    private val plan = IceServers.plan(iceServers, hintHost, publicIp)
     private val audioDevice: JavaAudioDeviceModule
     private val factory: PeerConnectionFactory
     private var pc: PeerConnection? = null

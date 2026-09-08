@@ -30,7 +30,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +49,7 @@ import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallPhase
 import app.rope.android.data.Conversation
+import kotlinx.coroutines.delay
 
 @Composable
 fun CallsPane(
@@ -128,6 +133,7 @@ fun CallsPane(
 @Composable
 fun CallOverlay(
     call: CallInfo,
+    iceServersJson: String = "",
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onHangup: () -> Unit,
@@ -144,6 +150,24 @@ fun CallOverlay(
         label = "ring",
     )
     val scale = if (reduce || call.phase == CallPhase.ACTIVE || call.phase == CallPhase.ENDED) 1f else ring
+    val fallbackStart = remember(call.callId) { System.currentTimeMillis() }
+    val startAt = if (call.startedAtMs > 0L) call.startedAtMs else fallbackStart
+    var now by remember(call.callId) { mutableStateOf(System.currentTimeMillis()) }
+    val running = call.link != CallLinkState.CONNECTED &&
+        call.link != CallLinkState.FAILED &&
+        call.phase != CallPhase.ENDED
+    LaunchedEffect(call.callId, running) {
+        while (running) {
+            now = System.currentTimeMillis()
+            delay(250)
+        }
+        now = System.currentTimeMillis()
+    }
+    val subtitle = CallLink.subtitle(call, iceServersJson)
+    val heading = CallLink.heading(call.phase, call.link, subtitle)
+    val clock = CallLink.clock(now - startAt, call.phase, call.link)
+    val ice = CallLink.iceCompact(call.lastIce)
+    val failed = call.link == CallLinkState.FAILED
     FadeIn(0) {
         Column(
             Modifier
@@ -161,7 +185,7 @@ fun CallOverlay(
                     breathe = call.phase != CallPhase.ENDED,
                 )
                 Text(
-                    CallLink.heading(call.phase, call.link),
+                    heading,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -184,19 +208,21 @@ fun CallOverlay(
                 }
                 Text(call.peerName, color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    when {
-                        call.media.isNotBlank() -> call.media
-                        call.link == CallLinkState.CONNECTED -> "WebRTC · DTLS-SRTP"
-                        call.phase == CallPhase.ACTIVE -> "WebRTC · соединяем"
-                        else -> "один тап — ответить"
-                    },
-                    color = if (call.link == CallLinkState.FAILED) {
+                    subtitle,
+                    color = if (failed) {
                         MaterialTheme.colorScheme.error
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (clock != null || ice.isNotBlank()) {
+                    Text(
+                        listOfNotNull(clock, ice.takeIf { it.isNotBlank() }).joinToString(" · "),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
             when (call.phase) {
                 CallPhase.RINGING_IN -> Row(
