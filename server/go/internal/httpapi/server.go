@@ -30,13 +30,13 @@ import (
 )
 
 type Server struct {
-	Cfg    config.Config
-	Store  *db.Store
-	Log    *log.Logger
-	Hub    *Hub
-	Limit  *ratelimit.Limiter
-	FP     string
-	setup  string
+	Cfg   config.Config
+	Store *db.Store
+	Log   *log.Logger
+	Hub   *Hub
+	Limit *ratelimit.Limiter
+	FP    string
+	setup string
 }
 
 func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
@@ -140,19 +140,23 @@ func (s *Server) logTurn() {
 		return
 	}
 	s.Log.Printf("ICE host=%s turn=%d turns=%d ttl=%s", s.Cfg.PublicHost, s.Cfg.EffectiveTurnPort(), s.Cfg.EffectiveTurnsPort(), s.Cfg.IceTTL())
-	rep := s.Cfg.ProbeTurn(400 * time.Millisecond)
-	s.Log.Printf("TURN listening=%v turns_listening=%v listen=%s external_ip=%s advertised=%d err=%q",
-		rep.Running, rep.TurnsListening, rep.Listen, rep.ExternalIP, len(rep.Advertised), rep.Error)
+	rep := s.Cfg.ProbeTurn(800 * time.Millisecond)
+	s.Log.Printf("TURN listening=%v allocate=%v relayed=%s turns_listening=%v listen=%s external_ip=%s advertised=%d err=%q",
+		rep.Running, rep.AllocateOK, rep.RelayedIP, rep.TurnsListening, rep.Listen, rep.ExternalIP, len(rep.Advertised), rep.Error)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	out := map[string]any{"ok": true, "turn_running": false}
+	out := map[string]any{"ok": true, "turn_running": false, "turn_allocate_ok": false}
 	if s.Cfg.IceEnabled() {
-		turn := s.Cfg.ProbeTurn(400 * time.Millisecond)
+		turn := s.Cfg.ProbeTurn(800 * time.Millisecond)
 		out["turn_running"] = turn.Running
+		out["turn_allocate_ok"] = turn.AllocateOK
 		out["turns_listening"] = turn.TurnsListening
 		out["turn_port"] = turn.TurnPort
 		out["turns_port"] = turn.TurnsPort
+		if turn.RelayedIP != "" {
+			out["turn_relayed_ip"] = turn.RelayedIP
+		}
 		if turn.Error != "" {
 			out["turn_error"] = turn.Error
 		}
@@ -392,7 +396,7 @@ func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request, a authed, _
 	oc, _ := s.Store.ObjectCount()
 	obytes, _ := s.Store.ObjectBytesSum()
 	gc, _ := s.Store.GroupCount()
-	turn := s.Cfg.ProbeTurn(400 * time.Millisecond)
+	turn := s.Cfg.ProbeTurn(800 * time.Millisecond)
 	writeJSON(w, 200, map[string]any{
 		"server_id":        s.Cfg.ServerID,
 		"version":          config.ServerVersion,
@@ -407,13 +411,16 @@ func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request, a authed, _
 		"max_object_bytes": s.objectLimit(),
 		"online_devices":   len(s.Hub.Online()),
 		"public_host":      s.Cfg.PublicHost,
+		"public_ip":        s.Cfg.PublicIPv4(),
 		"turn_port":        turn.TurnPort,
 		"turns_port":       turn.TurnsPort,
 		"ice_enabled":      s.Cfg.IceEnabled(),
 		"turn_running":     turn.Running,
+		"turn_allocate_ok": turn.AllocateOK,
 		"turns_listening":  turn.TurnsListening,
 		"turn_listen":      turn.Listen,
 		"turn_external_ip": turn.ExternalIP,
+		"turn_relayed_ip":  turn.RelayedIP,
 		"turn_error":       turn.Error,
 		"ice_urls":         turn.Advertised,
 	})

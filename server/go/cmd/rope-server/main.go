@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"time"
 
 	"github.com/dfa-ra/rope/server/go/internal/config"
 	"github.com/dfa-ra/rope/server/go/internal/db"
@@ -16,6 +17,7 @@ func main() {
 	dataDir := flag.String("data-dir", "", "override SQLite data directory")
 	initCfg := flag.Bool("init", false, "create config and data dir if missing")
 	allowHTTP := flag.Bool("allow-http", false, "listen without TLS (debug only)")
+	turnCheck := flag.Bool("turn-check", false, "probe coturn ALLOCATE and exit")
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "rope ", log.LstdFlags)
@@ -33,6 +35,16 @@ func main() {
 	defer store.Close()
 	if err := store.EnsureMeta(cfg.ServerID, config.ServerVersion, config.ProtocolVersion); err != nil {
 		logger.Fatal(err)
+	}
+	if *turnCheck {
+		config.ResetTurnAllocCache()
+		rep := cfg.ProbeTurn(1500 * time.Millisecond)
+		logger.Printf("turn_running=%v allocate_ok=%v relayed=%s turns=%v err=%q urls=%v",
+			rep.Running, rep.AllocateOK, rep.RelayedIP, rep.TurnsListening, rep.Error, rep.Advertised)
+		if !rep.Running || !rep.AllocateOK {
+			os.Exit(1)
+		}
+		return
 	}
 	srv := httpapi.New(cfg, store, logger)
 	if err := srv.ListenAndServe(); err != nil {

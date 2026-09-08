@@ -12,16 +12,16 @@ import (
 )
 
 const ProtocolVersion uint16 = 1
-const ServerVersion = "0.2.13"
+const ServerVersion = "0.2.15"
 const HTTPDevFingerprintSeed = "rope-http-dev"
 
 type Config struct {
-	Listen             string `json:"listen"`
-	DataDir            string `json:"data_dir"`
-	TLSCert            string `json:"tls_cert"`
-	TLSKey             string `json:"tls_key"`
-	SetupToken         string `json:"setup_token"`
-	ServerID           string `json:"server_id"`
+	Listen              string `json:"listen"`
+	DataDir             string `json:"data_dir"`
+	TLSCert             string `json:"tls_cert"`
+	TLSKey              string `json:"tls_key"`
+	SetupToken          string `json:"setup_token"`
+	ServerID            string `json:"server_id"`
 	MailboxTTLSeconds   int    `json:"mailbox_ttl_seconds"`
 	MaxEnvelopeBytes    int    `json:"max_envelope_bytes"`
 	MaxObjectBytes      int    `json:"max_object_bytes"`
