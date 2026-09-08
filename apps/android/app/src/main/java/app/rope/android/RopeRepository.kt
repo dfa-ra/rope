@@ -47,7 +47,6 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
-import app.rope.android.data.CallLinkState
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
