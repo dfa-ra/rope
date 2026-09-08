@@ -129,18 +129,6 @@ fun ChatsPane(
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
-        if (listMode == ChatListMode.GROUPS) {
-            FadeIn(40) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                    Text("Группы", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "Общие чаты на вашем сервере. Состав виден реле, текст — нет.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
         val forwarding = state.forwarding
         when {
             forwarding != null -> {
@@ -274,8 +262,8 @@ private fun emptyBody(mode: ChatListMode, query: String, forwarding: Boolean, ro
         "Некуда переслать. Когда появятся чаты, можно будет переслать сюда."
     }
     query.isNotBlank() -> "Попробуйте другое имя или текст последнего сообщения."
-    mode == ChatListMode.GROUPS -> "Создайте группу — сервер знает только состав, текст шифруется каждому."
-    mode == ChatListMode.CALLS -> "Позвоните из личного чата. Недавние вызовы появятся здесь."
+    mode == ChatListMode.GROUPS -> RoleRules.groupsEmptyBody()
+    mode == ChatListMode.CALLS -> RoleRules.callsEmptyBody(role)
     else -> RoleRules.chatsEmptyBody(role)
 }
 
@@ -527,7 +515,7 @@ fun ChatPane(
                 body = if (state.messageQuery.isNotBlank()) {
                     "Другой запрос — или очистите поиск."
                 } else {
-                    "Сообщения шифруются на этом телефоне. Сервер видит только конверт."
+                    RoleRules.threadEmptyBody()
                 },
                 modifier = Modifier.weight(1f),
             )

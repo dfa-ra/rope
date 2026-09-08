@@ -6,7 +6,7 @@ package app.rope.android.data
  */
 object IceUnstick {
     /** No relay candidate / no ICE progress → drop RELAY-only, try host/srflx. */
-    const val NO_PROGRESS_MS = 10_000L
+    const val NO_PROGRESS_MS = 4_000L
 
     /** Callee never sent answer (or offer never arrived) — signaling, not ICE. */
     const val ANSWER_FAIL_MS = 12_000L

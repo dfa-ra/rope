@@ -28,9 +28,15 @@ data class IceRtcPlan(
 ) {
     val hasTurn: Boolean
         get() = servers.any { spec -> spec.urls.any { IceServers.isTurnUrl(it) } }
+
+    /** Stuck RELAY-only ICE → host/srflx (`IceTransportsType.ALL`). */
+    fun allowDirect(): IceRtcPlan = copy(forceRelay = false)
 }
 
 object IceServers {
+    /** TURN REST creds expire; treat empty or aged cache as must-fetch. */
+    const val ICE_CACHE_MAX_AGE_MS = 30_000L
+
     // Optional /v1/info fields the TURN-server agent can add later (do not edit Go here):
     // - ice_servers[].hostname : TLS SNI when urls use a raw IP
     // - public_ip : second set of turn/turns URLs if DNS for public_host fails on the phone
@@ -47,6 +53,21 @@ object IceServers {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    /**
+     * True when GET /v1/info must run: never-fetched, empty payload, or TURN json older
+     * than [ICE_CACHE_MAX_AGE_MS]. Call start always fetches; this only decides retries
+     * when the GET fails and the local cache might be unusable.
+     */
+    fun shouldRefresh(
+        cachedAtMs: Long,
+        nowMs: Long,
+        cachedJson: String?,
+    ): Boolean {
+        if (cachedAtMs <= 0L) return true
+        if (parse(cachedJson).isEmpty()) return true
+        return nowMs - cachedAtMs >= ICE_CACHE_MAX_AGE_MS
     }
 
     fun fromInfo(obj: JSONObject): List<IceServerSpec> = parseArray(iceArray(obj))

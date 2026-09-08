@@ -216,4 +216,29 @@ class CallLinkTest {
         assertTrue(CallLink.subtitle(incomingWarned, "").contains("один тап — ответить"))
         assertTrue(CallLink.subtitle(incomingWarned, "").contains("нет TURN"))
     }
+
+    @Test
+    fun overlayCopyIsLabelsNotLectures() {
+        assertEquals("Входящий вызов", CallLink.heading(CallPhase.RINGING_IN, CallLinkState.RINGING))
+        assertEquals("Вызов…", CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.RINGING))
+        assertEquals("Разговор", CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTED))
+        val headings = listOf(
+            CallLink.heading(CallPhase.RINGING_IN, CallLinkState.RINGING),
+            CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.RINGING),
+            CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTING),
+            CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTED),
+            CallLink.heading(CallPhase.ENDED, CallLinkState.FAILED),
+        )
+        headings.forEach { h ->
+            assertTrue(h, h.length <= 24)
+            assertFalse(h, h.contains("конверт"))
+            assertFalse(h, h.contains("шифр", ignoreCase = true))
+            assertFalse(h, h.contains("архитектур"))
+        }
+        val ringing = CallInfo("1", "p", "Анна", false, CallPhase.RINGING_IN, media = "один тап — ответить")
+        val sub = CallLink.subtitle(ringing, """[{"urls":["turn:vps:3478"],"username":"u","credential":"c"}]""")
+        assertEquals("один тап — ответить", sub)
+        assertFalse(sub.contains("конверт"))
+        assertFalse(CallLink.connectedDetail(false).contains("конверт"))
+    }
 }

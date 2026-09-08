@@ -200,4 +200,35 @@ class IceServersTest {
         assertEquals("u", parsed[0].username)
         assertEquals(listOf("turn:vps:3478"), parsed[0].urls)
     }
+
+    @Test
+    fun shouldRefreshWhenEmptyStaleOrNeverFetched() {
+        val turn = """[{"urls":["turn:vps:3478"],"username":"u","credential":"c"}]"""
+        val t0 = 1_000_000L
+        assertTrue(IceServers.shouldRefresh(0, t0, turn))
+        assertTrue(IceServers.shouldRefresh(t0, t0, ""))
+        assertTrue(IceServers.shouldRefresh(t0, t0, null))
+        assertTrue(IceServers.shouldRefresh(t0, t0, "[]"))
+        assertFalse(IceServers.shouldRefresh(t0, t0 + 1_000, turn))
+        assertFalse(IceServers.shouldRefresh(t0, t0 + IceServers.ICE_CACHE_MAX_AGE_MS - 1, turn))
+        assertTrue(IceServers.shouldRefresh(t0, t0 + IceServers.ICE_CACHE_MAX_AGE_MS, turn))
+        assertTrue(IceServers.shouldRefresh(t0, t0 + 60_000, turn))
+    }
+
+    @Test
+    fun planForceRelayFallsBackToAllViaAllowDirect() {
+        val specs = IceServers.parse(
+            """[{"urls":["turn:vps.example:3478"],"username":"u","credential":"c"}]""",
+        )
+        val plan = IceServers.plan(specs)
+        assertTrue(plan.forceRelay)
+        assertTrue(plan.hasTurn)
+        val direct = plan.allowDirect()
+        assertFalse(direct.forceRelay)
+        assertTrue(direct.hasTurn)
+        assertEquals(plan.servers, direct.servers)
+        val stunOnly = IceServers.plan(IceServers.parse("""[{"urls":["stun:vps:3478"]}]"""))
+        assertFalse(stunOnly.forceRelay)
+        assertFalse(stunOnly.allowDirect().forceRelay)
+    }
 }

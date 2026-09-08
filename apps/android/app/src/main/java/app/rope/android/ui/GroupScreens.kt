@@ -48,13 +48,6 @@ fun NewGroupPane(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             FadeIn(40) { Text("Новая группа", style = MaterialTheme.typography.titleLarge) }
-            FadeIn(100) {
-                Text(
-                    "Сервер знает только состав. Текст шифруется каждому участнику отдельно.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             OutlinedTextField(
                 state.groupNameDraft,
                 onName,

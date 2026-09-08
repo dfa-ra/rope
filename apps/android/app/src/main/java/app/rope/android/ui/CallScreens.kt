@@ -20,10 +20,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CallEnd
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MicOff
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -40,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.rope.android.NavRules
 import app.rope.android.UiState
@@ -60,16 +63,6 @@ fun CallsPane(
     val recent = NavRules.callsOf(state.conversations)
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     Column(Modifier.fillMaxSize()) {
-        FadeIn(40) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("Звонки", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    "История по последнему звонку в чате. Чтобы позвонить — откройте личный чат.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
         if (recent.isEmpty() && people.isEmpty()) {
             val role = state.profile?.role
             RopeEmptyState(
@@ -113,7 +106,7 @@ fun CallsPane(
                                     Column(Modifier.weight(1f)) {
                                         Text(d.displayName.ifBlank { d.deviceId.take(8) }, style = MaterialTheme.typography.titleMedium)
                                         Text(
-                                            if (d.online) "в сети · WebRTC" else "не в сети",
+                                            if (d.online) "в сети" else "не в сети",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -137,6 +130,10 @@ fun CallOverlay(
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onHangup: () -> Unit,
+    micMuted: Boolean = false,
+    speakerOn: Boolean = false,
+    onToggleMute: () -> Unit = {},
+    onToggleSpeaker: () -> Unit = {},
 ) {
     BackHandler {
         if (call.phase == CallPhase.RINGING_IN) onReject() else onHangup()
@@ -229,19 +226,27 @@ fun CallOverlay(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    CircleAction("Отклонить", Color(0xFFE53935), onReject)
-                    CircleAction("Ответить", Color(0xFF43A047), onAccept)
+                    CircleAction("Отклонить", Color(0xFFE53935), Icons.Outlined.CallEnd, onReject)
+                    CircleAction("Ответить", Color(0xFF43A047), Icons.Outlined.Call, onAccept)
                 }
-                else -> Button(
-                    onClick = onHangup,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                else -> Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Outlined.CallEnd, contentDescription = null)
-                    Text("  Завершить")
+                    CircleAction(
+                        if (micMuted) "Микрофон выкл" else "Микрофон",
+                        if (micMuted) Color(0xFF616161) else Color(0xFF3F3F46),
+                        if (micMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
+                        onToggleMute,
+                    )
+                    CircleAction("Завершить", Color(0xFFE53935), Icons.Outlined.CallEnd, onHangup)
+                    CircleAction(
+                        if (speakerOn) "Динамик вкл" else "Динамик",
+                        if (speakerOn) Color(0xFF1565C0) else Color(0xFF3F3F46),
+                        Icons.Outlined.VolumeUp,
+                        onToggleSpeaker,
+                    )
                 }
             }
         }
@@ -249,15 +254,18 @@ fun CallOverlay(
 }
 
 @Composable
-private fun CircleAction(label: String, color: Color, onClick: () -> Unit) {
+private fun CircleAction(label: String, color: Color, icon: ImageVector, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Button(
             onClick = onClick,
-            colors = ButtonDefaults.buttonColors(containerColor = color),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = color,
+                contentColor = Color.White,
+            ),
             modifier = Modifier.size(72.dp),
             shape = CircleShape,
         ) {
-            Icon(if (label == "Ответить") Icons.Outlined.Call else Icons.Outlined.CallEnd, contentDescription = label)
+            Icon(icon, contentDescription = label)
         }
         Text(label, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(top = 8.dp))
     }

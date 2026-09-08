@@ -23,33 +23,25 @@ object RoleRules {
     fun canOpenStatus(role: String?): Boolean = true
 
     fun peopleEmptyHint(role: String?): String =
-        if (canInvite(role)) {
-            "Пока никого. Покажите QR — человек появится здесь."
-        } else {
-            "Пока никого. Когда организатор пригласит человека, он появится здесь."
-        }
+        if (canInvite(role)) "Покажите QR, чтобы пригласить." else "Пока пусто"
 
     fun peopleInviteAction(role: String?): String? = if (canInvite(role)) "Пригласить" else null
 
-    fun callsEmptyBody(role: String?): String =
-        if (canInvite(role)) {
-            "Пригласите человека, откройте личный чат и нажмите трубку."
-        } else {
-            "Откройте личный чат и нажмите трубку."
-        }
+    @Suppress("UNUSED_PARAMETER")
+    fun callsEmptyBody(role: String?): String = "Нажмите трубку в чате."
 
     fun chatsEmptyBody(role: String?): String =
-        if (canInvite(role)) {
-            "Пригласите человека QR-кодом или создайте группу."
-        } else {
-            "Когда появятся люди, здесь будут чаты. Можно создать группу."
-        }
+        if (canInvite(role)) "Пригласите человека или создайте группу." else "Пока пусто"
+
+    fun groupsEmptyBody(): String = "Пока пусто"
+
+    fun threadEmptyBody(): String = "Напишите сообщение"
 
     fun groupNoMembersHint(role: String?): String =
         if (canInvite(role)) {
-            "Пока некого добавить. Пригласите человека QR-кодом."
+            "Пригласите человека QR-кодом."
         } else {
-            "Пока некого добавить. Попросите организатора пригласить человека."
+            "Пока некого добавить."
         }
 
     /**

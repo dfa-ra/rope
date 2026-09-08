@@ -125,6 +125,8 @@ fun RopeScaffold(
     onAcceptCall: () -> Unit,
     onRejectCall: () -> Unit,
     onHangup: () -> Unit,
+    onToggleCallMute: () -> Unit = {},
+    onToggleCallSpeaker: () -> Unit = {},
     onToggleTheme: () -> Unit,
     onReply: (app.rope.android.data.ChatMessage) -> Unit,
     onEdit: (app.rope.android.data.ChatMessage) -> Unit,
@@ -312,6 +314,10 @@ fun RopeScaffold(
             onAcceptCall,
             onRejectCall,
             onHangup,
+            micMuted = state.callMicMuted,
+            speakerOn = state.callSpeakerOn,
+            onToggleMute = onToggleCallMute,
+            onToggleSpeaker = onToggleCallSpeaker,
         )
     }
     state.viewingImage?.let { img ->

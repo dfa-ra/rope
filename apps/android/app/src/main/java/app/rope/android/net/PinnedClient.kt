@@ -13,6 +13,16 @@ object PinnedClient {
         return md.digest(der).joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Fail-closed when a pin is configured. Blank pin = debug HTTP / missing profile.
+     * Hex compare only — not a crypto implementation.
+     */
+    fun tlsPinAllows(presentedHex: String, expectedHex: String): Boolean {
+        val pin = expectedHex.trim()
+        if (pin.isEmpty()) return true
+        return presentedHex.trim().equals(pin, ignoreCase = true)
+    }
+
     fun http(): OkHttpClient = OkHttpClient.Builder()
         .callTimeout(20, TimeUnit.SECONDS)
         .build()

@@ -13,6 +13,13 @@ import org.junit.Test
 
 class IceUnstickTest {
     @Test
+    fun noProgressFallbackIsFourSeconds() {
+        assertEquals(4_000L, IceUnstick.NO_PROGRESS_MS)
+        assertTrue(IceUnstick.NO_PROGRESS_MS < IceUnstick.ANSWER_FAIL_MS)
+        assertTrue(IceUnstick.NO_PROGRESS_MS < IceUnstick.CONNECT_FAIL_MS)
+    }
+
+    @Test
     fun noRelayAfterTimeoutFallsBackThenFails() {
         assertTrue(
             IceUnstick.shouldFallbackRelay(

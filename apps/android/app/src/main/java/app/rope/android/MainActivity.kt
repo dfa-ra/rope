@@ -130,6 +130,8 @@ class MainActivity : AppCompatActivity() {
                     onAcceptCall = { withMic("accept") { repo.acceptCall() } },
                     onRejectCall = repo::rejectCall,
                     onHangup = repo::hangup,
+                    onToggleCallMute = repo::toggleCallMute,
+                    onToggleCallSpeaker = repo::toggleCallSpeaker,
                     onToggleTheme = repo::toggleTheme,
                     onReply = repo::startReply,
                     onEdit = repo::startEdit,

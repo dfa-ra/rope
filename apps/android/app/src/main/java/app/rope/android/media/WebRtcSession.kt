@@ -59,6 +59,8 @@ class WebRtcSession(
     private var viaRelay = false
     private var fellBack = false
     private var closed = false
+    @Volatile
+    private var micEnabled = true
     private val mainHandler = Handler(Looper.getMainLooper())
     private val fallbackDirect = Runnable {
         if (closed || viaRelay || fellBack) return@Runnable
@@ -149,10 +151,13 @@ class WebRtcSession(
             // TURNS uses the VPS self-signed cert. Default WebRTC TLS rejects it.
             setSSLCertificateVerifier(SSLCertificateVerifier { der ->
                 val got = runCatching { PinnedClient.fingerprintHex(der) }.getOrDefault("")
-                if (pinnedFingerprint.isNotBlank() && !got.equals(pinnedFingerprint, ignoreCase = true)) {
-                    Log.i("rope-webrtc", "tls cert $got pin=$pinnedFingerprint — allow TURNS/DTLS")
+                val ok = PinnedClient.tlsPinAllows(got, pinnedFingerprint)
+                if (pinnedFingerprint.isBlank()) {
+                    Log.w("rope-webrtc", "tls pin blank — allow (debug HTTP / missing profile)")
+                } else if (!ok) {
+                    Log.w("rope-webrtc", "tls cert $got pin=$pinnedFingerprint — reject")
                 }
-                true
+                ok
             })
         }.createPeerConnectionDependencies()
         val cfg = rtcConfig(plan)
@@ -230,9 +235,16 @@ class WebRtcSession(
         if (closed || fellBack) return
         fellBack = true
         mainHandler.removeCallbacks(fallbackDirect)
-        val cfg = rtcConfig(plan.copy(forceRelay = false))
+        val cfg = rtcConfig(plan.allowDirect())
         val ok = runCatching { pc?.setConfiguration(cfg) == true }.getOrDefault(false)
         Log.i("rope-webrtc", "setConfiguration ALL=$ok (was relay-only=${plan.forceRelay})")
+    }
+
+    fun setMicEnabled(on: Boolean) {
+        if (closed) return
+        micEnabled = on
+        audioTrack?.setEnabled(on)
+        runCatching { pc?.setAudioRecording(on) }
     }
 
     fun restartIce() {
@@ -344,8 +356,8 @@ class WebRtcSession(
 
     private fun attachRemoteAudio() {
         pc?.setAudioPlayout(true)
-        pc?.setAudioRecording(true)
-        audioTrack?.setEnabled(true)
+        pc?.setAudioRecording(micEnabled)
+        audioTrack?.setEnabled(micEnabled)
         CallAudio.confirm(app)
     }
 

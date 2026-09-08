@@ -118,6 +118,8 @@ data class UiState(
     val voicePositionMs: Long = 0,
     val voiceDurationMs: Long = 0,
     val call: CallInfo? = null,
+    val callMicMuted: Boolean = false,
+    val callSpeakerOn: Boolean = false,
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
@@ -167,6 +169,7 @@ class RopeRepository(private val app: Application) {
     private var ringWatch: Job? = null
     private var rtcAsCaller = false
     private val rtcLock = Any()
+    private var iceCachedAtMs: Long = 0L
 
     fun start(pendingLink: String?) {
         scope.launch {
@@ -870,6 +873,18 @@ class RopeRepository(private val app: Application) {
         applyCallEffects(callMachine.localHangup())
     }
 
+    fun toggleCallMute() {
+        val next = !_state.value.callMicMuted
+        _state.value = _state.value.copy(callMicMuted = next)
+        rtc?.setMicEnabled(!next)
+    }
+
+    fun toggleCallSpeaker() {
+        val next = !_state.value.callSpeakerOn
+        _state.value = _state.value.copy(callSpeakerOn = next)
+        CallAudio.setSpeaker(app, next)
+    }
+
     fun createInvite() {
         if (!RoleRules.canInvite(_state.value.profile?.role)) {
             return
@@ -1272,6 +1287,7 @@ class RopeRepository(private val app: Application) {
     private fun refreshIceServers(profile: ServerProfile): ServerProfile {
         val info = runCatching { api?.info() }.getOrNull() ?: return profile
         val ice = IceServers.infoJson(info) ?: return profile
+        iceCachedAtMs = System.currentTimeMillis()
         return profile.copy(iceServersJson = ice)
     }
 
@@ -1908,7 +1924,14 @@ class RopeRepository(private val app: Application) {
             }
             val parsed = IceServers.parse(profile?.iceServersJson)
             val resolved = IceServers.resolve(parsed, profile?.host)
-            if (!IceServers.missingTurn(resolved) || attempt == 1) return resolved
+            val hasTurn = !IceServers.missingTurn(resolved)
+            val staleOrEmpty = IceServers.shouldRefresh(
+                iceCachedAtMs,
+                System.currentTimeMillis(),
+                profile?.iceServersJson,
+            )
+            if (hasTurn && !staleOrEmpty) return resolved
+            if (attempt == 1) return resolved
             delay(400)
         }
         return IceServers.resolve(emptyList(), profile?.host)
@@ -1918,6 +1941,8 @@ class RopeRepository(private val app: Application) {
         synchronized(rtcLock) {
             val existing = rtc
             if (existing != null) {
+                if (_state.value.callMicMuted) existing.setMicEnabled(false)
+                if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
                 if (asCaller && !rtcAsCaller) {
                     rtcAsCaller = true
                     existing.createOffer()
@@ -1961,6 +1986,8 @@ class RopeRepository(private val app: Application) {
             }
             rtc = session
             rtcAsCaller = asCaller
+            if (_state.value.callMicMuted) session.setMicEnabled(false)
+            if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
             if (asCaller) session.createOffer() else session.prepareCallee()
         }
     }
@@ -2076,7 +2103,7 @@ class RopeRepository(private val app: Application) {
             }
             rtc = null
         }
-        _state.value = _state.value.copy(call = null)
+        _state.value = _state.value.copy(call = null, callMicMuted = false, callSpeakerOn = false)
     }
 
     private fun startTone(outgoing: Boolean) {
