@@ -22,6 +22,9 @@ data class CallMachineState(
     val iceReady: Boolean = false,
     val lastIce: String = "",
     val startedAtMs: Long = 0L,
+    val connectStartedAtMs: Long = 0L,
+    val viaRelay: Boolean = false,
+    val relayFellBack: Boolean = false,
 ) {
     val live: Boolean get() = !ended && callId.isNotBlank()
 }
@@ -37,6 +40,7 @@ sealed class CallEffect {
     data class StartRtc(val asCaller: Boolean) : CallEffect()
     data class DeliverRemote(val signals: List<CallSignal>) : CallEffect()
     object RestartIce : CallEffect()
+    object FallbackDirect : CallEffect()
     object TearDown : CallEffect()
     object RingOut : CallEffect()
     object RingIn : CallEffect()
@@ -85,14 +89,16 @@ class CallMachine {
     fun reset() = synchronized(lock) { state = CallMachineState() }
 
     fun localStart(callId: String, peerId: String, myId: String): List<CallEffect> = synchronized(lock) {
-        if (callId.isBlank() || peerId.isBlank()) return emptyList()
-        if (state.live && state.peerDeviceId == peerId && state.phase == CallPhase.RINGING_IN) {
+        val id = callId.trim()
+        val peer = PeerIds.normalize(peerId)
+        if (id.isBlank() || peer.isBlank() || ChatIds.isGroup(peerId)) return emptyList()
+        if (state.live && PeerIds.same(state.peerDeviceId, peer) && state.phase == CallPhase.RINGING_IN) {
             return localAcceptLocked()
         }
         if (state.live) return emptyList()
         state = CallMachineState(
-            callId = callId,
-            peerDeviceId = peerId,
+            callId = id,
+            peerDeviceId = peer,
             outgoing = true,
             phase = CallPhase.RINGING_OUT,
             link = CallLinkState.RINGING,
@@ -101,8 +107,8 @@ class CallMachine {
             startedAtMs = System.currentTimeMillis(),
         )
         return listOf(
-            CallEffect.Send(callId, peerId, CallSignal.RING),
-            CallEffect.Record(peerId, true),
+            CallEffect.Send(id, peer, CallSignal.RING),
+            CallEffect.Record(peer, true),
             CallEffect.PrefetchIce,
             CallEffect.RingOut,
             CallEffect.WatchRing,
@@ -118,12 +124,15 @@ class CallMachine {
     fun onWire(from: String, event: String, callId: String, payload: Any?, myId: String): List<CallEffect> =
         synchronized(lock) {
             val ev = CallSignal.parseEvent(event) ?: return emptyList()
-            if (from.isBlank() || callId.isBlank()) return emptyList()
+            val fromId = PeerIds.normalize(from)
+            val id = callId.trim()
+            if (fromId.isBlank() || id.isBlank()) return emptyList()
+            val mine = PeerIds.normalize(myId)
             when (ev) {
-                CallSignal.RING -> onRingLocked(from, callId, myId)
-                CallSignal.ACCEPT -> onAcceptLocked(from, callId)
-                CallSignal.REJECT, CallSignal.HANGUP -> onRemoteEndLocked(from, callId)
-                in CallSignal.EVENTS -> onMediaLocked(from, callId, ev, payload)
+                CallSignal.RING -> onRingLocked(fromId, id, mine)
+                CallSignal.ACCEPT -> onAcceptLocked(fromId, id)
+                CallSignal.REJECT, CallSignal.HANGUP -> onRemoteEndLocked(fromId, id)
+                in CallSignal.EVENTS -> onMediaLocked(fromId, id, ev, payload)
                 else -> emptyList()
             }
         }
@@ -144,7 +153,11 @@ class CallMachine {
         if (!state.live) return emptyList()
         val media = if (hasTurn) {
             if (state.media.contains("нет TURN") || state.media.contains("ice_servers")) {
-                if (state.phase == CallPhase.ACTIVE) CallLink.connectingDetail(true) else "ожидаем ответа"
+                if (state.phase == CallPhase.ACTIVE) {
+                    CallLink.connectingDetail(true, state.remoteDescriptionReady, state.relayFellBack)
+                } else {
+                    "ожидаем ответа"
+                }
             } else {
                 state.media
             }
@@ -180,32 +193,81 @@ class CallMachine {
     fun onIce(name: String, viaRelay: Boolean): List<CallEffect> = synchronized(lock) {
         if (!state.live) return emptyList()
         if (state.phase == CallPhase.RINGING_IN || state.phase == CallPhase.RINGING_OUT) return emptyList()
-        val (link, label) = CallLink.applyIce(name, viaRelay, state.hasTurn)
-        state = state.copy(link = link, media = label, lastIce = name, iceReady = true)
+        val relay = state.viaRelay || viaRelay
+        val (link, label) = CallLink.applyIce(
+            name,
+            viaRelay = relay,
+            hasTurn = state.hasTurn,
+            remoteReady = state.remoteDescriptionReady,
+            fellBack = state.relayFellBack,
+        )
+        state = state.copy(link = link, media = label, lastIce = name, iceReady = true, viaRelay = relay)
         val out = mutableListOf<CallEffect>()
         if (link == CallLinkState.CONNECTED) out += CallEffect.CancelWatch
         if (link == CallLinkState.FAILED && state.hasTurn && !state.iceRestartUsed && state.role == CallRtcRole.OFFERER) {
             state = state.copy(
                 iceRestartUsed = true,
                 link = CallLinkState.CONNECTING,
-                media = CallLink.connectingDetail(true),
+                media = CallLink.iceRestartDetail(),
             )
             out += CallEffect.RestartIce
-            out += CallEffect.WatchConnect
+        }
+        out
+    }
+
+    fun onLocalCandidate(relay: Boolean): List<CallEffect> = synchronized(lock) {
+        if (!state.live || !relay) return emptyList()
+        state = state.copy(viaRelay = true)
+        emptyList()
+    }
+
+    fun onConnectTick(elapsedMs: Long): List<CallEffect> = synchronized(lock) {
+        if (!state.live || state.phase != CallPhase.ACTIVE) return emptyList()
+        if (state.link == CallLinkState.CONNECTED || state.link == CallLinkState.FAILED) return emptyList()
+        val decision = IceUnstick.decide(
+            IceUnstick.Snapshot(
+                elapsedMs = elapsedMs,
+                ice = state.lastIce,
+                hasRelayCandidate = state.viaRelay,
+                preferRelay = state.hasTurn && !state.relayFellBack,
+                alreadyFellBack = state.relayFellBack,
+                iceRestartUsed = state.iceRestartUsed,
+                remoteDescriptionReady = state.remoteDescriptionReady,
+                connected = false,
+                failed = false,
+                isOfferer = state.role == CallRtcRole.OFFERER,
+            ),
+        )
+        if (decision.failSignal) {
+            val detail = CallLink.noSdpDetail()
+            state = state.copy(link = CallLinkState.FAILED, media = detail)
+            return listOf(CallEffect.CancelWatch, CallEffect.Notice(detail))
+        }
+        if (decision.failIce) {
+            val detail = CallLink.timeoutDetail(state.hasTurn)
+            state = state.copy(link = CallLinkState.FAILED, media = detail)
+            return listOf(CallEffect.CancelWatch, CallEffect.Notice(detail))
+        }
+        val out = mutableListOf<CallEffect>()
+        if (decision.fallbackDirect) {
+            state = state.copy(
+                relayFellBack = true,
+                media = CallLink.fallbackDirectDetail(),
+            )
+            out += CallEffect.FallbackDirect
+        }
+        if (decision.restartIce) {
+            state = state.copy(
+                iceRestartUsed = true,
+                media = if (state.relayFellBack) CallLink.fallbackDirectDetail() else CallLink.iceRestartDetail(),
+            )
+            out += CallEffect.RestartIce
         }
         out
     }
 
     fun onConnectTimeout(): List<CallEffect> = synchronized(lock) {
-        if (!state.live || state.phase != CallPhase.ACTIVE) return emptyList()
-        if (state.link == CallLinkState.CONNECTED || state.link == CallLinkState.FAILED) return emptyList()
-        if (state.hasTurn && !state.iceRestartUsed && state.role == CallRtcRole.OFFERER) {
-            state = state.copy(iceRestartUsed = true)
-            return listOf(CallEffect.RestartIce, CallEffect.WatchConnect)
-        }
-        val detail = CallLink.timeoutDetail(state.hasTurn)
-        state = state.copy(link = CallLinkState.FAILED, media = detail)
-        return listOf(CallEffect.CancelWatch, CallEffect.Notice(detail))
+        onConnectTick(IceUnstick.CONNECT_FAIL_MS)
     }
 
     fun onRingTimeout(): List<CallEffect> = synchronized(lock) {
@@ -261,7 +323,7 @@ class CallMachine {
     }
 
     private fun onRingLocked(from: String, callId: String, myId: String): List<CallEffect> {
-        if (state.live && state.peerDeviceId == from && state.outgoing && state.phase == CallPhase.RINGING_OUT) {
+        if (state.live && PeerIds.same(state.peerDeviceId, from) && state.outgoing && state.phase == CallPhase.RINGING_OUT) {
             return resolveGlareLocked(from, callId, myId)
         }
         if (state.live && matchesLocked(from, callId)) return emptyList()
@@ -307,7 +369,7 @@ class CallMachine {
 
     private fun onRemoteEndLocked(from: String, callId: String): List<CallEffect> {
         if (!state.live) return emptyList()
-        if (state.peerDeviceId != from && !matchesLocked(from, callId)) return emptyList()
+        if (!PeerIds.same(state.peerDeviceId, from) && !matchesLocked(from, callId)) return emptyList()
         hardEndLocked()
         return listOf(CallEffect.TearDown)
     }
@@ -378,17 +440,25 @@ class CallMachine {
                 deliver += s
             }
         }
-        state = state.copy(queue = keep2, remoteDescriptionReady = remote)
+        val becameReady = remote && !state.remoteDescriptionReady
+        val media = if (becameReady && state.phase == CallPhase.ACTIVE && state.link == CallLinkState.CONNECTING) {
+            CallLink.connectingDetail(state.hasTurn, remoteReady = true, fellBack = state.relayFellBack)
+        } else {
+            state.media
+        }
+        state = state.copy(queue = keep2, remoteDescriptionReady = remote, media = media)
         return if (deliver.isEmpty()) emptyList() else listOf(CallEffect.DeliverRemote(deliver))
     }
 
     private fun enterNegotiating(asCaller: Boolean) {
+        val now = System.currentTimeMillis()
         state = state.copy(
             phase = CallPhase.ACTIVE,
             link = CallLinkState.CONNECTING,
-            media = CallMedia.label("CHECKING"),
+            media = CallLink.waitingSdpDetail(),
             role = if (asCaller) CallRtcRole.OFFERER else CallRtcRole.ANSWERER,
             rtcWanted = true,
+            connectStartedAtMs = if (state.connectStartedAtMs > 0L) state.connectStartedAtMs else now,
         )
     }
 

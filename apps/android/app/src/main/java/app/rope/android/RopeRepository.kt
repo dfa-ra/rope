@@ -13,6 +13,8 @@ import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
+import app.rope.android.data.CallLinkState
+import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.CallEffect
 import app.rope.android.data.CallMachine
@@ -1820,11 +1822,15 @@ class RopeRepository(private val app: Application) {
                 }
                 is CallEffect.DeliverRemote -> {
                     val session = rtc
-                    if (session != null) {
-                        effect.signals.forEach { session.handleRemote(it) }
+                    effect.signals.forEach { sig ->
+                        if (sig.kind == CallSignal.ICE) {
+                            callMachine.onLocalCandidate(CallMedia.isRelayCandidate(sig.candidate))
+                        }
+                        session?.handleRemote(sig)
                     }
                 }
                 CallEffect.RestartIce -> rtc?.restartIce()
+                CallEffect.FallbackDirect -> rtc?.allowDirect()
                 CallEffect.TearDown -> teardownCall()
                 CallEffect.RingOut -> {
                     startTone(true)
@@ -1917,7 +1923,7 @@ class RopeRepository(private val app: Application) {
                     app,
                     iceServers = ice,
                     pinnedFingerprint = profile?.fingerprint.orEmpty(),
-                    hintHost = profile?.host,
+                    hintHost = IceServers.parseHostname(profile?.iceServersJson) ?: profile?.host,
                     publicIp = IceServers.parsePublicIp(profile?.iceServersJson),
                     polite = !asCaller,
                     onLocalSignal = { sig ->
@@ -1931,6 +1937,9 @@ class RopeRepository(private val app: Application) {
                         sendCallEnvelope(peer, callId, sig.kind, sig.toJson())
                         if (sig.kind == CallSignal.OFFER) {
                             applyCallEffects(callMachine.onLocalOfferSent())
+                        }
+                        if (sig.kind == CallSignal.ICE) {
+                            applyCallEffects(callMachine.onLocalCandidate(CallMedia.isRelayCandidate(sig.candidate)))
                         }
                     },
                     onIce = { name, viaRelay ->
@@ -1952,8 +1961,17 @@ class RopeRepository(private val app: Application) {
         ringWatch?.cancel()
         ringWatch = null
         connectWatch = scope.launch {
-            delay(CallLink.CONNECT_TIMEOUT_MS)
-            applyCallEffects(callMachine.onConnectTimeout())
+            while (true) {
+                delay(1_000L)
+                val started = callMachine.state.connectStartedAtMs
+                if (started <= 0L || !callMachine.state.live) return@launch
+                if (callMachine.state.phase != CallPhase.ACTIVE) return@launch
+                val elapsed = System.currentTimeMillis() - started
+                applyCallEffects(callMachine.onConnectTick(elapsed))
+                val link = callMachine.state.link
+                if (link == CallLinkState.CONNECTED || link == CallLinkState.FAILED) return@launch
+                if (!callMachine.state.live || callMachine.state.phase != CallPhase.ACTIVE) return@launch
+            }
         }
     }
 

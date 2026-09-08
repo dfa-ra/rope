@@ -51,13 +51,17 @@ object IceServers {
 
     fun fromInfo(obj: JSONObject): List<IceServerSpec> = parseArray(iceArray(obj))
 
-    /** Cached /v1/info ICE payload. Includes top-level `public_ip` when present. */
+    /** Cached /v1/info ICE payload. Keeps top-level `public_ip` / `hostname` when present. */
     fun infoJson(obj: JSONObject): String? {
         val arr = iceArray(obj) ?: return null
         if (arr.length() == 0) return null
         val ip = jsonText(obj, "public_ip") ?: jsonText(obj, "publicIp")
-        if (ip == null) return arr.toString()
-        return JSONObject().put("ice_servers", arr).put("public_ip", ip).toString()
+        val host = jsonText(obj, "hostname") ?: jsonText(obj, "public_host") ?: jsonText(obj, "publicHost")
+        if (ip == null && host == null) return arr.toString()
+        val out = JSONObject().put("ice_servers", arr)
+        if (ip != null) out.put("public_ip", ip)
+        if (host != null) out.put("hostname", host)
+        return out.toString()
     }
 
     fun parsePublicIp(raw: String?): String? {
@@ -66,6 +70,27 @@ object IceServers {
         return try {
             val obj = JSONObject(text)
             jsonText(obj, "public_ip") ?: jsonText(obj, "publicIp")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Top-level hostname / public_host, else first ice_servers[].hostname. */
+    fun parseHostname(raw: String?): String? {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty() || text.equals("null", ignoreCase = true)) return null
+        return try {
+            when {
+                text.startsWith("{") -> {
+                    val obj = JSONObject(text)
+                    jsonText(obj, "hostname")
+                        ?: jsonText(obj, "public_host")
+                        ?: jsonText(obj, "publicHost")
+                        ?: parseArray(iceArray(obj)).firstNotNullOfOrNull { JsonIds.optional(it.hostname) }
+                }
+                text.startsWith("[") -> parse(text).firstNotNullOfOrNull { JsonIds.optional(it.hostname) }
+                else -> null
+            }
         } catch (_: Exception) {
             null
         }
@@ -128,7 +153,9 @@ object IceServers {
         publicIp: String? = null,
     ): IceRtcPlan {
         val resolved = resolve(serverProvided, hintHost)
-        val expanded = expandHosts(resolved, hintHost, publicIp)
+        val expanded = expandHosts(resolved, hintHost, publicIp).map { spec ->
+            spec.copy(urls = withExtraTcp(spec.urls))
+        }
         val servers = expanded.map { spec ->
             val turns = spec.urls.any { isTurnsUrl(it) }
             IceRtcServer(
@@ -143,11 +170,12 @@ object IceServers {
     }
 
     fun expandHosts(specs: List<IceServerSpec>, vararg altHosts: String?): List<IceServerSpec> {
-        val hosts = altHosts.mapNotNull { JsonIds.optional(it) }
-            .filter { it != "localhost" && it != "127.0.0.1" && it != "::1" }
-            .distinct()
-        if (hosts.isEmpty()) return specs
         return specs.map { spec ->
+            val hosts = (altHosts.toList() + spec.hostname)
+                .mapNotNull { JsonIds.optional(it) }
+                .filter { it != "localhost" && it != "127.0.0.1" && it != "::1" }
+                .distinct()
+            if (hosts.isEmpty()) return@map spec
             val extra = mutableListOf<String>()
             for (host in hosts) {
                 for (url in spec.urls) {
@@ -159,6 +187,29 @@ object IceServers {
             }
             if (extra.isEmpty()) spec else spec.copy(urls = spec.urls + extra)
         }
+    }
+
+    /** Prefer existing UDP; also gather TURN/TURNS over TCP if allocate-UDP fails. */
+    fun withExtraTcp(urls: List<String>): List<String> {
+        val out = urls.toMutableList()
+        for (url in urls) {
+            val tcp = tcpVariant(url) ?: continue
+            if (tcp !in out) out += tcp
+        }
+        return out
+    }
+
+    fun tcpVariant(url: String): String? {
+        if (!isTurnUrl(url)) return null
+        val raw = url.trim()
+        if (raw.lowercase().contains("transport=tcp")) return null
+        val base = raw.substringBefore('?')
+        val query = raw.substringAfter('?', "")
+        val kept = query.split('&').filter { part ->
+            part.isNotEmpty() && !part.startsWith("transport=", ignoreCase = true)
+        }
+        val next = (kept + "transport=tcp").joinToString("&")
+        return "$base?$next"
     }
 
     fun tlsHostname(spec: IceServerSpec, hintHost: String? = null): String? {

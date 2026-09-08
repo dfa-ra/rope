@@ -28,6 +28,9 @@ object CallAudio {
         }
     }
 
+    /** Re-assert call routing after a remote audio track arrives. */
+    fun confirm(context: Context) = apply(context, true)
+
     private fun requestFocus(am: AudioManager) {
         val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(
