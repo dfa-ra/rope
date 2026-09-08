@@ -136,8 +136,8 @@ func TestCallRelayLiveAndOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	off := readSkipPresence(t, ctx, aliceWS)
-	if off.Type != "error" || off.Code != "not_found" {
-		t.Fatalf("offline call want not_found got %+v", off)
+	if off.Type != "queued" || off.CallID != "c2" {
+		t.Fatalf("offline call want queued got %+v", off)
 	}
 }
 
@@ -352,6 +352,54 @@ func TestCallAudioRateLimited(t *testing.T) {
 	rel := readSkipPresence(t, ctx, bobWS)
 	if rel.Type != "call" || rel.Event != "relay" {
 		t.Fatalf("signaling must stay unthrottled %+v", rel)
+	}
+}
+
+func TestCallPendingRingDeliveredOnReconnect(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	_ = bobWS.Close(websocket.StatusNormalClosure, "")
+	time.Sleep(200 * time.Millisecond)
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-pend", "to": bob.id, "event": "ring", "payload": "sdp",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	queued := readSkipPresence(t, ctx, aliceWS)
+	if queued.Type != "queued" || queued.CallID != "c-pend" {
+		t.Fatalf("offline ring want queued got %+v", queued)
+	}
+
+	bobWS = dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, bobWS)
+	got := readSkipPresence(t, ctx, bobWS)
+	if got.Type != "call" || got.Event != "ring" || got.From != alice.id || got.CallID != "c-pend" {
+		t.Fatalf("reconnect want pending ring got %+v", got)
+	}
+	if got.Payload != "sdp" {
+		t.Fatalf("pending ring payload %+v", got)
 	}
 }
 

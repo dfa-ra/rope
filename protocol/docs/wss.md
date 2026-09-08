@@ -10,7 +10,8 @@ On connect the server:
 2. Marks it online and broadcasts `{ "type": "presence", "devices": [...] }` to every live socket
 3. Pushes every mailbox blob for that device as `deliver` frames
 4. Sends `{ "type": "mailbox_done" }`
-5. On disconnect, drops the device from the hub and broadcasts an updated `presence` list
+5. Flushes short-TTL in-memory pending `type=call` frames (RING/control only; never audio)
+6. On disconnect, drops the device from the hub and broadcasts an updated `presence` list
 
 ## Client → server
 
@@ -23,7 +24,7 @@ On connect the server:
 
 `group_send`: sender must be a current member; every envelope recipient must be a current member. Each envelope then follows the normal mailbox path.
 
-`call` is live-only. If `to` is offline the sender gets `not_found`. The server does not store SDP or call media — never `PutMailbox`. Payload is opaque ciphertext (or opaque SDP/ICE JSON); the relay does not decrypt or inspect plaintext.
+`call` is live when `to` is on the hub. If `to` is offline, `audio` still returns `not_found` (realtime frames are not queued). Other events (`ring`, `accept`, `offer`, `answer`, `ice`, `relay`, …) sit in a short-TTL (~60s) **in-memory** pending slot keyed by `call_id`; the sender gets `{ "type": "queued", "call_id": "..." }` instead of `not_found`. `hangup`/`reject` drop the slot. Nothing is written to SQLite — never `PutMailbox` for calls, no SDP/audio on disk. Payload is opaque ciphertext (or opaque SDP/ICE JSON); the relay does not decrypt or inspect plaintext.
 
 Decoded `payload` is capped at 16384 bytes (`too_large` if larger). Empty payload is allowed for control events (`ring`, `accept`, `reject`, `hangup`, `relay`, …). `audio` is rate-limited per sender at ~40 frames/sec (`rate_limited`, key `ws-call-audio:<device_id>`). Signaling events (`ring`, `accept`, `reject`, `hangup`, `offer`, `answer`, `ice`, `relay`) are not throttled at that cap.
 
@@ -39,6 +40,7 @@ ICE servers (STUN/TURN on the same host) are advertised on REST `GET /v1/info`, 
 
 ```json
 { "type": "queued", "message_id": "<uuid hex>" }
+{ "type": "queued", "call_id": "<uuid>" }
 { "type": "deliver", "envelope": "<standard base64>" }
 { "type": "delivered", "message_id": "<uuid hex>" }
 { "type": "mailbox_done" }

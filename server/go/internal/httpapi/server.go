@@ -30,14 +30,16 @@ import (
 )
 
 type Server struct {
-	Cfg       config.Config
-	Store     *db.Store
-	Log       *log.Logger
-	Hub       *Hub
-	Limit     *ratelimit.Limiter
-	CallAudio *ratelimit.Limiter
-	FP        string
-	setup     string
+	Cfg          config.Config
+	Store        *db.Store
+	Log          *log.Logger
+	Hub          *Hub
+	Limit        *ratelimit.Limiter
+	CallAudio    *ratelimit.Limiter
+	FP           string
+	setup        string
+	pendingMu    sync.Mutex
+	pendingCalls map[string]pendingCall
 }
 
 func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
@@ -45,13 +47,14 @@ func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
 		logger = log.Default()
 	}
 	s := &Server{
-		Cfg:       cfg,
-		Store:     store,
-		Log:       logger,
-		Hub:       NewHub(),
-		Limit:     ratelimit.New(60, time.Minute),
-		CallAudio: ratelimit.New(callAudioPerSec, time.Second),
-		setup:     cfg.SetupToken,
+		Cfg:          cfg,
+		Store:        store,
+		Log:          logger,
+		Hub:          NewHub(),
+		Limit:        ratelimit.New(60, time.Minute),
+		CallAudio:    ratelimit.New(callAudioPerSec, time.Second),
+		setup:        cfg.SetupToken,
+		pendingCalls: map[string]pendingCall{},
 	}
 	if cfg.FingerprintOverride != "" {
 		s.FP = cfg.FingerprintOverride
@@ -557,6 +560,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = conn.write(ctx, wsOut{Type: "mailbox_done"})
 	s.broadcastPresence()
+	s.flushPendingCalls(ctx, conn)
 
 	for {
 		var in wsIn
@@ -648,7 +652,18 @@ func (s *Server) handleGroupSend(ctx context.Context, from *clientConn, groupID 
 const (
 	maxCallPayloadBytes = 16384
 	callAudioPerSec     = 40
+	pendingCallTTL      = 60 * time.Second
+	maxPendingCalls     = 256
 )
+
+type pendingCall struct {
+	callID  string
+	from    string
+	to      string
+	event   string
+	payload []byte
+	expires time.Time
+}
 
 func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 	if in.CallID == "" || strings.TrimSpace(in.To) == "" {
@@ -666,6 +681,9 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 	}
 	target := s.resolveCallTarget(in.To)
 	if dest, ok := s.Hub.Get(target); ok {
+		if isCallTerminal(in.Event) {
+			s.dropPendingCall(in.CallID)
+		}
 		_ = dest.write(ctx, wsOut{
 			Type:    "call",
 			CallID:  in.CallID,
@@ -675,7 +693,90 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		})
 		return
 	}
-	_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "peer offline"})
+	if strings.EqualFold(in.Event, "audio") {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "peer offline"})
+		return
+	}
+	if isCallTerminal(in.Event) {
+		s.dropPendingCall(in.CallID)
+		return
+	}
+	if !s.storePendingCall(pendingCall{
+		callID:  in.CallID,
+		from:    from.id,
+		to:      target,
+		event:   in.Event,
+		payload: []byte(payload),
+		expires: time.Now().Add(pendingCallTTL),
+	}) {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "call pending full"})
+		return
+	}
+	_ = from.write(ctx, wsOut{Type: "queued", CallID: in.CallID})
+}
+
+func isCallTerminal(event string) bool {
+	return strings.EqualFold(event, "hangup") || strings.EqualFold(event, "reject")
+}
+
+func (s *Server) storePendingCall(p pendingCall) bool {
+	now := time.Now()
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	s.purgeExpiredPendingLocked(now)
+	if _, exists := s.pendingCalls[p.callID]; !exists && len(s.pendingCalls) >= maxPendingCalls {
+		return false
+	}
+	s.pendingCalls[p.callID] = p
+	return true
+}
+
+func (s *Server) dropPendingCall(callID string) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	s.purgeExpiredPendingLocked(time.Now())
+	delete(s.pendingCalls, callID)
+}
+
+func (s *Server) takePendingCallsFor(deviceID string) []pendingCall {
+	now := time.Now()
+	deviceID = strings.ToLower(deviceID)
+	var memberID string
+	if d, err := s.Store.Device(deviceID); err == nil {
+		memberID = strings.ToLower(d.MemberID)
+	}
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	s.purgeExpiredPendingLocked(now)
+	var out []pendingCall
+	for id, p := range s.pendingCalls {
+		to := strings.ToLower(p.to)
+		if to == deviceID || (memberID != "" && to == memberID) {
+			out = append(out, p)
+			delete(s.pendingCalls, id)
+		}
+	}
+	return out
+}
+
+func (s *Server) purgeExpiredPendingLocked(now time.Time) {
+	for id, p := range s.pendingCalls {
+		if now.After(p.expires) {
+			delete(s.pendingCalls, id)
+		}
+	}
+}
+
+func (s *Server) flushPendingCalls(ctx context.Context, dest *clientConn) {
+	for _, p := range s.takePendingCallsFor(dest.id) {
+		_ = dest.write(ctx, wsOut{
+			Type:    "call",
+			CallID:  p.callID,
+			From:    p.from,
+			Event:   p.event,
+			Payload: string(p.payload),
+		})
+	}
 }
 
 // resolveCallTarget maps a WSS call `to` field to a live hub device.
