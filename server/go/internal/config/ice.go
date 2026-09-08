@@ -42,8 +42,15 @@ func (c Config) IceTTL() time.Duration {
 	if c.TurnTTLSeconds > 0 {
 		return time.Duration(c.TurnTTLSeconds) * time.Second
 	}
-	// Clients cache GET /v1/info; 24h HMAC expires under that cache.
+	// Clients cache GET /v1/info HMAC credentials. Keep 7d so a day-long
+	// cache cannot expire mid-call. Do not shorten without client cache tests;
+	// advertise ice_ttl_seconds so clients refresh before expiry.
 	return 7 * 24 * time.Hour
+}
+
+// IceTTLSeconds is the HMAC lifetime advertised on GET /v1/info.
+func (c Config) IceTTLSeconds() int {
+	return int(c.IceTTL() / time.Second)
 }
 
 // IceEnabled is "HMAC + host configured", not "coturn is listening".
@@ -90,14 +97,33 @@ func IsPrivateIPv4(s string) bool {
 	return ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127
 }
 
+// unusableICEHost is true for hosts phones cannot reach as TURN/STUN:
+// RFC1918, loopback, link-local, CGNAT 100.64/10, IPv6 ULA/link-local.
+func unusableICEHost(h string) bool {
+	h = strings.TrimSpace(h)
+	if h == "" || strings.EqualFold(h, "localhost") {
+		return true
+	}
+	bare := strings.TrimSuffix(strings.TrimPrefix(h, "["), "]")
+	ip := net.ParseIP(bare)
+	if ip == nil {
+		return false // DNS hostname is usable
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		return IsPrivateIPv4(ip4.String())
+	}
+	return ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
+}
+
 func (c Config) iceURLHosts() []string {
 	host := strings.TrimSpace(c.PublicHost)
 	ip := c.PublicIPv4()
 	add := func(out []string, h string) []string {
-		h = IceHost(strings.TrimSpace(h))
-		if h == "" || h == "localhost" || h == "127.0.0.1" || h == "[::1]" {
+		h = strings.TrimSpace(h)
+		if unusableICEHost(h) {
 			return out
 		}
+		h = IceHost(h)
 		for _, e := range out {
 			if strings.EqualFold(e, h) {
 				return out
@@ -106,9 +132,7 @@ func (c Config) iceURLHosts() []string {
 		return append(out, h)
 	}
 	// A private public_host is a common «Обновить ядро» mistake (SSH to 10.x).
-	if IsPrivateIPv4(host) && ip != "" && !IsPrivateIPv4(ip) {
-		return add(nil, ip)
-	}
+	// Never fall through to advertising that host when PublicIPv4 is empty or also private.
 	var out []string
 	out = add(out, host)
 	out = add(out, ip)
@@ -130,16 +154,23 @@ func (c Config) IceHostname() string {
 // PublicIPv4 is advertised as top-level public_ip so the client can
 // duplicate turn/turns URLs when public_host DNS does not resolve.
 func (c Config) PublicIPv4() string {
-	if IsIPv4(c.PublicIP) {
-		return strings.TrimSpace(c.PublicIP)
+	pick := func(s string) string {
+		s = strings.TrimSpace(s)
+		if IsIPv4(s) && !IsPrivateIPv4(s) {
+			return s
+		}
+		return ""
 	}
-	if IsIPv4(c.PublicHost) {
-		return strings.TrimSpace(c.PublicHost)
+	if ip := pick(c.PublicIP); ip != "" {
+		return ip
+	}
+	if ip := pick(c.PublicHost); ip != "" {
+		return ip
 	}
 	if file, ok := ReadFileTurnStatus(c.TurnStatusFile()); ok {
 		ext := strings.TrimSpace(strings.Split(file.ExternalIP, "/")[0])
-		if IsIPv4(ext) {
-			return ext
+		if ip := pick(ext); ip != "" {
+			return ip
 		}
 	}
 	return ""
@@ -174,8 +205,12 @@ func (c Config) IceServers(now time.Time) []IceServer {
 	}
 	hosts := c.iceURLHosts()
 	if len(hosts) == 0 {
+		// No public host: client falls back to STUN. Never advertise 10.x / CGNAT.
 		return nil
 	}
+	// Advertise public URLs even if ProbeTurn is down on first boot (coturn
+	// can race the listen). Health / TurnReport stay honest (turn_running,
+	// allocate_ok). Do not hide ICE just because the probe is flaky.
 	sni := c.IceHostname()
 	turnPort := c.EffectiveTurnPort()
 	user := TurnUsername(now, c.IceTTL())
@@ -196,9 +231,42 @@ func (c Config) IceServers(now time.Time) []IceServer {
 		)
 	}
 	return []IceServer{
-		{URLs: stunURLs, Hostname: sni},
-		{URLs: turnURLs, Username: user, Credential: cred, Hostname: sni},
+		{URLs: stunURLs, Hostname: iceSNI(sni, stunURLs)},
+		{URLs: turnURLs, Username: user, Credential: cred, Hostname: iceSNI(sni, turnURLs)},
 	}
+}
+
+// iceSNI sets IceServer.Hostname when urls contain an IP literal and a DNS
+// name is known (IceHostname / TLSHostname) so TURNS can present the cert SNI.
+func iceSNI(sni string, urls []string) string {
+	sni = strings.TrimSpace(sni)
+	if sni == "" {
+		return ""
+	}
+	for _, u := range urls {
+		if iceURLHasIPLiteral(u) {
+			return sni
+		}
+	}
+	return ""
+}
+
+func iceURLHasIPLiteral(u string) bool {
+	u = strings.TrimSpace(u)
+	for _, p := range []string{"stuns:", "turns:", "stun:", "turn:"} {
+		if strings.HasPrefix(strings.ToLower(u), p) {
+			u = u[len(p):]
+			break
+		}
+	}
+	if i := strings.IndexByte(u, '?'); i >= 0 {
+		u = u[:i]
+	}
+	host, _, err := net.SplitHostPort(u)
+	if err != nil {
+		host = u
+	}
+	return isIPLiteral(host)
 }
 
 // FileTurnStatus is written by install.sh so the owner sees the real bind result.

@@ -206,6 +206,93 @@ func TestIceServersOmitsTurnsWhenTLSFailed(t *testing.T) {
 	}
 }
 
+func TestIceServersPrivateOnlyHostReturnsNil(t *testing.T) {
+	for _, host := range []string{"10.0.0.4", "192.168.1.1", "172.16.9.1", "100.64.1.2", "127.0.0.1", "169.254.1.1"} {
+		cfg := Default()
+		cfg.PublicHost = host
+		cfg.TurnSecret = "shared-hmac"
+		cfg.TurnsPort = 443
+		if ice := cfg.IceServers(time.Now()); ice != nil {
+			t.Fatalf("%s: must not advertise private ICE %+v", host, ice)
+		}
+	}
+	cfg := Default()
+	cfg.PublicHost = "10.0.0.4"
+	cfg.PublicIP = "192.168.0.9"
+	cfg.TurnSecret = "s"
+	if ice := cfg.IceServers(time.Now()); ice != nil {
+		t.Fatalf("private public_ip still advertised: %+v", ice)
+	}
+}
+
+func TestIceServersPublicIPSetsHostname(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "vps.example"
+	cfg.PublicIP = "203.0.113.9"
+	cfg.TurnSecret = "shared-hmac"
+	cfg.TurnsPort = 443
+	ice := cfg.IceServers(time.Unix(1_700_000_000, 0))
+	if len(ice) != 2 {
+		t.Fatalf("len %d", len(ice))
+	}
+	if ice[0].Hostname != "vps.example" || ice[1].Hostname != "vps.example" {
+		t.Fatalf("hostname field required when urls include IP literal: %+v", ice)
+	}
+	joined := strings.Join(ice[1].URLs, " ")
+	if !strings.Contains(joined, "203.0.113.9") {
+		t.Fatalf("need IP url: %s", joined)
+	}
+}
+
+func TestIceServersDNSHostSkipsPrivatePublicIP(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "vps.example"
+	cfg.PublicIP = "10.0.0.4"
+	cfg.TurnSecret = "s"
+	cfg.TurnsPort = 443
+	ice := cfg.IceServers(time.Now())
+	if len(ice) != 2 {
+		t.Fatalf("DNS host is public enough: %+v", ice)
+	}
+	joined := strings.Join(ice[1].URLs, " ")
+	if strings.Contains(joined, "10.0.0.4") {
+		t.Fatalf("must not duplicate RFC1918: %s", joined)
+	}
+	if !strings.Contains(joined, "turns:vps.example:443") {
+		t.Fatalf("need dns turns: %s", joined)
+	}
+	if cfg.PublicIPv4() != "" {
+		t.Fatalf("private public_ip leaked: %s", cfg.PublicIPv4())
+	}
+}
+
+func TestPublicIPv4SkipsPrivate(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "10.0.0.4"
+	if cfg.PublicIPv4() != "" {
+		t.Fatalf("private public_host: %s", cfg.PublicIPv4())
+	}
+	cfg.PublicIP = "100.64.1.2"
+	if cfg.PublicIPv4() != "" {
+		t.Fatalf("CGNAT public_ip: %s", cfg.PublicIPv4())
+	}
+	cfg.PublicIP = "203.0.113.9"
+	if cfg.PublicIPv4() != "203.0.113.9" {
+		t.Fatalf("got %s", cfg.PublicIPv4())
+	}
+}
+
+func TestIceTTLSecondsMatchesDuration(t *testing.T) {
+	if Default().IceTTLSeconds() != 7*24*3600 {
+		t.Fatalf("default ttl seconds %d", Default().IceTTLSeconds())
+	}
+	cfg := Default()
+	cfg.TurnTTLSeconds = 3600
+	if cfg.IceTTLSeconds() != 3600 {
+		t.Fatalf("override %d", cfg.IceTTLSeconds())
+	}
+}
+
 func TestIceServersUsesPublicIPWhenHostIsPrivate(t *testing.T) {
 	cfg := Default()
 	cfg.PublicHost = "10.0.0.4"
@@ -252,6 +339,35 @@ func TestIsPrivateIPv4(t *testing.T) {
 	}
 	if IsPrivateIPv4("203.0.113.9") || IsPrivateIPv4("vps.example") {
 		t.Fatal("public / dns")
+	}
+}
+
+func TestProbeTurnPrivateHostDoesNotAdvertise(t *testing.T) {
+	origD := DialTCP
+	origA := RunTurnAllocate
+	t.Cleanup(func() {
+		DialTCP = origD
+		RunTurnAllocate = origA
+		ResetTurnAllocCache()
+	})
+	ResetTurnAllocCache()
+	cfg := Default()
+	cfg.PublicHost = "10.0.0.4"
+	cfg.TurnSecret = "s"
+	cfg.DataDir = t.TempDir()
+	DialTCP = func(string, time.Duration) error { return errProbeDown }
+	rep := cfg.ProbeTurn(10 * time.Millisecond)
+	if !rep.Configured {
+		t.Fatal("secret+host is configured")
+	}
+	if rep.Running || rep.AllocateOK {
+		t.Fatalf("must not pretend TURN is up: %+v", rep)
+	}
+	if len(rep.Advertised) != 0 {
+		t.Fatalf("must not advertise private URLs: %v", rep.Advertised)
+	}
+	if rep.Error == "" {
+		t.Fatal("expected listen error")
 	}
 }
 

@@ -159,6 +159,9 @@ func TestHealthAndInfo(t *testing.T) {
 	if _, ok := info["ice_servers"]; ok {
 		t.Fatal("debug server without TURN must not advertise ice_servers")
 	}
+	if _, ok := info["ice_ttl_seconds"]; ok {
+		t.Fatal("no ice_servers so ice_ttl_seconds must be omitted")
+	}
 }
 
 func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
@@ -173,15 +176,19 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	var info struct {
-		ServerID   string             `json:"server_id"`
-		PublicIP   string             `json:"public_ip"`
-		IceServers []config.IceServer `json:"ice_servers"`
+		ServerID      string             `json:"server_id"`
+		PublicIP      string           `json:"public_ip"`
+		IceTTLSeconds int              `json:"ice_ttl_seconds"`
+		IceServers    []config.IceServer `json:"ice_servers"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		t.Fatal(err)
 	}
 	if len(info.IceServers) != 2 {
 		t.Fatalf("%+v", info.IceServers)
+	}
+	if info.IceTTLSeconds != config.Default().IceTTLSeconds() {
+		t.Fatalf("ice_ttl_seconds %d want %d", info.IceTTLSeconds, config.Default().IceTTLSeconds())
 	}
 	if info.IceServers[0].URLs[0] != "stun:198.51.100.20:3478" {
 		t.Fatalf("stun %v", info.IceServers[0].URLs)
@@ -265,14 +272,18 @@ func TestInfoHostnameAndPublicIP(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	var info struct {
-		PublicIP   string             `json:"public_ip"`
-		IceServers []config.IceServer `json:"ice_servers"`
+		PublicIP      string             `json:"public_ip"`
+		IceTTLSeconds int                `json:"ice_ttl_seconds"`
+		IceServers    []config.IceServer `json:"ice_servers"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		t.Fatal(err)
 	}
 	if info.PublicIP != "203.0.113.9" {
 		t.Fatalf("public_ip %q", info.PublicIP)
+	}
+	if info.IceTTLSeconds != config.Default().IceTTLSeconds() {
+		t.Fatalf("ice_ttl_seconds %d", info.IceTTLSeconds)
 	}
 	if len(info.IceServers) != 2 {
 		t.Fatalf("%+v", info.IceServers)
@@ -306,6 +317,32 @@ func TestInfoHostnameAndPublicIP(t *testing.T) {
 	}
 	if !strings.Contains(info.IceServers[1].URLs[0], "203.0.113.9") {
 		t.Fatalf("urls stay on IP: %v", info.IceServers[1].URLs)
+	}
+}
+
+func TestInfoOmitsIceWhenHostIsPrivate(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "10.0.0.4"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := info["ice_servers"]; ok {
+		t.Fatalf("private-only host must not advertise ice_servers: %+v", info)
+	}
+	if _, ok := info["ice_ttl_seconds"]; ok {
+		t.Fatal("no ice_servers so no ice_ttl_seconds")
+	}
+	if _, ok := info["public_ip"]; ok {
+		t.Fatalf("private public_ip leaked: %+v", info)
 	}
 }
 

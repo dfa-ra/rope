@@ -139,10 +139,18 @@ func (s *Server) logTurn() {
 		s.Log.Printf("ICE disabled (need public_host and turn_secret in config.json)")
 		return
 	}
-	s.Log.Printf("ICE host=%s turn=%d turns=%d ttl=%s", s.Cfg.PublicHost, s.Cfg.EffectiveTurnPort(), s.Cfg.EffectiveTurnsPort(), s.Cfg.IceTTL())
+	ice := s.Cfg.IceServers(time.Now())
+	if len(ice) == 0 {
+		s.Log.Printf("ICE not advertised: public_host=%s is not a usable public TURN/STUN host", s.Cfg.PublicHost)
+	} else {
+		s.Log.Printf("ICE advertised turn=%d turns=%d ttl=%s urls=%d", s.Cfg.EffectiveTurnPort(), s.Cfg.EffectiveTurnsPort(), s.Cfg.IceTTL(), len(s.Cfg.IceURLs()))
+	}
 	rep := s.Cfg.ProbeTurn(800 * time.Millisecond)
 	s.Log.Printf("TURN listening=%v allocate=%v relayed=%s turns_listening=%v listen=%s external_ip=%s advertised=%d err=%q",
 		rep.Running, rep.AllocateOK, rep.RelayedIP, rep.TurnsListening, rep.Listen, rep.ExternalIP, len(rep.Advertised), rep.Error)
+	if !rep.Running || !rep.AllocateOK {
+		s.Log.Printf("TURN not healthy — ICE is not ready (turn_running=%v allocate_ok=%v err=%q)", rep.Running, rep.AllocateOK, rep.Error)
+	}
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -176,6 +184,7 @@ func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
 	}
 	if ice := s.Cfg.IceServers(time.Now()); len(ice) > 0 {
 		out["ice_servers"] = ice
+		out["ice_ttl_seconds"] = s.Cfg.IceTTLSeconds()
 	}
 	if ip := s.Cfg.PublicIPv4(); ip != "" {
 		out["public_ip"] = ip
