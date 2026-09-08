@@ -39,11 +39,8 @@ object CallLink {
             link != CallLinkState.FAILED &&
             phase == CallPhase.RINGING_OUT
 
-    fun weCreateOffer(myDeviceId: String, peerDeviceId: String): Boolean {
-        val me = PeerIds.normalize(myDeviceId)
-        val peer = PeerIds.normalize(peerDeviceId)
-        return me.isNotBlank() && peer.isNotBlank() && me < peer
-    }
+    fun weCreateOffer(myDeviceId: String, peerDeviceId: String): Boolean =
+        myDeviceId.isNotBlank() && myDeviceId < peerDeviceId
 
     fun canonicalCallId(localId: String, remoteId: String): String {
         val a = localId.trim()
@@ -60,16 +57,11 @@ object CallLink {
         altCallId: String,
         peerDeviceId: String,
     ): Boolean {
-        val from = PeerIds.normalize(eventFrom)
-        val peer = PeerIds.normalize(peerDeviceId)
-        val ev = eventCallId.trim()
-        val id = callId.trim()
-        val alt = altCallId.trim()
-        if (from.isNotBlank() && from == peer) {
-            if (ev.isBlank() || id.isBlank()) return true
-            return ev == id || ev == alt
+        if (eventFrom.isNotBlank() && eventFrom == peerDeviceId) {
+            if (eventCallId.isBlank() || callId.isBlank()) return true
+            return eventCallId == callId || eventCallId == altCallId
         }
-        return ev.isNotBlank() && (ev == id || ev == alt)
+        return eventCallId.isNotBlank() && (eventCallId == callId || eventCallId == altCallId)
     }
 
     fun shouldQueueSignal(
