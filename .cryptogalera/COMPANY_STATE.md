@@ -4,13 +4,11 @@ PO-owned live snapshot. Not a changelog.
 
 ## Product Goal
 
-**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. This cycle ships **0.3.1** (Telegram-class chat UI + call path that still works when WebRTC/UDP is blocked). `v0.2.15` and `v0.3.0` stay published; do not retag them.
+**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. This cycle shipped **0.3.1** (Telegram-class chat UI + WSS E2EE call fallback when WebRTC/ICE is blocked). `v0.2.15` and `v0.3.0` stay published; do not retag them.
 
 ## Current Phase
 
-**CG-007 unfrozen for this user task only.** Workstream: composer feel, attach sheet, photo bubbles, glass selection, quiet errors, WebRTC + WSS E2EE audio fallback, then tag `v0.3.1`.
-
-Not a general unfreeze: no iOS, no ratchet/MLS, no VK/Yandex/WB call tunnels, no overlapping landing agents.
+**CG-007 unfrozen for this user task only — now closed with v0.3.1.** Next work needs a new user task. No iOS, no ratchet/MLS, no VK/Yandex/WB call tunnels.
 
 ## Staffing this cycle (User asked; no approval wait)
 
