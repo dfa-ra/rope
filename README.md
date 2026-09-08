@@ -12,7 +12,7 @@ core/rust         identity, envelope, crypto
 server/go         relay, mailbox, invites
 deployment/       systemd + install.sh
 protocol/docs     wire format
-docs/             architecture and threat model
+docs/             product, architecture, threat model, company, organization, decisions, tasks
 ```
 
 ## Quick start (developers)
@@ -55,6 +55,17 @@ Production APK signing uses repository secrets documented in [docs/dev-setup.md]
 ## What is not in MVP
 
 iOS, calls, voice notes, files, groups, federation, web/desktop, polished Telegram/Amnezia UI.
+
+## Working here (CryptoGalera)
+
+Company operating model for humans and cloud agents:
+
+- [AGENTS.md](AGENTS.md) — rules agents must follow
+- [docs/company.md](docs/company.md) — roles, briefs, reviews, escalation
+- [docs/organization.md](docs/organization.md) — org chart, file ownership, how work is staffed
+- [docs/product.md](docs/product.md) — product goal, in/out of scope, canonical line
+- [docs/decisions.md](docs/decisions.md) — durable decisions
+- [docs/tasks.md](docs/tasks.md) — current work queue
 
 ## License
 
