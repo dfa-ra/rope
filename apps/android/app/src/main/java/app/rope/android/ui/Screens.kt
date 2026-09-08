@@ -166,11 +166,11 @@ fun RopeScaffold(
                 title = {
                     val title = NavRules.chromeTitle(state.screen, offline = state.offline)
                     val opensHome = NavRules.titleOpensHome(state.screen, signedIn)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable(enabled = opensHome) { onTab(Screen.Home) },
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         RopeLogoMark(
+                            modifier = Modifier
+                                .semantics { contentDescription = "На главную" }
+                                .clickable(enabled = opensHome) { onTab(Screen.Home) },
                             size = 28.dp,
                             animate = true,
                             breathe = state.screen == Screen.Home || state.screen == Screen.Start,
@@ -183,9 +183,6 @@ fun RopeScaffold(
                     }
                 },
                 actions = {
-                    if (NavRules.showsHomeAction(state.screen, signedIn)) {
-                        TextButton(onClick = { onTab(Screen.Home) }) { Text("На главную") }
-                    }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
                             if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,

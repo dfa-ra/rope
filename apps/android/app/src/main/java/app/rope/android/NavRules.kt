@@ -58,7 +58,9 @@ object NavRules {
 
     fun titleOpensHome(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
 
-    fun showsHomeAction(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
+    /** Chrome home control is the logo only — no separate «На главную» action. */
+    @Suppress("UNUSED_PARAMETER")
+    fun showsHomeAction(screen: Screen, signedIn: Boolean): Boolean = false
 
     fun showsInviteCta(role: String?): Boolean = RoleRules.canShowInviteQr(role)
 
