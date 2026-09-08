@@ -5,8 +5,17 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.MessageKind
 
-object BrandLinks {
-    const val RELEASES = "https://github.com/dfa-ra/rope/releases"
+data class HomeShortcut(
+    val label: String,
+    val destination: Screen,
+)
+
+object HomeCtas {
+    val shortcuts: List<HomeShortcut> = listOf(
+        HomeShortcut("К чатам", Screen.Chats),
+        HomeShortcut("К статусу сервера", Screen.Status),
+        HomeShortcut("К группам", Screen.Groups),
+    )
 }
 
 data class MainTab(

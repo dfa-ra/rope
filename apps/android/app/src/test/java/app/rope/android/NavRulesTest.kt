@@ -80,6 +80,25 @@ class NavRulesTest {
     }
 
     @Test
+    fun homeShortcutsStayInApp() {
+        assertEquals(
+            listOf(Screen.Chats, Screen.Status, Screen.Groups),
+            HomeCtas.shortcuts.map { it.destination },
+        )
+        HomeCtas.shortcuts.forEach { shortcut ->
+            val label = shortcut.label.lowercase()
+            assertFalse(shortcut.label, label.contains("лендинг"))
+            assertFalse(shortcut.label, label.contains("landing"))
+            assertFalse(shortcut.label, label.contains("скачать"))
+            assertFalse(shortcut.label, label.contains("download"))
+            assertFalse(shortcut.label, label.contains("releases"))
+            assertFalse(shortcut.label, label.contains("о приложении"))
+            assertFalse(shortcut.label, label.contains("about"))
+            assertFalse(shortcut.label, label.contains("github"))
+        }
+    }
+
+    @Test
     fun fiveMainTabsAndListRefresh() {
         assertEquals(5, NavRules.tabs.size)
         assertEquals(listOf(Screen.Home, Screen.Chats, Screen.Groups, Screen.Calls, Screen.Status), NavRules.tabs.map { it.screen })

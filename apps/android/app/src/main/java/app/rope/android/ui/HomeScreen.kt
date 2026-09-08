@@ -16,11 +16,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import app.rope.android.BrandLinks
 import app.rope.android.BuildConfig
+import app.rope.android.HomeCtas
 import app.rope.android.NavRules
 import app.rope.android.Screen
 import app.rope.android.UiState
@@ -33,7 +32,6 @@ fun HomePane(
     onStatus: () -> Unit,
     onInvite: () -> Unit,
 ) {
-    val uri = LocalUriHandler.current
     val me = state.profile?.displayName.orEmpty()
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val groups = NavRules.groupsOf(state.conversations)
@@ -72,20 +70,19 @@ fun HomePane(
                 }
             }
             Spacer(Modifier.height(22.dp))
-            FadeIn(160) {
-                GlowButton("К чатам", { onGo(Screen.Chats) }, Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(220) {
-                QuietButton("К статусу сервера", onStatus, Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(280) {
-                QuietButton(
-                    "Скачать / о приложении",
-                    { runCatching { uri.openUri(BrandLinks.RELEASES) } },
-                    Modifier.fillMaxWidth(),
-                )
+            HomeCtas.shortcuts.forEachIndexed { index, shortcut ->
+                if (index > 0) Spacer(Modifier.height(10.dp))
+                FadeIn(160 + index * 60) {
+                    val onClick = {
+                        if (shortcut.destination == Screen.Status) onStatus()
+                        else onGo(shortcut.destination)
+                    }
+                    if (index == 0) {
+                        GlowButton(shortcut.label, onClick, Modifier.fillMaxWidth())
+                    } else {
+                        QuietButton(shortcut.label, onClick, Modifier.fillMaxWidth())
+                    }
+                }
             }
             Spacer(Modifier.height(22.dp))
             FadeIn(400) {
