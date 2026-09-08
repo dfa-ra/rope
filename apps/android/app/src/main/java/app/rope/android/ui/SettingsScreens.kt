@@ -92,7 +92,9 @@ fun SettingsPane(
                     }
                     Switch(
                         checked = state.notificationsMuted,
-                        onCheckedChange = { onToggleNotifications() },
+                        onCheckedChange = { checked ->
+                            if (checked != state.notificationsMuted) onToggleNotifications()
+                        },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
                     )
                 }
