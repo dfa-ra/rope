@@ -61,7 +61,8 @@ iOS, calls, voice notes, files, groups, federation, web/desktop, polished Telegr
 Company operating model for humans and cloud agents:
 
 - [cryptogalera/README.md](cryptogalera/README.md) — company runtime wrapping Rope (MIGRATION)
-- [cryptogalera/CONSTITUTION.md](cryptogalera/CONSTITUTION.md) — operational constitution
+- [cryptogalera/RUNTIME.md](cryptogalera/RUNTIME.md) — spawn / task / report protocol
+- [`.cryptogalera/`](.cryptogalera/COMPANY_STATE.md) — live company memory (PO-owned)
 - [AGENTS.md](AGENTS.md) — rules agents must follow
 - [docs/company.md](docs/company.md) — roles, briefs, reviews, escalation
 - [docs/organization.md](docs/organization.md) — org chart, file ownership, how work is staffed

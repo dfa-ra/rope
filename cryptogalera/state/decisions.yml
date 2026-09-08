@@ -131,3 +131,15 @@ decisions:
       - Mode is MIGRATION until the PO sets it otherwise.
       - Feature freeze (T-003) still holds.
       - Unfreeze is T-007 (user must say so; D-005 if implementation would change trunk).
+
+  - id: D-008
+    title: Cursor multi-agent runtime protocol
+    date: "2026-09-08"
+    status: accepted
+    decider: founder_po
+    pointer: docs/decisions.md#d-008-cursor-multi-agent-runtime-protocol
+    summary: >-
+      Persist protocol as cryptogalera/RUNTIME.md. PO-owned live memory in
+      .cryptogalera/. Task IDs CG-XXX. Workers never spawn. Real Task-tool
+      subagents only. Does not unfreeze Rope implementation.
+    task: CG-008

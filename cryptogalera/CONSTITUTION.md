@@ -29,7 +29,7 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 13. **When to spawn.** Create an agent only for specialization the lead cannot cover, true parallelism on **disjoint** ownership, independent review (reviewer ≠ author), or context isolation. Recheck after each worker finishes; do not pre-spawn a tree.
 14. **Anti-sprawl.** Forbidden: agent explosion on overlapping UI/calls/landing/release work; recursive management; fake delegation; parallel work with no integrator; endless analysis; implementing Stage-2 because a prompt mentioned it.
 15. **Briefs.** No worker starts without Role, Objective, Context, Responsibilities, Constraints, Deliverables, Definition of Done, Dependencies, Report To. Incomplete brief → stop and ask the lead. Do not invent scope.
-16. **Reports.** Worker → lead → PO use: STATUS, SUMMARY, WORK COMPLETED, KEY DECISIONS, RISKS, OPEN QUESTIONS, DELIVERABLES, RECOMMENDED NEXT ACTION. No essays. Default channel is the repo, not side chats that replace tasks or decisions.
+16. **Reports.** Worker → lead → PO use: STATUS, SUMMARY, WORK COMPLETED, KEY DECISIONS, RISKS, OPEN QUESTIONS, DELIVERABLES, RECOMMENDED NEXT ACTION. Cursor Task-tool spawn/report fields: [RUNTIME.md](RUNTIME.md). No essays. Default channel is the repo, not side chats that replace tasks or decisions.
 
 ## 4. Decisions, freeze, and review
 
@@ -42,13 +42,14 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 ## 5. Sources of truth and ownership
 
 22. **SoT files (do not duplicate in prompts).**
-    - Runtime: this file, [README.md](README.md), `rules/`, `state/` (State Lead).
+    - Runtime: this file, [README.md](README.md), [RUNTIME.md](RUNTIME.md), `rules/`, `state/`.
+    - Company memory: `.cryptogalera/` (PO-only).
     - Session (unverified, preserved): [AGENTS.md](../AGENTS.md), [docs/company.md](../docs/company.md), [docs/organization.md](../docs/organization.md), [docs/product.md](../docs/product.md), [docs/architecture.md](../docs/architecture.md), [docs/threat-model.md](../docs/threat-model.md), [docs/decisions.md](../docs/decisions.md), [docs/tasks.md](../docs/tasks.md).
     - Wire API: [docs/api.md](../docs/api.md) → `protocol/docs/` on the current trunk.
     If a prompt conflicts with `docs/product.md` or this constitution, stop and escalate.
 23. **Session docs.** Adopted as unverified SoT. Do not revert, delete, or rewrite them from scratch because they are unverified.
 24. **Live state.** `cryptogalera/state/*.yml` is owned by State Lead; PO owns live state content. Process Lead does not create or overwrite those files.
-25. **File ownership (this repo).** Product trees: `apps/android` (Android; Kotlin never implements crypto), `core/rust` (Rust), `server/go` (Go), `protocol` (Engineering Lead), `deployment` (Go/deployment), `scripts` (Engineering Lead), `docs` (PO + Engineering Lead), `.github` + `Makefile` (Engineering Lead). Runtime: constitution, README, and `rules/` = Process (PO is T-006 integrator, not a co-owner of those files); `cryptogalera/state/` = PO (content), State Lead (files); `.cursor/rules/` = Process. Do not edit another owner’s tree without the integration owner. Detail: [rules/file-ownership.md](rules/file-ownership.md).
+25. **File ownership (this repo).** Product trees: `apps/android` (Android; Kotlin never implements crypto), `core/rust` (Rust), `server/go` (Go), `protocol` (Engineering Lead), `deployment` (Go/deployment), `scripts` (Engineering Lead), `docs` (PO + Engineering Lead), `.github` + `Makefile` (Engineering Lead). Runtime: constitution, README, `RUNTIME.md`, and `rules/` = Process (PO is T-006 integrator, not a co-owner of those files); `cryptogalera/state/` = PO (content), State Lead (files); `.cryptogalera/` = PO; `.cursor/rules/` = Process. Do not edit another owner’s tree without the integration owner. Detail: [rules/file-ownership.md](rules/file-ownership.md).
 26. **API.** There is no second API. Current-trunk `protocol/docs` (REST, WSS, envelope, invite) is the wire SoT. Stage-2 protocol on other branches is not SoT until D-005.
 
 ## 6. Safety

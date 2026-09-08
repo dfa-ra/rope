@@ -12,8 +12,9 @@ Matches [docs/organization.md](../../docs/organization.md), plus CryptoGalera ru
 | `scripts/**` | Engineering Lead | UniFFI Kotlin bindings and Android native `.so` builds. Touches Android + Rust. |
 | `docs/**` | PO + Engineering Lead | Product, architecture, threat model, company, tasks, decisions, API pointer. |
 | `.github/**`, `Makefile` | Engineering Lead | CI and release workflows. |
-| `cryptogalera/CONSTITUTION.md`, `cryptogalera/README.md`, `cryptogalera/rules/**` | Process | Binding runtime law. PO is T-006 integrator, not a co-owner of these files. |
+| `cryptogalera/CONSTITUTION.md`, `cryptogalera/README.md`, `cryptogalera/RUNTIME.md`, `cryptogalera/rules/**` | Process | Binding runtime law. PO integrates; not a co-owner of these files. |
 | `cryptogalera/state/**` | PO (live state) | YAML written by State Lead; Process does not create or overwrite these files. |
+| `.cryptogalera/**` | PO | Company memory. Only the root agent edits. Leads return facts; they do not write these files. |
 | `.cursor/rules/` | Process | Cursor always-on rules. Process Lead. |
 
 Shared surfaces (protocol docs, UniFFI, invite URL, REST/WSS) are sequenced by the Engineering Lead. Process/docs tasks do not edit `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/`.

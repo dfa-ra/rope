@@ -67,6 +67,16 @@ Goal: Resume product work only when the user says so, and only after D-005 if th
 Depends on: T-006
 Forbidden until then: seating Engineering Lead for product coding; merging Stage-2; implementing calls/groups/UI.
 
+### CG-008: Install Cursor multi-agent runtime protocol
+
+Status: done
+Owner: Product Owner. Worker: PROC-LEAD (CG-008-A).
+Goal: Persist spawn/report protocol and PO-owned `.cryptogalera/` memory. Alias T-008.
+Deliverables: `cryptogalera/RUNTIME.md`, `.cryptogalera/*`, Cursor/AGENTS pointers, D-008.
+Definition of Done: Protocol on disk; management files exist; product trees untouched; real subagent used for CG-008-A; independent review of the wrap.
+Depends on: CG-006
+Forbidden: product implementation; `.cursor/agents/*` sprawl; Workers spawning agents.
+
 ---
 
 ## Not tasks (do not staff)

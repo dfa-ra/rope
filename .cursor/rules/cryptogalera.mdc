@@ -3,13 +3,13 @@ description: CryptoGalera runtime wrapping Rope — migration mode, no product i
 alwaysApply: true
 ---
 
-Read `cryptogalera/README.md` and `AGENTS.md` before any other work. Then `cryptogalera/CONSTITUTION.md`.
+Read `cryptogalera/README.md`, `cryptogalera/RUNTIME.md`, and `AGENTS.md` before any other work. Then `cryptogalera/CONSTITUTION.md`. Also read `.cryptogalera/COMPANY_STATE.md` and `.cryptogalera/TASK_BOARD.md` (PO-owned; do not edit unless you are the PO).
 
 Mode is **MIGRATION**. Do not implement, merge, or redesign Rope. Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` unless the Product Owner unfreezes and the task is on `docs/tasks.md`.
 
 Do not revert, delete, or reset user/session work. Session docs are unverified SoT — preserve them.
 
-Spawn agents only per `AGENTS.md` (specialization, disjoint parallelism, independent review, context isolation). One task, one owner. No overlapping paths.
+Task IDs are `CG-XXX`. Spawn agents only per `cryptogalera/RUNTIME.md` and `AGENTS.md` (specialization, disjoint parallelism, independent review, context isolation). One task, one owner. No overlapping paths. **Workers must not spawn.** Never fake subagents — only a real Task-tool invocation counts.
 
 **D-005 is user-only.** Do not merge Stage-2 (PRs #2/#3, tags v0.2.x) or treat it as scope until the user accepts D-005.
 

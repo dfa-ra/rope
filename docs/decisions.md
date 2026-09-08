@@ -100,3 +100,19 @@ Decision:
 - Product trunk remains D-001 / D-005 (user still must choose A/B/C before product implementation resumes).
 Consequences: Agents in this repo first read `cryptogalera/` state. Mode is `MIGRATION` until the PO sets it otherwise. Feature freeze (T-003) still holds.
 Alternatives considered: Replace Rope with a new CryptoGalera product (rejected). Delete session docs and start over (rejected — user forbade revert). Treat constitution prompt as a new product build (rejected).
+
+---
+
+### D-008: Cursor multi-agent runtime protocol
+
+Date: 2026-09-08
+Status: accepted
+Decider: Product Owner (user loaded the Cursor Runtime Protocol)
+Context: Constitution defines who decides. The new protocol defines how Cursor subagents spawn, report, and how company memory is stored. Product remains frozen (D-007).
+Decision:
+- Persist protocol as `cryptogalera/RUNTIME.md`.
+- PO-owned live memory in `.cryptogalera/` (`COMPANY_STATE.md`, `TASK_BOARD.md`, `DECISIONS.md`, `RISKS.md`). Only the root agent edits those files.
+- Task IDs `CG-XXX`. Workers never spawn. A subagent exists only as a real Cursor Task invocation.
+- Does **not** unfreeze Rope implementation.
+Consequences: New orchestration uses Context Packages and the task board. Fake “I sent this to Backend Lead” is a protocol violation.
+Alternatives considered: Replace `cryptogalera/` with only `.cryptogalera/` (rejected — preserve existing runtime). Start product coding because the protocol says “begin” (rejected — D-007 / MIGRATION still holds).

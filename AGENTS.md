@@ -6,6 +6,10 @@ Cursor cloud agents and humans working this repository must follow this file. Th
 
 Company process is the **runtime** at [cryptogalera/README.md](cryptogalera/README.md) and [cryptogalera/CONSTITUTION.md](cryptogalera/CONSTITUTION.md). Live state: `cryptogalera/state/` (State Lead). Cursor enforcement: `.cursor/rules/cryptogalera.mdc`.
 
+- Spawn / task / report protocol: [cryptogalera/RUNTIME.md](cryptogalera/RUNTIME.md).
+- Company memory: `.cryptogalera/` (PO-only edits: `COMPANY_STATE`, `TASK_BOARD`, `DECISIONS`; optional `RISKS`).
+- Task IDs: `CG-XXX`.
+
 Mode is **MIGRATION**: product implementation is frozen (D-007). Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` until the PO unfreezes. D-005 remains user-only. The documents below are unverified session SoT — preserve them; do not revert.
 
 ## Company
@@ -93,6 +97,7 @@ RECOMMENDED NEXT ACTION:
 | [docs/dev-setup.md](docs/dev-setup.md) | How to build and test |
 | [protocol/docs/](protocol/docs/) | Wire format, REST, WSS, invites |
 | [cryptogalera/README.md](cryptogalera/README.md) | Company runtime (mode, map) |
+| [cryptogalera/RUNTIME.md](cryptogalera/RUNTIME.md) | Spawn / task / report protocol |
 
 Do not duplicate these in prompts. Do not invent a roadmap. If a prompt conflicts with `docs/product.md`, stop and escalate.
 
@@ -108,8 +113,9 @@ Do not duplicate these in prompts. Do not invent a roadmap. If a prompt conflict
 | Shared docs | `docs/**` | PO + Engineering Lead |
 | Bindings scripts | `scripts/**` | Engineering Lead (Android + Rust) |
 | CI | `.github/**`, `Makefile` | Engineering Lead |
-| Runtime law | `cryptogalera/CONSTITUTION.md`, `cryptogalera/README.md`, `cryptogalera/rules/**` | Process Lead |
+| Runtime law | `cryptogalera/CONSTITUTION.md`, `cryptogalera/README.md`, `cryptogalera/RUNTIME.md`, `cryptogalera/rules/**` | Process Lead |
 | Live state | `cryptogalera/state/**` | PO (content); State Lead (files) |
+| Company memory | `.cryptogalera/**` | PO |
 | Cursor rules | `.cursor/rules/**` | Process Lead |
 
 Shared and protocol changes must be coordinated before coding. Do not edit another owner’s tree without the integration owner’s OK. Do not change `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, or CI unless that is the assigned task.

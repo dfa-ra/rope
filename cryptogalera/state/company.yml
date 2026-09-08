@@ -38,9 +38,11 @@ sot_docs:
 runtime_docs:
   - cryptogalera/CONSTITUTION.md
   - cryptogalera/README.md
+  - cryptogalera/RUNTIME.md
   - cryptogalera/rules/persistent.md
   - cryptogalera/rules/file-ownership.md
   - .cursor/rules/cryptogalera.mdc
+  - .cryptogalera/COMPANY_STATE.md
 
 notes:
   - CryptoGalera is the company process; Rope is the product already in this repo.
