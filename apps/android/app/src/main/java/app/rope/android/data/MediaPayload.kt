@@ -272,27 +272,85 @@ data class ChatPrefs(
 
 enum class ChatListMode { ALL, GROUPS, CALLS }
 
+enum class ChatListHit(val rank: Int) {
+    NONE(0),
+    PREVIEW(1),
+    TITLE(2),
+    TITLE_PREFIX(3),
+}
+
+object QueryHighlight {
+    fun firstRange(text: String, query: String): IntRange? {
+        val q = ChatListRules.normalize(query)
+        if (q.isEmpty() || text.isEmpty()) return null
+        val i = text.indexOf(q, ignoreCase = true)
+        if (i < 0) return null
+        return i until (i + q.length)
+    }
+}
+
 object ChatListRules {
+    private val presenceSubtitles = setOf("в сети", "не в сети")
+    private val whitespace = Regex("\\s+")
+
+    fun normalize(query: String): String = query.trim().replace(whitespace, " ").lowercase()
+
+    fun searching(query: String): Boolean = normalize(query).isNotEmpty()
+
     fun visible(c: Conversation, mode: ChatListMode): Boolean = when (mode) {
         ChatListMode.ALL -> true
         ChatListMode.GROUPS -> c.isGroup
         ChatListMode.CALLS -> c.last?.kind == MessageKind.CALL
     }
 
-    fun matches(c: Conversation, query: String, mode: ChatListMode = ChatListMode.ALL): Boolean {
-        if (!visible(c, mode)) return false
-        if (query.isBlank()) return true
-        val q = query.trim().lowercase()
-        return c.title.lowercase().contains(q) ||
-            c.subtitle.lowercase().contains(q) ||
-            c.last?.preview()?.lowercase()?.contains(q) == true
+    fun hit(c: Conversation, query: String): ChatListHit {
+        val q = normalize(query)
+        if (q.isEmpty()) return ChatListHit.NONE
+        val title = c.title.lowercase()
+        if (title.startsWith(q)) return ChatListHit.TITLE_PREFIX
+        if (title.contains(q)) return ChatListHit.TITLE
+        val hay = buildString {
+            c.last?.preview()?.takeIf { it.isNotBlank() }?.let { append(it).append('\n') }
+            if (c.last != null && c.subtitle.isNotBlank() && c.subtitle.lowercase() !in presenceSubtitles) {
+                append(c.subtitle)
+            }
+        }.lowercase()
+        if (hay.contains(q)) return ChatListHit.PREVIEW
+        return ChatListHit.NONE
     }
 
-    fun compare(a: Conversation, b: Conversation): Int {
+    fun matches(c: Conversation, query: String, mode: ChatListMode = ChatListMode.ALL): Boolean {
+        if (!visible(c, mode)) return false
+        if (!searching(query)) return true
+        return hit(c, query) != ChatListHit.NONE
+    }
+
+    fun compare(a: Conversation, b: Conversation, query: String = ""): Int {
+        if (searching(query)) {
+            val rank = hit(b, query).rank.compareTo(hit(a, query).rank)
+            if (rank != 0) return rank
+            return (b.last?.timestampMs ?: 0L).compareTo(a.last?.timestampMs ?: 0L)
+        }
         val pin = b.pinned.compareTo(a.pinned)
         if (pin != 0) return pin
         return (b.last?.timestampMs ?: 0L).compareTo(a.last?.timestampMs ?: 0L)
     }
+
+    fun rows(
+        conversations: List<Conversation>,
+        query: String,
+        mode: ChatListMode = ChatListMode.ALL,
+    ): List<Conversation> = conversations.filter { matches(it, query, mode) }
+        .sortedWith { a, b -> compare(a, b, query) }
+
+    fun pinnedBlock(rows: List<Conversation>, query: String): List<Conversation> =
+        if (searching(query)) emptyList() else rows.filter { it.pinned }
+
+    fun unpinnedBlock(rows: List<Conversation>, query: String): List<Conversation> =
+        if (searching(query)) rows else rows.filter { !it.pinned }
+
+    fun showPinDivider(rows: List<Conversation>, query: String): Boolean =
+        pinnedBlock(rows, query).isNotEmpty() && unpinnedBlock(rows, query).isNotEmpty()
 }
 
 object MessageSearch {

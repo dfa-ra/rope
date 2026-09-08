@@ -77,6 +77,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -109,6 +110,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -121,6 +123,7 @@ import app.rope.android.UiState
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
+import app.rope.android.data.QueryHighlight
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerRules
@@ -207,37 +210,18 @@ fun ChatsPane(
                 }
             }
         }
-        TextField(
+        ChatListSearchField(
             value = state.chatQuery,
             onValueChange = onQuery,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            placeholder = {
-                Text(
-                    when (listMode) {
-                        ChatListMode.GROUPS -> "Поиск групп"
-                        ChatListMode.CALLS -> "Поиск звонков"
-                        ChatListMode.ALL -> "Поиск чатов"
-                    },
-                )
+            placeholder = when (listMode) {
+                ChatListMode.GROUPS -> "Поиск групп"
+                ChatListMode.CALLS -> "Поиск звонков"
+                ChatListMode.ALL -> "Поиск"
             },
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            trailingIcon = {
-                if (state.chatQuery.isNotBlank()) {
-                    IconButton(onClick = { onQuery("") }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Очистить")
-                    }
-                }
-            },
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-            ),
-            shape = RoundedCornerShape(RopeShapes.search),
         )
-        val rows = state.conversations.filter { ChatListRules.matches(it, state.chatQuery, listMode) }
+        val rows = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
+        val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
+        val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty()) {
                 RopeEmptyState(
@@ -250,19 +234,41 @@ fun ChatsPane(
                 )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    itemsIndexed(rows, key = { _, c -> c.id }) { index, c ->
+                    if (pinnedRows.isNotEmpty()) {
+                        itemsIndexed(pinnedRows, key = { _, c -> c.id }) { _, c ->
+                            FadeIn(0) {
+                                ConversationRow(
+                                    c,
+                                    onClick = { onOpen(c) },
+                                    onPin = { onPinChat(c.id) },
+                                    onMute = { onMuteChat(c.id) },
+                                    query = state.chatQuery,
+                                )
+                            }
+                        }
+                        if (ChatListRules.showPinDivider(rows, state.chatQuery)) {
+                            item(key = "pinned-divider") {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp),
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                )
+                            }
+                        }
+                    }
+                    itemsIndexed(otherRows, key = { _, c -> c.id }) { _, c ->
                         FadeIn(0) {
                             ConversationRow(
                                 c,
                                 onClick = { onOpen(c) },
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
+                                query = state.chatQuery,
                             )
                         }
                     }
                 }
             }
-            if (state.forwarding == null && listMode != ChatListMode.CALLS) {
+            if (state.forwarding == null && listMode != ChatListMode.CALLS && !ChatListRules.searching(state.chatQuery)) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier
@@ -275,6 +281,61 @@ fun ChatsPane(
             }
         }
     }
+}
+
+@Composable
+private fun ChatListSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+) {
+    val style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = style,
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(RopeShapes.search))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) {
+                        Text(
+                            placeholder,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    inner()
+                }
+                if (value.isNotBlank()) {
+                    IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = "Очистить",
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        },
+    )
 }
 
 private fun emptyTitle(mode: ChatListMode, query: String): String = when {
@@ -296,6 +357,43 @@ private fun emptyBody(mode: ChatListMode, query: String, forwarding: Boolean, ro
     else -> RoleRules.chatsEmptyBody(role)
 }
 
+@Composable
+private fun HighlightedText(
+    text: String,
+    query: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val range = QueryHighlight.firstRange(text, query)
+    if (range == null) {
+        Text(
+            text,
+            style = style,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
+        )
+        return
+    }
+    val annotated = buildAnnotatedString {
+        append(text.substring(0, range.first))
+        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+            append(text.substring(range.first, range.last + 1))
+        }
+        append(text.substring(range.last + 1))
+    }
+    Text(
+        annotated,
+        style = style,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ConversationRow(
@@ -303,6 +401,7 @@ internal fun ConversationRow(
     onClick: () -> Unit,
     onPin: () -> Unit,
     onMute: () -> Unit,
+    query: String = "",
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -342,17 +441,13 @@ internal fun ConversationRow(
             InitialsAvatar(c.title, c.isGroup, c.online)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (c.pinned) {
-                        Icon(
-                            Icons.Outlined.PushPin,
-                            contentDescription = "Закреплён",
-                            modifier = Modifier
-                                .padding(end = 4.dp)
-                                .size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    HighlightedText(
+                        text = c.title,
+                        query = query,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
                     if (c.muted) {
                         Icon(
                             Icons.Outlined.NotificationsOff,
@@ -360,6 +455,16 @@ internal fun ConversationRow(
                             modifier = Modifier
                                 .padding(end = 6.dp)
                                 .size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (c.pinned) {
+                        Icon(
+                            Icons.Outlined.PushPin,
+                            contentDescription = "Закреплён",
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(12.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -371,12 +476,11 @@ internal fun ConversationRow(
                         )
                     }
                 }
-                Text(
-                    c.subtitle,
+                HighlightedText(
+                    text = c.subtitle,
+                    query = query,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (c.online && !c.isGroup) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (c.unread > 0) {

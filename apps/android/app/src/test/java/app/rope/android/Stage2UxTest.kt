@@ -8,7 +8,9 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatIds
+import app.rope.android.data.ChatListHit
 import app.rope.android.data.ChatListRules
+import app.rope.android.data.QueryHighlight
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ChatRouting
@@ -34,6 +36,7 @@ import app.rope.android.media.ImageCodec
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -307,6 +310,35 @@ class Stage2UxTest {
         }
         val rfc = java.time.Instant.ofEpochMilli(seen.timeInMillis).toString()
         assertEquals("был(а) 14:05", MessageTime.lastSeenLabel(rfc, false, seen.timeInMillis))
+    }
+
+    @Test
+    fun chatListSearchRanksTitleOverPreviewAndIgnoresPins() {
+        fun msg(text: String, t: Long) =
+            ChatMessage("m$t", "p", false, text, MessageStatus.DELIVERED_TO_DEVICE, t)
+        val prefix = Conversation("1", "Анна", "zzz", false, true, msg("zzz", 1L), pinned = true)
+        val title = Conversation("2", "Марианна", "zzz", false, false, msg("zzz", 50L))
+        val preview = Conversation("3", "Боб", "секретный план", false, false, msg("секретный план", 100L))
+        val presence = Conversation("4", "Кира", "в сети", false, true, null)
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(prefix, "  Анн  "))
+        assertEquals(ChatListHit.TITLE, ChatListRules.hit(title, "анн"))
+        assertEquals(ChatListHit.PREVIEW, ChatListRules.hit(preview, "секрет"))
+        assertEquals(ChatListHit.NONE, ChatListRules.hit(presence, "сети"))
+        assertFalse(ChatListRules.matches(presence, "сети"))
+        assertTrue(ChatListRules.matches(prefix, "анн"))
+        val ranked = ChatListRules.rows(listOf(preview, title, prefix, presence), "анн")
+        assertEquals(listOf("1", "2"), ranked.map { it.id })
+        val idle = ChatListRules.rows(listOf(preview, prefix), "")
+        assertEquals(listOf("1", "3"), idle.map { it.id })
+        assertTrue(ChatListRules.showPinDivider(idle, ""))
+        assertFalse(ChatListRules.showPinDivider(idle, "анн"))
+        assertEquals(emptyList<Conversation>(), ChatListRules.pinnedBlock(idle, "боб"))
+        assertEquals(listOf("1"), ChatListRules.pinnedBlock(idle, "").map { it.id })
+        assertEquals(0 until 3, QueryHighlight.firstRange("Анна", "анн"))
+        assertNull(QueryHighlight.firstRange("Анна", "   "))
+        assertEquals("анна", ChatListRules.normalize("  Анн  "))
+        assertTrue(ChatListRules.searching("ан"))
+        assertFalse(ChatListRules.searching(" \t "))
     }
 
     @Test
