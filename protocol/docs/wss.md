@@ -7,16 +7,23 @@ URL: `wss://<host>:<port>/v1/ws?device_id=<hex>&ts=<unix>&sig=<base64url>`
 On connect the server:
 
 1. Authenticates the device
-2. Marks it online
+2. Marks it online and broadcasts `{ "type": "presence", "devices": [...] }` to every live socket
 3. Pushes every mailbox blob for that device as `deliver` frames
 4. Sends `{ "type": "mailbox_done" }`
+5. On disconnect, drops the device from the hub and broadcasts an updated `presence` list
 
 ## Client → server
 
 ```json
 { "type": "send", "envelope": "<standard base64>" }
 { "type": "ack", "message_id": "<uuid hex>" }
+{ "type": "group_send", "group_id": "<uuid>", "envelopes": ["<base64>", "..."] }
+{ "type": "call", "call_id": "<uuid>", "to": "<device_hex>", "event": "ring|accept|reject|hangup|offer|answer|ice", "payload": "" }
 ```
+
+`group_send`: sender must be a current member; every envelope recipient must be a current member. Each envelope then follows the normal mailbox path.
+
+`call` is live-only. If `to` is offline the sender gets `not_found`. The server does not store SDP. ICE servers (STUN/TURN on the same host) are advertised on REST `GET /v1/info`, not as a new WSS type.
 
 ## Server → client
 
@@ -27,6 +34,7 @@ On connect the server:
 { "type": "mailbox_done" }
 { "type": "presence", "devices": ["hex", "..."] }
 { "type": "error", "code": "protocol|auth|not_found|too_large|rate_limited", "message": "..." }
+{ "type": "call", "call_id": "...", "from": "<device_hex>", "event": "ring", "payload": "" }
 ```
 
 ## Delivery rules

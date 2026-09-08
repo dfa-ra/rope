@@ -12,20 +12,30 @@ import (
 )
 
 const ProtocolVersion uint16 = 1
-const ServerVersion = "0.1.0"
+const ServerVersion = "0.2.15"
 const HTTPDevFingerprintSeed = "rope-http-dev"
 
 type Config struct {
-	Listen             string `json:"listen"`
-	DataDir            string `json:"data_dir"`
-	TLSCert            string `json:"tls_cert"`
-	TLSKey             string `json:"tls_key"`
-	SetupToken         string `json:"setup_token"`
-	ServerID           string `json:"server_id"`
-	MailboxTTLSeconds  int    `json:"mailbox_ttl_seconds"`
-	MaxEnvelopeBytes   int    `json:"max_envelope_bytes"`
-	AllowHTTP          bool   `json:"allow_http"`
+	Listen              string `json:"listen"`
+	DataDir             string `json:"data_dir"`
+	TLSCert             string `json:"tls_cert"`
+	TLSKey              string `json:"tls_key"`
+	SetupToken          string `json:"setup_token"`
+	ServerID            string `json:"server_id"`
+	MailboxTTLSeconds   int    `json:"mailbox_ttl_seconds"`
+	MaxEnvelopeBytes    int    `json:"max_envelope_bytes"`
+	MaxObjectBytes      int    `json:"max_object_bytes"`
+	ObjectTTLSeconds    int    `json:"object_ttl_seconds"`
+	ObjectQuotaBytes    int64  `json:"object_quota_bytes"`
+	AllowHTTP           bool   `json:"allow_http"`
 	FingerprintOverride string `json:"fingerprint,omitempty"`
+	PublicHost          string `json:"public_host,omitempty"`
+	PublicIP            string `json:"public_ip,omitempty"`
+	TLSHostname         string `json:"tls_hostname,omitempty"`
+	TurnSecret          string `json:"turn_secret,omitempty"`
+	TurnPort            int    `json:"turn_port,omitempty"`
+	TurnsPort           int    `json:"turns_port,omitempty"`
+	TurnTTLSeconds      int    `json:"turn_ttl_seconds,omitempty"`
 }
 
 func Default() Config {
@@ -36,6 +46,9 @@ func Default() Config {
 		TLSKey:            "/etc/rope/tls/key.pem",
 		MailboxTTLSeconds: 7 * 24 * 3600,
 		MaxEnvelopeBytes:  65536,
+		MaxObjectBytes:    25 * 1024 * 1024,
+		ObjectTTLSeconds:  7 * 24 * 3600,
+		ObjectQuotaBytes:  512 * 1024 * 1024,
 	}
 }
 
@@ -97,6 +110,17 @@ func (c Config) DBPath() string {
 
 func (c Config) MailboxTTL() time.Duration {
 	return time.Duration(c.MailboxTTLSeconds) * time.Second
+}
+
+func (c Config) ObjectTTL() time.Duration {
+	if c.ObjectTTLSeconds <= 0 {
+		return 7 * 24 * time.Hour
+	}
+	return time.Duration(c.ObjectTTLSeconds) * time.Second
+}
+
+func (c Config) ObjectsDir() string {
+	return filepath.Join(c.DataDir, "objects")
 }
 
 func HTTPDevFingerprint() string {

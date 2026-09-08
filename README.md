@@ -1,8 +1,15 @@
 # Rope
 
-Private self-hosted 1-to-1 messenger for Android. You provision a personal VPS from the app, invite a second device with a QR / deep link, and exchange E2EE text through a Go relay that never sees plaintext.
+Private self-hosted messenger for Android. You provision a personal VPS from the app, invite people with a QR / deep link, and exchange E2EE text, voice, photos, files, and group chats through a Go relay that never sees plaintext.
 
-MVP stack: **Kotlin UI → Rust security core (UniFFI) → HTTPS/WSS → Go + SQLite**.
+Stack: **Kotlin UI → Rust security core (UniFFI) → HTTPS/WSS → Go + SQLite**.
+
+**Лендинг:** [web/index.html](web/index.html)
+
+```bash
+cd web && python3 -m http.server 8080
+# http://127.0.0.1:8080
+```
 
 ## Layout
 
@@ -13,6 +20,7 @@ server/go         relay, mailbox, invites
 deployment/       systemd + install.sh
 protocol/docs     wire format
 docs/             product, architecture, threat model, company, organization, decisions, tasks
+web/              marketing landing (open web/index.html)
 ```
 
 ## Quick start (developers)
@@ -40,21 +48,32 @@ sudo ./deployment/scripts/install.sh \
   --port 8443
 ```
 
-Re-run with `--upgrade` to replace the binary and keep `data.db`.
+Re-run with `--upgrade` to replace the binary, keep `data.db`, and (from 0.2.7) install/refresh coturn on the same host so calls get TURN.  
+`--reinstall` wipes `data.db` + config and issues a new owner `SETUP_TOKEN` (lost-phone recovery).
+
+Раскатка у пользователя (телефон → SSH → VPS): [docs/rollout.md](docs/rollout.md).
+
+## Сайт
+
+Посадочная страница: откройте [`web/index.html`](web/index.html) в браузере (позже можно включить GitHub Pages из папки `web/`).
 
 ## Releases
 
 Push a tag `vX.Y.Z`. GitHub Actions publishes:
 
-- `rope-server-linux-amd64` and `linux-arm64`
+- `rope-server-linux-amd64` and `linux-arm64` (в приложении выбирается архитектура, без правки URL)
 - Android APK
 - `SHA256SUMS`
 
 Production APK signing uses repository secrets documented in [docs/dev-setup.md](docs/dev-setup.md).
 
-## What is not in MVP
+Stage 2 (v0.2): photos/files, hold-to-record voice, groups, call signaling, encrypted object store. Details: [docs/stage2.md](docs/stage2.md), metrics: [docs/stage2-metrics.md](docs/stage2-metrics.md).
 
-iOS, calls, voice notes, files, groups, federation, web/desktop, polished Telegram/Amnezia UI.
+Canonical trunk is `main`, matching GitHub Latest `v0.2.15`. Do not retag or replace that release’s assets.
+
+## What is not in this tree
+
+iOS, federation, web/desktop messenger. TURN/TURNS runs on the same VPS as `rope-server` (coturn; advertised on `GET /v1/info`).
 
 ## Working here (CryptoGalera)
 

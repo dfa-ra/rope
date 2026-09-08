@@ -1,20 +1,33 @@
 #!/usr/bin/env bash
-# Idempotent Rope server installer for Ubuntu LTS / Debian (x86_64).
+# Idempotent Rope server installer for Ubuntu LTS / Debian (x86_64 / arm64).
+# Installs rope-server plus coturn on the same host (TURN / TURNS).
 set -euo pipefail
 
 BINARY=""
 HOST=""
 PORT="8443"
 UPGRADE=0
+REINSTALL=0
+PRINT_TURN_CONF=0
 DATA_DIR="/var/lib/rope"
 ETC_DIR="/etc/rope"
 BIN_DIR="/opt/rope/bin"
 SERVICE_USER="rope"
+TURN_PORT="3478"
+TURNS_PORT="443"
+TURN_SECRET=""
+RELAY_MIN="49152"
+RELAY_MAX="49311"
+IPV4_ONLY=1
+TURN_TTL=604800
 
 usage() {
-  echo "usage: $0 --binary /path/to/rope-server --host <ip-or-dns> [--port 8443] [--upgrade]"
+  echo "usage: $0 --binary /path/to/rope-server --host <ip-or-dns> [--port 8443] [--upgrade|--reinstall]"
+  echo "       $0 --print-turn-conf --host <ip-or-dns> [--turns-port 443|5349] [--secret X] [--allow-ipv6]"
   exit 2
 }
+
+log() { echo "rope-install: $*" >&2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,9 +35,228 @@ while [[ $# -gt 0 ]]; do
     --host) HOST="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --upgrade) UPGRADE=1; shift ;;
+    --reinstall) REINSTALL=1; shift ;;
+    --print-turn-conf) PRINT_TURN_CONF=1; shift ;;
+    --turns-port) TURNS_PORT="$2"; shift 2 ;;
+    --turn-port) TURN_PORT="$2"; shift 2 ;;
+    --secret) TURN_SECRET="$2"; shift 2 ;;
+    --ipv4-only) IPV4_ONLY=1; shift ;;
+    --allow-ipv6) IPV4_ONLY=0; shift ;;
     *) usage ;;
   esac
 done
+
+is_ipv4() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+
+is_rfc1918_ipv4() {
+  local ip="$1" a b
+  is_ipv4 "$ip" || return 1
+  a="${ip%%.*}"
+  b="${ip#*.}"; b="${b%%.*}"
+  [[ "$ip" == "0.0.0.0" || "$a" == "10" || "$a" == "127" ]] && return 0
+  [[ "$a" == "192" && "$b" == "168" ]] && return 0
+  [[ "$a" == "169" && "$b" == "254" ]] && return 0
+  [[ "$a" == "172" && "$b" -ge 16 && "$b" -le 31 ]] && return 0
+  # CGNAT 100.64.0.0/10 — не рекламируем как TURN URL, если есть настоящий WAN.
+  [[ "$a" == "100" && "$b" -ge 64 && "$b" -le 127 ]] && return 0
+  return 1
+}
+
+iface_is_virtual() {
+  local name="$1"
+  [[ "$name" =~ ^(lo|docker|br-|veth|virbr|cni|flannel|tun|tap|wg|tailscale|zt|nrd|dummy|vmnet) ]]
+}
+
+resolve_ipv4() {
+  local name="$1"
+  if is_ipv4 "$name"; then
+    echo "$name"
+    return
+  fi
+  getent ahostsv4 "$name" 2>/dev/null | awk '{ print $1; exit }'
+}
+
+local_ipv4() {
+  if [[ -n "${ROPE_RELAY_IP:-}" ]]; then
+    echo "$ROPE_RELAY_IP"
+    return
+  fi
+  local src dev
+  if command -v ip >/dev/null 2>&1; then
+    src="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+    dev="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit }}')"
+    if is_ipv4 "$src" && [[ "$src" != "127.0.0.1" ]] && ! iface_is_virtual "$dev"; then
+      echo "$src"
+      return
+    fi
+    src="$(ip -4 -o addr show scope global 2>/dev/null | awk '
+      {
+        iface=$2; ip=$4; sub(/\/.*/, "", ip);
+        if (iface ~ /^(lo|docker|br-|veth|virbr|cni|flannel|tun|tap|wg|tailscale)/) next;
+        if (ip ~ /^127\./ || ip ~ /^169\.254\./) next;
+        print ip; exit
+      }')"
+    if is_ipv4 "$src"; then
+      echo "$src"
+      return
+    fi
+  fi
+  hostname -I 2>/dev/null | awk '{
+    for (i = 1; i <= NF; i++) {
+      if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $i !~ /^127\./ && $i !~ /^169\.254\./) {
+        print $i; exit
+      }
+    }
+  }'
+}
+
+ip_on_local_iface() {
+  local want="$1"
+  [[ -n "$want" ]] || return 1
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 -o addr show scope global 2>/dev/null | awk -v w="$want" '{
+      ip=$4; sub(/\/.*/, "", ip); if (ip==w) found=1
+    } END { exit !found }' && return 0
+  fi
+  hostname -I 2>/dev/null | awk -v w="$want" '{
+    for (i = 1; i <= NF; i++) if ($i == w) found=1
+  } END { exit !found }'
+}
+
+# Bind relay sockets only to an address that exists on the box.
+# Setting relay-ip to the public 1:1 NAT address makes ALLOCATE fail.
+relay_ipv4() {
+  local ip
+  ip="$(local_ipv4 || true)"
+  [[ -n "$ip" ]] || return 0
+  if [[ -n "${ROPE_RELAY_IP:-}" ]] || ip_on_local_iface "$ip"; then
+    echo "$ip"
+  fi
+}
+
+detect_wan_ipv4() {
+  if [[ -n "${ROPE_WAN_IP:-}" ]]; then
+    echo "$ROPE_WAN_IP"
+    return
+  fi
+  local ip url
+  for url in https://api.ipify.org https://ifconfig.me/ip https://icanhazip.com; do
+    ip="$(curl -4 -fsS --max-time 3 "$url" 2>/dev/null | tr -d ' \r\n' || true)"
+    if is_ipv4 "$ip" && ! is_rfc1918_ipv4 "$ip"; then
+      echo "$ip"
+      return
+    fi
+  done
+}
+
+# Prefer a public --host / DNS A; fall back to detected WAN (NAT VPS, broken DNS).
+advertised_ipv4() {
+  local host_ip wan
+  host_ip="$(resolve_ipv4 "$HOST")"
+  wan="$(detect_wan_ipv4 || true)"
+  if [[ -n "$host_ip" ]] && ! is_rfc1918_ipv4 "$host_ip"; then
+    echo "$host_ip"
+    return
+  fi
+  if [[ -n "$wan" ]]; then
+    echo "$wan"
+    return
+  fi
+  if [[ -n "$host_ip" ]]; then
+    echo "$host_ip"
+  fi
+}
+
+external_ip_line() {
+  local pub localip
+  pub="$(advertised_ipv4)"
+  localip="$(relay_ipv4 || true)"
+  if [[ -n "$pub" && -n "$localip" && "$pub" != "$localip" ]]; then
+    echo "external-ip=${pub}/${localip}"
+  elif [[ -n "$pub" ]]; then
+    echo "external-ip=${pub}"
+  fi
+}
+
+render_turnserver_conf() {
+  local ext_line cert_dir pub localip allowed tls_line relay relay_line ipv6_line
+  ext_line="$(external_ip_line)"
+  cert_dir="${ETC_DIR}/turn-tls"
+  pub="$(advertised_ipv4)"
+  localip="$(relay_ipv4 || true)"
+  allowed=""
+  if [[ -n "$pub" ]]; then
+    allowed="allowed-peer-ip=${pub}"
+  fi
+  if [[ -n "$localip" && "$localip" != "$pub" ]]; then
+    if [[ -n "$allowed" ]]; then
+      allowed="${allowed}"$'\n'"allowed-peer-ip=${localip}"
+    else
+      allowed="allowed-peer-ip=${localip}"
+    fi
+  fi
+  tls_line=""
+  if [[ -n "${TURNS_PORT}" && "${TURNS_PORT}" != "0" ]]; then
+    tls_line="tls-listening-port=${TURNS_PORT}"
+  fi
+  # Never set relay-ip to a 1:1 NAT public address that is not on an iface.
+  relay="${localip}"
+  relay_line=""
+  if [[ -n "$relay" ]]; then
+    relay_line="relay-ip=${relay}"
+  fi
+  ipv6_line=""
+  if [[ "${IPV4_ONLY}" == "1" ]]; then
+    ipv6_line="no-ipv6"$'\n'"keep-address-family"
+  fi
+  cat <<EOF
+# Generated by Rope installer. HMAC secret matches turn_secret in ${ETC_DIR}/config.json.
+# journal: journalctl -u coturn -u rope --no-pager -n 80
+listening-ip=0.0.0.0
+listening-port=${TURN_PORT}
+${tls_line}
+${ext_line}
+${relay_line}
+${allowed}
+${ipv6_line}
+min-port=${RELAY_MIN}
+max-port=${RELAY_MAX}
+realm=rope
+server-name=rope
+fingerprint
+lt-cred-mech
+use-auth-secret
+static-auth-secret=${TURN_SECRET}
+cert=${cert_dir}/cert.pem
+pkey=${cert_dir}/key.pem
+no-tlsv1
+no-tlsv1_1
+no-cli
+no-multicast-peers
+simple-log
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.0.0.0-192.0.0.255
+denied-peer-ip=192.0.2.0-192.0.2.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=198.18.0.0-198.19.255.255
+denied-peer-ip=198.51.100.0-198.51.100.255
+denied-peer-ip=203.0.113.0-203.0.113.255
+denied-peer-ip=::1
+stale-nonce=600
+EOF
+}
+
+if [[ "$PRINT_TURN_CONF" -eq 1 ]]; then
+  [[ -n "$HOST" ]] || usage
+  [[ -n "$TURN_SECRET" ]] || TURN_SECRET="test-secret"
+  render_turnserver_conf
+  exit 0
+fi
 
 [[ -n "$BINARY" && -x "$BINARY" && -n "$HOST" ]] || usage
 
@@ -33,6 +265,105 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
+port_in_use() {
+  local p="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntn 2>/dev/null | awk '{print $4}' | grep -Eq "[.:]${p}$"
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -lnt 2>/dev/null | grep -Eq "[.:]${p} "
+  else
+    return 1
+  fi
+}
+
+# True if something other than coturn/turnserver already owns the TCP port.
+foreign_tcp_port() {
+  local p="$1"
+  local line
+  if ! command -v ss >/dev/null 2>&1; then
+    port_in_use "$p"
+    return
+  fi
+  line="$(ss -lntp 2>/dev/null | awk -v p=":${p}" '$4 ~ p"$" { print; exit }')"
+  [[ -z "$line" ]] && return 1
+  if echo "$line" | grep -Eqi 'turnserver|coturn'; then
+    return 1
+  fi
+  return 0
+}
+
+json_get() {
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],"") or "")' "$1" "$2"
+}
+
+write_ice_config() {
+  local path="$1" host="$2" secret="$3" turn_port="$4" turns_port="$5"
+  local pub
+  pub="$(advertised_ipv4)"
+  python3 - "$path" "$host" "$secret" "$turn_port" "$turns_port" "$TURN_TTL" "$pub" <<'PY'
+import json, sys, ipaddress
+path, host, secret, turn_port, turns_port, ttl, pub = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]), sys.argv[7]
+
+def private_ip(s):
+    try:
+        ip = ipaddress.ip_address(s)
+    except ValueError:
+        return False
+    return bool(ip.version == 4 and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_unspecified))
+
+with open(path) as f:
+    cfg = json.load(f)
+# SSH-to-10.x would otherwise advertise unreachable TURN URLs.
+if private_ip(host) and pub and not private_ip(pub):
+    cfg["public_host"] = pub
+else:
+    cfg["public_host"] = host
+if not cfg.get("turn_secret"):
+    cfg["turn_secret"] = secret
+cfg["turn_port"] = turn_port
+cfg["turns_port"] = turns_port
+cfg["turn_ttl_seconds"] = ttl
+if pub:
+    cfg["public_ip"] = pub
+with open(path, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PY
+}
+
+write_turn_status() {
+  local ok="$1" err="$2" listen="$3" ext="$4"
+  python3 - "$ETC_DIR/turn-status.json" "$ok" "$err" "$TURN_PORT" "$TURNS_PORT" "$listen" "$ext" <<'PY'
+import json, sys
+path, ok, err, turn_port, turns_port, listen, ext = sys.argv[1:8]
+doc = {
+    "ok": ok in ("1", "true", "True"),
+    "error": err,
+    "turn_port": int(turn_port or 0),
+    "turns_port": int(turns_port or 0),
+    "listen": listen,
+    "external_ip": ext,
+}
+with open(path, "w") as f:
+    json.dump(doc, f, indent=2)
+    f.write("\n")
+PY
+  chown root:"$SERVICE_USER" "$ETC_DIR/turn-status.json" 2>/dev/null || true
+  chmod 644 "$ETC_DIR/turn-status.json"
+}
+
+choose_turns_port() {
+  # Prefer 443 when it is free (or already ours). Caddy/nginx → 5349.
+  if foreign_tcp_port 443; then
+    TURNS_PORT="5349"
+  else
+    TURNS_PORT="443"
+  fi
+  if [[ "$TURNS_PORT" == "5349" ]] && foreign_tcp_port 5349; then
+    TURNS_PORT="0"
+  fi
+}
+
 if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
@@ -40,19 +371,29 @@ fi
 mkdir -p "$BIN_DIR" "$DATA_DIR" "$ETC_DIR/tls"
 install -o root -g root -m 0755 "$BINARY" "$BIN_DIR/rope-server"
 
-if [[ "$UPGRADE" -eq 1 && -f "$ETC_DIR/config.json" ]]; then
-  systemctl daemon-reload
-  systemctl restart rope
-  echo "upgraded binary; data and config preserved"
-  exit 0
+already_installed=0
+if [[ -f "$ETC_DIR/config.json" || -f "$DATA_DIR/data.db" ]]; then
+  already_installed=1
+fi
+
+if [[ "$REINSTALL" -eq 1 && "$already_installed" -eq 1 ]]; then
+  systemctl stop rope 2>/dev/null || true
+  rm -f "$DATA_DIR/data.db" "$DATA_DIR/data.db-wal" "$DATA_DIR/data.db-shm"
+  rm -f "$ETC_DIR/config.json"
+  echo "wiped previous Rope data (owner, members, mailbox)"
+  already_installed=0
 fi
 
 if [[ ! -f "$ETC_DIR/tls/cert.pem" || ! -f "$ETC_DIR/tls/key.pem" ]]; then
+  SAN="DNS:${HOST}"
+  if is_ipv4 "$HOST"; then
+    SAN="IP:${HOST}"
+  fi
   openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \
     -keyout "$ETC_DIR/tls/key.pem" \
     -out "$ETC_DIR/tls/cert.pem" \
     -subj "/CN=${HOST}" \
-    -addext "subjectAltName=DNS:${HOST},IP:${HOST}" 2>/dev/null \
+    -addext "subjectAltName=${SAN}" 2>/dev/null \
     || openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \
       -keyout "$ETC_DIR/tls/key.pem" \
       -out "$ETC_DIR/tls/cert.pem" \
@@ -61,9 +402,12 @@ fi
 
 FINGERPRINT="$(openssl x509 -in "$ETC_DIR/tls/cert.pem" -outform DER | sha256sum | awk '{print $1}')"
 
+choose_turns_port
+
 if [[ ! -f "$ETC_DIR/config.json" ]]; then
   SERVER_ID="$(openssl rand -hex 16)"
   SETUP_TOKEN="$(openssl rand -hex 24)"
+  TURN_SECRET="$(openssl rand -hex 32)"
   cat > "$ETC_DIR/config.json" <<EOF
 {
   "listen": "0.0.0.0:${PORT}",
@@ -75,13 +419,28 @@ if [[ ! -f "$ETC_DIR/config.json" ]]; then
   "mailbox_ttl_seconds": 604800,
   "max_envelope_bytes": 65536,
   "allow_http": false,
-  "fingerprint": "${FINGERPRINT}"
+  "fingerprint": "${FINGERPRINT}",
+  "public_host": "${HOST}",
+  "public_ip": "$(advertised_ipv4)",
+  "turn_secret": "${TURN_SECRET}",
+  "turn_port": ${TURN_PORT},
+  "turns_port": ${TURNS_PORT},
+  "turn_ttl_seconds": ${TURN_TTL}
 }
 EOF
 else
-  SETUP_TOKEN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["setup_token"])' "$ETC_DIR/config.json")"
-  SERVER_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["server_id"])' "$ETC_DIR/config.json")"
+  SETUP_TOKEN="$(json_get "$ETC_DIR/config.json" "setup_token")"
+  SERVER_ID="$(json_get "$ETC_DIR/config.json" "server_id")"
+  TURN_SECRET="$(json_get "$ETC_DIR/config.json" "turn_secret")"
+  if [[ -z "$TURN_SECRET" ]]; then
+    TURN_SECRET="$(openssl rand -hex 32)"
+  fi
 fi
+
+# Persist ICE fields before coturn starts so a bind failure still leaves matching secrets.
+write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+# Re-read secret in case config already had one.
+TURN_SECRET="$(json_get "$ETC_DIR/config.json" "turn_secret")"
 
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
 chown -R root:"$SERVICE_USER" "$ETC_DIR"
@@ -116,24 +475,369 @@ WantedBy=multi-user.target
 EOF
 fi
 
-if command -v ufw >/dev/null 2>&1; then
-  ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
+# Starting rope should also start coturn; stopping rope must NOT kill coturn.
+mkdir -p /etc/systemd/system/rope.service.d
+cat > /etc/systemd/system/rope.service.d/turn.conf <<'EOF'
+[Unit]
+Wants=coturn.service
+After=network-online.target
+EOF
+
+write_coturn_dropin() {
+  local unit="$1"
+  local dest_dir="/etc/systemd/system/${unit}.service.d"
+  mkdir -p "$dest_dir"
+  local src
+  src="$(cd "$(dirname "$0")/.." && pwd)/systemd/coturn.service.d/rope.conf"
+  if [[ -f "$src" ]]; then
+    install -m 0644 "$src" "$dest_dir/rope.conf"
+    return
+  fi
+  cat > "$dest_dir/rope.conf" <<'EOF'
+[Unit]
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=turnserver
+Group=turnserver
+Restart=on-failure
+RestartSec=3
+RuntimeDirectory=turnserver
+RuntimeDirectoryMode=0750
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=coturn
+ExecStart=
+ExecStart=/usr/bin/turnserver -c /etc/turnserver.conf --pidfile=/run/turnserver/turnserver.pid --daemon=off --log-file=stdout --simple-log
+EOF
+}
+
+turn_unit() {
+  if systemctl list-unit-files coturn.service >/dev/null 2>&1 && \
+     systemctl list-unit-files coturn.service 2>/dev/null | grep -q coturn.service; then
+    echo coturn
+  elif systemctl list-unit-files turnserver.service >/dev/null 2>&1 && \
+       systemctl list-unit-files turnserver.service 2>/dev/null | grep -q turnserver.service; then
+    echo turnserver
+  else
+    echo coturn
+  fi
+}
+
+apply_turn_conf() {
+  umask 077
+  render_turnserver_conf > /etc/turnserver.conf
+  if id -u turnserver >/dev/null 2>&1; then
+    chown root:turnserver /etc/turnserver.conf
+  else
+    chown root:root /etc/turnserver.conf
+  fi
+  chmod 640 /etc/turnserver.conf
+  cp /etc/turnserver.conf "$ETC_DIR/turnserver.conf"
+  if id -u turnserver >/dev/null 2>&1; then
+    chown root:turnserver "$ETC_DIR/turnserver.conf"
+  fi
+  chmod 640 "$ETC_DIR/turnserver.conf"
+}
+
+coturn_active() {
+  systemctl is-active --quiet coturn || systemctl is-active --quiet turnserver
+}
+
+restart_coturn() {
+  local unit
+  unit="$(turn_unit)"
+  write_coturn_dropin "$unit"
+  if [[ "$unit" == "coturn" ]]; then
+    write_coturn_dropin turnserver
+  fi
+  systemctl daemon-reload || return 1
+  systemctl enable "$unit" >/dev/null 2>&1 || true
+  systemctl restart "$unit" || return 1
+}
+
+listening_on() {
+  local p="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntun 2>/dev/null | awk '{print $5}' | grep -Eq "[.:]${p}$"
+  else
+    port_in_use "$p"
+  fi
+}
+
+wait_coturn_ports() {
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if coturn_active && listening_on "$TURN_PORT"; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+turns_bound() {
+  [[ "$TURNS_PORT" == "0" || -z "$TURNS_PORT" ]] && return 0
+  listening_on "$TURNS_PORT"
+}
+
+install_coturn() {
+  if ! command -v turnserver >/dev/null 2>&1 || ! command -v ip >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    if command -v apt-get >/dev/null 2>&1; then
+      apt-get update -qq
+      apt-get install -y -qq coturn iproute2
+    else
+      echo "ROPE_TURN_SKIPPED=no-apt" >&2
+      write_turn_status 0 "нет apt, coturn не установлен" "" ""
+      return 1
+    fi
+  fi
+  if ! command -v turnserver >/dev/null 2>&1; then
+    echo "ROPE_TURN_SKIPPED=no-turnserver" >&2
+    write_turn_status 0 "пакет coturn установлен, бинарника turnserver нет" "" ""
+    return 1
+  fi
+
+  if ! id -u turnserver >/dev/null 2>&1; then
+    useradd --system --home /var/lib/turnserver --shell /usr/sbin/nologin turnserver 2>/dev/null || true
+  fi
+  if id -u turnserver >/dev/null 2>&1; then
+    usermod -aG "$SERVICE_USER" turnserver 2>/dev/null || true
+  fi
+
+  mkdir -p "$ETC_DIR/turn-tls" /var/log/turnserver /var/lib/turnserver
+  local cert_user=root
+  local cert_group="$SERVICE_USER"
+  if id -u turnserver >/dev/null 2>&1; then
+    cert_user=turnserver
+    cert_group=turnserver
+  fi
+  install -o "$cert_user" -g "$cert_group" -m 644 "$ETC_DIR/tls/cert.pem" "$ETC_DIR/turn-tls/cert.pem"
+  install -o "$cert_user" -g "$cert_group" -m 640 "$ETC_DIR/tls/key.pem" "$ETC_DIR/turn-tls/key.pem"
+  if id -u turnserver >/dev/null 2>&1; then
+    chown turnserver:turnserver /var/log/turnserver /var/lib/turnserver 2>/dev/null || true
+  fi
+
+  if [[ -f /etc/default/coturn ]]; then
+    if grep -q '^TURNSERVER_ENABLED=' /etc/default/coturn; then
+      sed -i 's/^TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+    else
+      echo "TURNSERVER_ENABLED=1" >> /etc/default/coturn
+    fi
+  else
+    echo "TURNSERVER_ENABLED=1" > /etc/default/coturn
+  fi
+
+  apply_turn_conf
+  log "HMAC static-auth-secret written to /etc/turnserver.conf; same value as turn_secret in ${ETC_DIR}/config.json"
+  log "coturn listen=0.0.0.0 turn=${TURN_PORT}/udp+tcp turns=${TURNS_PORT} $(external_ip_line) ipv4_only=${IPV4_ONLY} ttl=${TURN_TTL}s"
+  if ! restart_coturn; then
+    log "coturn restart failed on TURNS ${TURNS_PORT} (journalctl -u coturn -n 50 --no-pager)"
+  fi
+  wait_coturn_ports || true
+
+  if ! wait_coturn_ports && [[ "$TURNS_PORT" == "443" ]]; then
+    log "TURNS 443 bind failed; falling back to 5349"
+    TURNS_PORT="5349"
+    write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+    apply_turn_conf
+    restart_coturn || true
+    wait_coturn_ports || true
+  fi
+
+  if ! wait_coturn_ports && [[ "$TURNS_PORT" == "5349" ]]; then
+    log "TURNS 5349 bind failed; advertising UDP/TCP 3478 only"
+    TURNS_PORT="0"
+    write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+    apply_turn_conf
+    restart_coturn || true
+    wait_coturn_ports || true
+  fi
+
+  if wait_coturn_ports && [[ "$TURNS_PORT" != "0" ]] && ! turns_bound; then
+    if [[ "$TURNS_PORT" == "443" ]]; then
+      log "3478 is up but TURNS 443 did not bind; trying 5349"
+      TURNS_PORT="5349"
+      write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+      apply_turn_conf
+      restart_coturn || true
+      wait_coturn_ports || true
+    fi
+    if [[ "$TURNS_PORT" != "0" ]] && ! turns_bound; then
+      log "TURNS ${TURNS_PORT} still not bound; GET /v1/info will advertise 3478 only"
+      TURNS_PORT="0"
+      write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+      apply_turn_conf
+      restart_coturn || true
+      wait_coturn_ports || true
+    fi
+  fi
+
+  local ext
+  ext="$(external_ip_line | sed 's/^external-ip=//')"
+  if wait_coturn_ports; then
+    write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+    write_turn_status 1 "" "0.0.0.0" "$ext"
+    log "coturn listening 0.0.0.0:${TURN_PORT} turns=${TURNS_PORT} external-ip=${ext}"
+    echo "ROPE_TURN_OK"
+    echo "TURN_PORT=${TURN_PORT}"
+    echo "TURNS_PORT=${TURNS_PORT}"
+    echo "TURN_LISTEN=0.0.0.0"
+    echo "TURN_EXTERNAL_IP=${ext}"
+    return 0
+  fi
+
+  local err="coturn не запустился"
+  if ! command -v turnserver >/dev/null 2>&1; then
+    err="нет turnserver"
+  elif foreign_tcp_port "$TURN_PORT"; then
+    err="порт ${TURN_PORT} занят"
+  elif [[ "$TURNS_PORT" != "0" ]] && foreign_tcp_port "$TURNS_PORT"; then
+    err="TURNS порт ${TURNS_PORT} занят"
+  elif [[ ! -f "$ETC_DIR/turn-tls/cert.pem" || ! -f "$ETC_DIR/turn-tls/key.pem" ]]; then
+    err="нет TLS-сертификата для TURNS"
+  else
+    err="coturn не слушает 0.0.0.0:${TURN_PORT} (journalctl -u coturn -n 80 --no-pager)"
+  fi
+  echo "ROPE_TURN_SKIPPED=inactive" >&2
+  echo "ROPE_TURN_ERROR=${err}" >&2
+  log "${err}"
+  systemctl status coturn --no-pager >&2 || systemctl status turnserver --no-pager >&2 || true
+  TURNS_PORT="0"
+  write_ice_config "$ETC_DIR/config.json" "$HOST" "$TURN_SECRET" "$TURN_PORT" "$TURNS_PORT"
+  write_turn_status 0 "$err" "" "$ext"
+  return 1
+}
+
+TURN_OK=0
+TURN_ERROR=""
+if install_coturn; then
+  TURN_OK=1
+else
+  TURN_ERROR="coturn not running"
+  log "coturn not listening; turn_secret is still in config.json (HMAC matches turnserver.conf)"
 fi
 
-systemctl daemon-reload
-systemctl enable --now rope
+# Re-read ports after possible 443→5349 fallback.
+TURN_PORT="$(json_get "$ETC_DIR/config.json" "turn_port")"
+TURNS_PORT="$(json_get "$ETC_DIR/config.json" "turns_port")"
+[[ -n "$TURN_PORT" ]] || TURN_PORT="3478"
 
+# ufw allow is a no-op while ufw is inactive. Typical RU VPS images use
+# iptables/nft DROP and never open 3478 / 49152–49311 — ALLOCATE then hangs
+# on phones behind CGNAT while /health still says turn_running=true.
+open_turn_ports() {
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
+    ufw allow "${TURN_PORT}/tcp" >/dev/null 2>&1 || true
+    ufw allow "${TURN_PORT}/udp" >/dev/null 2>&1 || true
+    ufw allow "443/tcp" >/dev/null 2>&1 || true
+    ufw allow "5349/tcp" >/dev/null 2>&1 || true
+    ufw allow "${RELAY_MIN}:${RELAY_MAX}/udp" >/dev/null 2>&1 || true
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --permanent --add-port="${PORT}/tcp" >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port="${TURN_PORT}/tcp" >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port="${TURN_PORT}/udp" >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port=443/tcp >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port=5349/tcp >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port="${RELAY_MIN}-${RELAY_MAX}/udp" >/dev/null 2>&1 || true
+    firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+  iptables_accept() {
+    local proto="$1" spec="$2"
+    command -v iptables >/dev/null 2>&1 || return 0
+    iptables -C INPUT -p "$proto" $spec -j ACCEPT >/dev/null 2>&1 && return 0
+    iptables -I INPUT 1 -p "$proto" $spec -j ACCEPT >/dev/null 2>&1 || true
+  }
+  iptables_accept tcp "--dport ${PORT}"
+  iptables_accept tcp "--dport ${TURN_PORT}"
+  iptables_accept udp "--dport ${TURN_PORT}"
+  iptables_accept tcp "--dport 443"
+  iptables_accept tcp "--dport 5349"
+  iptables_accept udp "--dport ${RELAY_MIN}:${RELAY_MAX}"
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save >/dev/null 2>&1 || true
+  elif [[ -d /etc/iptables ]] && command -v iptables-save >/dev/null 2>&1; then
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+  fi
+}
+open_turn_ports
+
+chmod 640 "$ETC_DIR/config.json"
+systemctl daemon-reload
+# Always restart rope so /v1/info picks up ice_servers; never wipe data.db here.
+log "restarting rope (data.db kept) and ensuring coturn is wanted"
+systemctl enable rope >/dev/null 2>&1 || true
+systemctl restart rope
+if [[ "$TURN_OK" -eq 1 ]]; then
+  restart_coturn || true
+  wait_coturn_ports || true
+fi
+
+HEALTH_JSON=""
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -ksS "https://127.0.0.1:${PORT}/health" | grep -q '"ok"'; then
+  HEALTH_JSON="$(curl -ksS "https://127.0.0.1:${PORT}/health" || true)"
+  if echo "$HEALTH_JSON" | grep -q '"ok"'; then
     break
   fi
   sleep 1
 done
 
-if ! curl -ksS "https://127.0.0.1:${PORT}/health" | grep -q '"ok"'; then
+if ! echo "$HEALTH_JSON" | grep -q '"ok"'; then
   echo "health check failed" >&2
   systemctl status rope --no-pager || true
   exit 1
+fi
+
+if [[ "$TURN_OK" -eq 1 ]]; then
+  ALLOC_OK="$(python3 -c 'import json,sys
+try:
+    d=json.loads(sys.stdin.read() or "{}")
+    print("1" if d.get("turn_allocate_ok") else "0")
+except Exception:
+    print("0")' <<<"$HEALTH_JSON")"
+  ALLOC_ERR="$(python3 -c 'import json,sys
+try:
+    d=json.loads(sys.stdin.read() or "{}")
+    print(d.get("turn_error") or "")
+except Exception:
+    print("")' <<<"$HEALTH_JSON")"
+  RELAYED="$(python3 -c 'import json,sys
+try:
+    d=json.loads(sys.stdin.read() or "{}")
+    print(d.get("turn_relayed_ip") or "")
+except Exception:
+    print("")' <<<"$HEALTH_JSON")"
+  if [[ "$ALLOC_OK" != "1" ]]; then
+    [[ -z "$ALLOC_ERR" ]] && ALLOC_ERR="coturn слушает, ALLOCATE не прошёл"
+    log "TURN self-test failed: ${ALLOC_ERR}"
+    echo "ROPE_TURN_ALLOCATE_FAILED=${ALLOC_ERR}" >&2
+    write_turn_status 0 "$ALLOC_ERR" "0.0.0.0" "$(external_ip_line | sed 's/^external-ip=//')"
+  else
+    log "TURN self-test ALLOCATE ok relayed=${RELAYED}"
+    echo "ROPE_TURN_ALLOCATE_OK"
+    [[ -n "$RELAYED" ]] && echo "TURN_RELAYED_IP=${RELAYED}"
+  fi
+fi
+
+if [[ "$already_installed" -eq 1 || "$UPGRADE" -eq 1 ]]; then
+  echo "upgraded binary; data and config preserved"
+  echo "ROPE_UPGRADE_OK"
+  if [[ "$TURN_OK" -eq 1 ]]; then
+    echo "ROPE_TURN_OK"
+    echo "TURN_PORT=${TURN_PORT}"
+    echo "TURNS_PORT=${TURNS_PORT}"
+  else
+    echo "ROPE_TURN_SKIPPED=inactive"
+    [[ -n "$TURN_ERROR" ]] && echo "ROPE_TURN_ERROR=${TURN_ERROR}"
+  fi
+  exit 0
 fi
 
 echo "ROPE_INSTALL_OK"
@@ -142,3 +846,10 @@ echo "PORT=${PORT}"
 echo "SERVER_ID=${SERVER_ID}"
 echo "FINGERPRINT=${FINGERPRINT}"
 echo "SETUP_TOKEN=${SETUP_TOKEN}"
+if [[ "$TURN_OK" -eq 1 ]]; then
+  echo "ROPE_TURN_OK"
+  echo "TURN_PORT=${TURN_PORT}"
+  echo "TURNS_PORT=${TURNS_PORT}"
+else
+  echo "ROPE_TURN_SKIPPED=inactive"
+fi

@@ -6,7 +6,7 @@ Binary, little-endian. The Go relay parses the header and verifies the sender si
 offset  size  field
 0       4     magic = 0x52 0x4F 0x50 0x45 ("ROPE")
 4       2     version = 1
-6       1     type (1 = text)
+6       1     type (1 = text, 2 = media, 3 = group_text, 4 = call, 5 = receipt)
 7       1     reserved = 0
 8       16    message_id (UUID)
 24      8     timestamp_ms (unix epoch, milliseconds)
@@ -31,13 +31,54 @@ Maximum `ciphertext_len` accepted by the server: 65536.
 3. AEAD: XChaCha20-Poly1305
 4. AAD: the envelope header through `recipient_id` inclusive (bytes `[0, 96)`)
 
-Inner plaintext for type=1:
+Inner plaintext for type=1 (`text`):
 
 ```
 1 byte  payload_version = 1
 4 bytes text_utf8_len (little-endian u32)
 N bytes UTF-8 text
 ```
+
+Unknown `type` values are rejected by the Rust core (`known_envelope_type`). The relay still treats the blob as opaque.
+
+### type=2 media
+
+UTF-8 JSON inside the AEAD (not visible to the server):
+
+```json
+{
+  "kind": "voice|image|file",
+  "object_id": "uuid from POST /v1/objects",
+  "sha256": "hex of ciphertext",
+  "key_b64": "32-byte object key",
+  "mime": "audio/mp4",
+  "name": "voice.m4a",
+  "size": 12345,
+  "duration_ms": 3200,
+  "group_id": null
+}
+```
+
+The object store holds only ciphertext. The object key never appears in HTTP headers.
+
+### type=3 group_text
+
+```json
+{ "g": "group_id", "t": "text", "e": 2 }
+```
+
+### Encrypted objects (`ROCH`)
+
+```
+4 magic "ROCH"
+2 version = 1
+4 chunk_size
+4 chunk_count
+8 plaintext_len
+then per chunk: 24 nonce + 4 ct_len + ciphertext
+```
+
+Chunk key = HKDF-SHA256(ikm=object_key, salt=chunk_index, info="rope-obj-v1"). Max plaintext 25 MiB.
 
 ## Identity blobs
 

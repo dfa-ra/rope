@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/dfa-ra/rope/server/go/internal/authz"
 	"github.com/dfa-ra/rope/server/go/internal/config"
 	"github.com/dfa-ra/rope/server/go/internal/db"
 	"github.com/dfa-ra/rope/server/go/internal/envelope"
-	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
 )
 
@@ -54,6 +54,11 @@ func newDevice(t *testing.T) testDevice {
 
 func testServer(t *testing.T) (*Server, *httptest.Server, string) {
 	t.Helper()
+	return testServerCfg(t, nil)
+}
+
+func testServerCfg(t *testing.T, tweak func(*config.Config)) (*Server, *httptest.Server, string) {
+	t.Helper()
 	dir := t.TempDir()
 	store, err := db.Open(filepath.Join(dir, "data.db"))
 	if err != nil {
@@ -66,6 +71,9 @@ func testServer(t *testing.T) (*Server, *httptest.Server, string) {
 	cfg.ServerID = "test-server"
 	cfg.SetupToken = "setup-secret"
 	cfg.MailboxTTLSeconds = 60
+	if tweak != nil {
+		tweak(&cfg)
+	}
 	if err := store.EnsureMeta(cfg.ServerID, config.ServerVersion, config.ProtocolVersion); err != nil {
 		t.Fatal(err)
 	}
@@ -119,9 +127,19 @@ func TestHealthAndInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var health map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatal(resp.StatusCode)
+	}
+	if health["ok"] != true {
+		t.Fatalf("health %+v", health)
+	}
+	if health["turn_running"] != false {
+		t.Fatalf("debug server must not claim coturn is listening: %+v", health)
 	}
 	resp, err = http.Get(hs.URL + "/v1/info")
 	if err != nil {
@@ -137,6 +155,157 @@ func TestHealthAndInfo(t *testing.T) {
 	}
 	if info["fingerprint"] != config.HTTPDevFingerprint() {
 		t.Fatalf("fp %v", info["fingerprint"])
+	}
+	if _, ok := info["ice_servers"]; ok {
+		t.Fatal("debug server without TURN must not advertise ice_servers")
+	}
+}
+
+func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "198.51.100.20"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		ServerID   string             `json:"server_id"`
+		PublicIP   string             `json:"public_ip"`
+		IceServers []config.IceServer `json:"ice_servers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if len(info.IceServers) != 2 {
+		t.Fatalf("%+v", info.IceServers)
+	}
+	if info.IceServers[0].URLs[0] != "stun:198.51.100.20:3478" {
+		t.Fatalf("stun %v", info.IceServers[0].URLs)
+	}
+	turn := info.IceServers[1]
+	if turn.Username == "" || turn.Credential == "" {
+		t.Fatal("missing time-limited TURN creds")
+	}
+	if turn.Credential != config.TurnCredential("hmac-from-install", turn.Username) {
+		t.Fatal("HMAC mismatch")
+	}
+	joined := strings.Join(turn.URLs, " ")
+	if !strings.Contains(joined, "turns:198.51.100.20:443?transport=tcp") {
+		t.Fatalf("missing turns: %s", joined)
+	}
+	if !strings.Contains(joined, "turn:198.51.100.20:3478") {
+		t.Fatalf("missing turn: %s", joined)
+	}
+	if !strings.HasSuffix(turn.Username, ":rope") {
+		t.Fatalf("HMAC user %s", turn.Username)
+	}
+	if turn.Hostname != "" {
+		t.Fatalf("IP-only host must omit hostname: %q", turn.Hostname)
+	}
+	if info.PublicIP != "198.51.100.20" {
+		t.Fatalf("public_ip %q", info.PublicIP)
+	}
+	resp, err = http.Get(hs.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var health map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if health["ok"] != true {
+		t.Fatalf("health %+v", health)
+	}
+	if _, ok := health["turn_running"]; !ok {
+		t.Fatal("health must report turn_running (coturn listening), not only secret presence")
+	}
+}
+
+func TestInfoAdvertises5349Not443(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "198.51.100.20"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 5349
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		IceServers []config.IceServer `json:"ice_servers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(info.IceServers[1].URLs, " ")
+	if strings.Contains(joined, ":443") {
+		t.Fatalf("443 advertised: %s", joined)
+	}
+	if !strings.Contains(joined, "turns:198.51.100.20:5349?transport=tcp") {
+		t.Fatalf("missing 5349: %s", joined)
+	}
+}
+
+func TestInfoHostnameAndPublicIP(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "vps.example"
+		cfg.PublicIP = "203.0.113.9"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		PublicIP   string             `json:"public_ip"`
+		IceServers []config.IceServer `json:"ice_servers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if info.PublicIP != "203.0.113.9" {
+		t.Fatalf("public_ip %q", info.PublicIP)
+	}
+	if len(info.IceServers) != 2 {
+		t.Fatalf("%+v", info.IceServers)
+	}
+	if info.IceServers[0].Hostname != "vps.example" || info.IceServers[1].Hostname != "vps.example" {
+		t.Fatalf("hostname %+v", info.IceServers)
+	}
+	if !strings.Contains(strings.Join(info.IceServers[1].URLs, " "), "turns:vps.example:443") {
+		t.Fatalf("urls %+v", info.IceServers[1].URLs)
+	}
+
+	_, hsIP, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "203.0.113.9"
+		cfg.TLSHostname = "rope.example"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err = http.Get(hsIP.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if info.PublicIP != "203.0.113.9" {
+		t.Fatalf("ip-host public_ip %q", info.PublicIP)
+	}
+	if info.IceServers[1].Hostname != "rope.example" {
+		t.Fatalf("SNI when urls are IP: %+v", info.IceServers[1])
+	}
+	if !strings.Contains(info.IceServers[1].URLs[0], "203.0.113.9") {
+		t.Fatalf("urls stay on IP: %v", info.IceServers[1].URLs)
 	}
 }
 
@@ -165,7 +334,7 @@ func TestInviteSingleUseAndExpiry(t *testing.T) {
 	bootstrap(t, hs, inv.Token, guest, "guest")
 	guest2 := newDevice(t)
 	body2, _ := json.Marshal(map[string]any{
-		"token": inv.Token, "public_identity": guest2.blob, "device_id": guest2.id,
+		"token": inv.Token, "display_name": "guest2", "public_identity": guest2.blob, "device_id": guest2.id,
 	})
 	resp, err = http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body2))
 	if err != nil {
@@ -189,7 +358,7 @@ func TestInviteSingleUseAndExpiry(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	late := newDevice(t)
 	body2, _ = json.Marshal(map[string]any{
-		"token": inv.Token, "public_identity": late.blob, "device_id": late.id,
+		"token": inv.Token, "display_name": "late", "public_identity": late.blob, "device_id": late.id,
 	})
 	resp, err = http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body2))
 	if err != nil {
@@ -205,7 +374,7 @@ func TestWrongSetupTokenRejected(t *testing.T) {
 	_, hs, _ := testServer(t)
 	d := newDevice(t)
 	body, _ := json.Marshal(map[string]any{
-		"token": "nope", "public_identity": d.blob, "device_id": d.id,
+		"token": "nope", "display_name": "nope", "public_identity": d.blob, "device_id": d.id,
 	})
 	resp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -259,7 +428,9 @@ func TestMailboxDeliverAndDeleteWithoutPlaintext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var inv struct{ Token string `json:"token"` }
+	var inv struct {
+		Token string `json:"token"`
+	}
 	_ = json.NewDecoder(resp.Body).Decode(&inv)
 	resp.Body.Close()
 	bootstrap(t, hs, inv.Token, bob, "bob")
@@ -279,17 +450,11 @@ func TestMailboxDeliverAndDeleteWithoutPlaintext(t *testing.T) {
 	if err := wsjson.Write(ctx, aliceWS, map[string]any{"type": "send", "envelope": env}); err != nil {
 		t.Fatal(err)
 	}
-	var queued wsOut
-	if err := wsjson.Read(ctx, aliceWS, &queued); err != nil {
-		t.Fatal(err)
-	}
+	queued := readSkipPresence(t, ctx, aliceWS)
 	if queued.Type != "queued" {
 		t.Fatalf("queued got %+v", queued)
 	}
-	var delivered wsOut
-	if err := wsjson.Read(ctx, bobWS, &delivered); err != nil {
-		t.Fatal(err)
-	}
+	delivered := readSkipPresence(t, ctx, bobWS)
 	if delivered.Type != "deliver" {
 		t.Fatalf("deliver got %+v", delivered)
 	}
@@ -306,10 +471,7 @@ func TestMailboxDeliverAndDeleteWithoutPlaintext(t *testing.T) {
 	if err := wsjson.Write(ctx, bobWS, map[string]any{"type": "ack", "message_id": delivered.MessageID}); err != nil {
 		t.Fatal(err)
 	}
-	var done wsOut
-	if err := wsjson.Read(ctx, aliceWS, &done); err != nil {
-		t.Fatal(err)
-	}
+	done := readSkipPresence(t, ctx, aliceWS)
 	if done.Type != "delivered" {
 		t.Fatalf("delivered got %+v", done)
 	}
@@ -332,7 +494,9 @@ func TestOfflineMailboxThenFlush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var inv struct{ Token string `json:"token"` }
+	var inv struct {
+		Token string `json:"token"`
+	}
 	_ = json.NewDecoder(resp.Body).Decode(&inv)
 	resp.Body.Close()
 	bootstrap(t, hs, inv.Token, bob, "bob")
@@ -346,10 +510,7 @@ func TestOfflineMailboxThenFlush(t *testing.T) {
 	if err := wsjson.Write(ctx, aliceWS, map[string]any{"type": "send", "envelope": env}); err != nil {
 		t.Fatal(err)
 	}
-	var queued wsOut
-	if err := wsjson.Read(ctx, aliceWS, &queued); err != nil {
-		t.Fatal(err)
-	}
+	queued := readSkipPresence(t, ctx, aliceWS)
 	if queued.Type != "queued" {
 		t.Fatalf("%+v", queued)
 	}
@@ -360,12 +521,117 @@ func TestOfflineMailboxThenFlush(t *testing.T) {
 
 	bobWS := dialWS(t, ctx, hs, bob)
 	defer bobWS.Close(websocket.StatusNormalClosure, "")
-	var first wsOut
-	if err := wsjson.Read(ctx, bobWS, &first); err != nil {
-		t.Fatal(err)
-	}
+	first := readSkipPresence(t, ctx, bobWS)
 	if first.Type != "deliver" {
 		t.Fatalf("expected deliver on reconnect, got %+v", first)
+	}
+}
+
+func TestUniqueLoginRequired(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	body, _ := json.Marshal(map[string]any{
+		"token": setup, "display_name": "", "public_identity": owner.blob, "device_id": owner.id,
+	})
+	resp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 400 {
+		t.Fatalf("empty login wanted 400 got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	bootstrap(t, hs, setup, owner, "Anna")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	dup := newDevice(t)
+	body, _ = json.Marshal(map[string]any{
+		"token": inv.Token, "display_name": "anna", "public_identity": dup.blob, "device_id": dup.id,
+	})
+	resp, err = http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 409 {
+		t.Fatalf("duplicate login wanted 409 got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+func TestPresenceBroadcast(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+
+	bobWS := dialWS(t, ctx, hs, bob)
+	var sawBob bool
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !sawBob {
+		var msg wsOut
+		rctx, cancel := context.WithTimeout(ctx, time.Second)
+		err := wsjson.Read(rctx, aliceWS, &msg)
+		cancel()
+		if err != nil {
+			continue
+		}
+		if msg.Type == "presence" {
+			for _, id := range msg.Devices {
+				if id == bob.id {
+					sawBob = true
+				}
+			}
+		}
+	}
+	if !sawBob {
+		t.Fatal("alice did not see bob come online")
+	}
+	_ = bobWS.Close(websocket.StatusNormalClosure, "")
+	sawOffline := false
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !sawOffline {
+		var msg wsOut
+		rctx, cancel := context.WithTimeout(ctx, time.Second)
+		err := wsjson.Read(rctx, aliceWS, &msg)
+		cancel()
+		if err != nil {
+			continue
+		}
+		if msg.Type == "presence" {
+			sawOffline = true
+			for _, id := range msg.Devices {
+				if id == bob.id {
+					sawOffline = false
+				}
+			}
+		}
+	}
+	if !sawOffline {
+		t.Fatal("alice did not see bob go offline")
 	}
 }
 
@@ -393,6 +659,21 @@ func dialWS(t *testing.T, ctx context.Context, hs *httptest.Server, d testDevice
 		t.Fatal(err)
 	}
 	return c
+}
+
+func readSkipPresence(t *testing.T, ctx context.Context, c *websocket.Conn) wsOut {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	for {
+		var msg wsOut
+		if err := wsjson.Read(ctx, c, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg.Type != "presence" {
+			return msg
+		}
+	}
 }
 
 func drainHello(t *testing.T, ctx context.Context, c *websocket.Conn) {

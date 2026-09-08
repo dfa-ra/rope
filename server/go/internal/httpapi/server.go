@@ -19,6 +19,7 @@ import (
 	"github.com/dfa-ra/rope/server/go/internal/config"
 	"github.com/dfa-ra/rope/server/go/internal/db"
 	"github.com/dfa-ra/rope/server/go/internal/envelope"
+	"github.com/dfa-ra/rope/server/go/internal/login"
 	"github.com/dfa-ra/rope/server/go/internal/ratelimit"
 	"github.com/go-chi/chi/v5"
 	"strconv"
@@ -29,13 +30,13 @@ import (
 )
 
 type Server struct {
-	Cfg    config.Config
-	Store  *db.Store
-	Log    *log.Logger
-	Hub    *Hub
-	Limit  *ratelimit.Limiter
-	FP     string
-	setup  string
+	Cfg   config.Config
+	Store *db.Store
+	Log   *log.Logger
+	Hub   *Hub
+	Limit *ratelimit.Limiter
+	FP    string
+	setup string
 }
 
 func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
@@ -70,8 +71,21 @@ func (s *Server) Router() http.Handler {
 	r.Get("/v1/admin/status", s.withAuth(s.adminStatus))
 	r.Post("/v1/admin/revoke-member", s.withAuth(s.revokeMember))
 	r.Post("/v1/admin/revoke-device", s.withAuth(s.revokeDevice))
+	r.Post("/v1/objects", s.withAuthLimit(int64(s.objectLimit())+1, s.uploadObject))
+	r.Get("/v1/objects/{id}", s.withAuth(s.downloadObject))
+	r.Post("/v1/groups", s.withAuth(s.createGroup))
+	r.Get("/v1/groups", s.withAuth(s.listGroups))
+	r.Post("/v1/groups/{id}/members", s.withAuth(s.groupAdd))
+	r.Post("/v1/groups/{id}/remove", s.withAuth(s.groupRemove))
 	r.Get("/v1/ws", s.ws)
 	return r
+}
+
+func (s *Server) objectLimit() int {
+	if s.Cfg.MaxObjectBytes > 0 {
+		return s.Cfg.MaxObjectBytes
+	}
+	return 25 * 1024 * 1024
 }
 
 func (s *Server) ListenAndServe() error {
@@ -80,6 +94,7 @@ func (s *Server) ListenAndServe() error {
 		Handler:           s.Router(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	s.logTurn()
 	if s.Cfg.AllowHTTP {
 		s.Log.Printf("rope-server %s listening http://%s (debug)", config.ServerVersion, s.Cfg.Listen)
 		return h.ListenAndServe()
@@ -119,8 +134,34 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func (s *Server) logTurn() {
+	if !s.Cfg.IceEnabled() {
+		s.Log.Printf("ICE disabled (need public_host and turn_secret in config.json)")
+		return
+	}
+	s.Log.Printf("ICE host=%s turn=%d turns=%d ttl=%s", s.Cfg.PublicHost, s.Cfg.EffectiveTurnPort(), s.Cfg.EffectiveTurnsPort(), s.Cfg.IceTTL())
+	rep := s.Cfg.ProbeTurn(800 * time.Millisecond)
+	s.Log.Printf("TURN listening=%v allocate=%v relayed=%s turns_listening=%v listen=%s external_ip=%s advertised=%d err=%q",
+		rep.Running, rep.AllocateOK, rep.RelayedIP, rep.TurnsListening, rep.Listen, rep.ExternalIP, len(rep.Advertised), rep.Error)
+}
+
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"ok": true})
+	out := map[string]any{"ok": true, "turn_running": false, "turn_allocate_ok": false}
+	if s.Cfg.IceEnabled() {
+		turn := s.Cfg.ProbeTurn(800 * time.Millisecond)
+		out["turn_running"] = turn.Running
+		out["turn_allocate_ok"] = turn.AllocateOK
+		out["turns_listening"] = turn.TurnsListening
+		out["turn_port"] = turn.TurnPort
+		out["turns_port"] = turn.TurnsPort
+		if turn.RelayedIP != "" {
+			out["turn_relayed_ip"] = turn.RelayedIP
+		}
+		if turn.Error != "" {
+			out["turn_error"] = turn.Error
+		}
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
@@ -128,11 +169,18 @@ func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{
-		"server_id":         s.Cfg.ServerID,
-		"protocol_version":  config.ProtocolVersion,
-		"fingerprint":       s.FP,
-	})
+	out := map[string]any{
+		"server_id":        s.Cfg.ServerID,
+		"protocol_version": config.ProtocolVersion,
+		"fingerprint":      s.FP,
+	}
+	if ice := s.Cfg.IceServers(time.Now()); len(ice) > 0 {
+		out["ice_servers"] = ice
+	}
+	if ip := s.Cfg.PublicIPv4(); ip != "" {
+		out["public_ip"] = ip
+	}
+	writeJSON(w, 200, out)
 }
 
 type bootstrapReq struct {
@@ -152,8 +200,22 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
+	req.DisplayName = login.Normalize(req.DisplayName)
 	if len(req.PublicIdentity) < 70 || req.DeviceID == "" || req.Token == "" {
 		writeJSON(w, 400, map[string]string{"error": "missing fields"})
+		return
+	}
+	if !login.Valid(req.DisplayName) {
+		writeJSON(w, 400, map[string]string{"error": "login must be 2-24 letters, digits, _ . -"})
+		return
+	}
+	taken, err := s.Store.LoginTaken(req.DisplayName)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	if taken {
+		writeJSON(w, 409, map[string]string{"error": "login taken"})
 		return
 	}
 	if len(req.PublicIdentity) < 38 || hex.EncodeToString(req.PublicIdentity[6:38]) != strings.ToLower(req.DeviceID) {
@@ -237,8 +299,12 @@ func (s *Server) authenticate(r *http.Request, body []byte) (authed, error) {
 }
 
 func (s *Server) withAuth(fn func(http.ResponseWriter, *http.Request, authed, []byte)) http.HandlerFunc {
+	return s.withAuthLimit(1<<20, fn)
+}
+
+func (s *Server) withAuthLimit(limit int64, fn func(http.ResponseWriter, *http.Request, authed, []byte)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		body, _ := io.ReadAll(io.LimitReader(r.Body, limit))
 		a, err := s.authenticate(r, body)
 		if err != nil {
 			writeJSON(w, 401, map[string]string{"error": "unauthorized"})
@@ -270,6 +336,7 @@ func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ [
 		MemberID       string `json:"member_id"`
 		PublicIdentity []byte `json:"public_identity"`
 		LastSeen       string `json:"last_seen"`
+		Online         bool   `json:"online"`
 		Revoked        bool   `json:"revoked"`
 	}
 	outM := []mJSON{}
@@ -281,7 +348,8 @@ func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ [
 		if d.Revoked {
 			continue
 		}
-		outD = append(outD, dJSON{d.ID, d.MemberID, d.PublicIdentity, d.LastSeen, d.Revoked})
+		_, online := s.Hub.Get(d.ID)
+		outD = append(outD, dJSON{d.ID, d.MemberID, d.PublicIdentity, d.LastSeen, online, d.Revoked})
 	}
 	writeJSON(w, 200, map[string]any{"members": outM, "devices": outD})
 }
@@ -321,14 +389,40 @@ func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request, a authed, _
 		writeJSON(w, 403, map[string]string{"error": "owner only"})
 		return
 	}
+	s.gcExpiredObjects()
 	mc, _ := s.Store.MemberCount()
+	dc, _ := s.Store.DeviceCount()
 	box, _ := s.Store.MailboxCount()
+	oc, _ := s.Store.ObjectCount()
+	obytes, _ := s.Store.ObjectBytesSum()
+	gc, _ := s.Store.GroupCount()
+	turn := s.Cfg.ProbeTurn(800 * time.Millisecond)
 	writeJSON(w, 200, map[string]any{
 		"server_id":        s.Cfg.ServerID,
 		"version":          config.ServerVersion,
 		"protocol_version": config.ProtocolVersion,
 		"member_count":     mc,
+		"device_count":     dc,
 		"mailbox_count":    box,
+		"object_count":     oc,
+		"object_bytes":     obytes,
+		"group_count":      gc,
+		"listen":           s.Cfg.Listen,
+		"max_object_bytes": s.objectLimit(),
+		"online_devices":   len(s.Hub.Online()),
+		"public_host":      s.Cfg.PublicHost,
+		"public_ip":        s.Cfg.PublicIPv4(),
+		"turn_port":        turn.TurnPort,
+		"turns_port":       turn.TurnsPort,
+		"ice_enabled":      s.Cfg.IceEnabled(),
+		"turn_running":     turn.Running,
+		"turn_allocate_ok": turn.AllocateOK,
+		"turns_listening":  turn.TurnsListening,
+		"turn_listen":      turn.Listen,
+		"turn_external_ip": turn.ExternalIP,
+		"turn_relayed_ip":  turn.RelayedIP,
+		"turn_error":       turn.Error,
+		"ice_urls":         turn.Advertised,
 	})
 }
 
@@ -372,9 +466,15 @@ func (s *Server) revokeDevice(w http.ResponseWriter, _ *http.Request, a authed, 
 }
 
 type wsIn struct {
-	Type      string `json:"type"`
-	Envelope  []byte `json:"envelope"`
-	MessageID string `json:"message_id"`
+	Type      string          `json:"type"`
+	Envelope  []byte          `json:"envelope"`
+	Envelopes [][]byte        `json:"envelopes"`
+	MessageID string          `json:"message_id"`
+	GroupID   string          `json:"group_id"`
+	CallID    string          `json:"call_id"`
+	To        string          `json:"to"`
+	Event     string          `json:"event"`
+	Payload   json.RawMessage `json:"payload"`
 }
 
 type wsOut struct {
@@ -384,6 +484,10 @@ type wsOut struct {
 	Devices   []string `json:"devices,omitempty"`
 	Code      string   `json:"code,omitempty"`
 	Message   string   `json:"message,omitempty"`
+	CallID    string   `json:"call_id,omitempty"`
+	From      string   `json:"from,omitempty"`
+	Event     string   `json:"event,omitempty"`
+	Payload   string   `json:"payload,omitempty"`
 }
 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
@@ -431,16 +535,17 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	s.Hub.Add(deviceID, conn)
 	s.Store.TouchDevice(deviceID)
 	defer func() {
-		s.Hub.Drop(deviceID)
+		s.Hub.DropIf(deviceID, conn)
+		s.broadcastPresence()
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	}()
 	ctx := r.Context()
 	pending, _ := s.Store.PendingMailbox(deviceID)
 	for _, row := range pending {
-		_ = wsjson.Write(ctx, c, wsOut{Type: "deliver", Envelope: row.Blob, MessageID: row.MessageID})
+		_ = conn.write(ctx, wsOut{Type: "deliver", Envelope: row.Blob, MessageID: row.MessageID})
 	}
-	_ = wsjson.Write(ctx, c, wsOut{Type: "mailbox_done"})
-	_ = wsjson.Write(ctx, c, wsOut{Type: "presence", Devices: s.Hub.Online()})
+	_ = conn.write(ctx, wsOut{Type: "mailbox_done"})
+	s.broadcastPresence()
 
 	for {
 		var in wsIn
@@ -452,6 +557,10 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 			s.handleSend(ctx, conn, in.Envelope)
 		case "ack":
 			s.handleAck(ctx, conn, in.MessageID)
+		case "group_send":
+			s.handleGroupSend(ctx, conn, in.GroupID, in.Envelopes)
+		case "call":
+			s.handleCall(ctx, conn, in)
 		default:
 			_ = wsjson.Write(ctx, c, wsOut{Type: "error", Code: "protocol", Message: "unknown type"})
 		}
@@ -502,6 +611,86 @@ func (s *Server) handleSend(ctx context.Context, from *clientConn, raw []byte) {
 	if dest, ok := s.Hub.Get(recip.ID); ok {
 		_ = dest.write(ctx, wsOut{Type: "deliver", Envelope: raw, MessageID: parsed.Meta.MessageID})
 	}
+}
+
+func (s *Server) handleGroupSend(ctx context.Context, from *clientConn, groupID string, envs [][]byte) {
+	ok, err := s.Store.IsGroupMember(groupID, from.id)
+	if err != nil || !ok {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "auth", Message: "not a group member"})
+		return
+	}
+	members, _ := s.Store.GroupMembers(groupID)
+	allowed := map[string]bool{}
+	for _, m := range members {
+		allowed[m] = true
+	}
+	for _, raw := range envs {
+		parsed, err := envelope.Parse(raw)
+		if err != nil || parsed.Meta.SenderID != from.id || !allowed[parsed.Meta.RecipientID] {
+			_ = from.write(ctx, wsOut{Type: "error", Code: "auth", Message: "group envelope rejected"})
+			return
+		}
+		s.handleSend(ctx, from, raw)
+	}
+}
+
+func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
+	if in.CallID == "" || strings.TrimSpace(in.To) == "" {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
+		return
+	}
+	target := s.resolveCallTarget(in.To)
+	if dest, ok := s.Hub.Get(target); ok {
+		_ = dest.write(ctx, wsOut{
+			Type:    "call",
+			CallID:  in.CallID,
+			From:    from.id,
+			Event:   in.Event,
+			Payload: decodeCallPayload(in.Payload),
+		})
+		return
+	}
+	_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "peer offline"})
+}
+
+// resolveCallTarget maps a WSS call `to` field to a live hub device.
+// Chat routes by envelope recipient (device hex). Calls used to miss when the
+// client sent a member_id or a stale device of a member who is online elsewhere.
+func (s *Server) resolveCallTarget(to string) string {
+	id := strings.ToLower(strings.TrimSpace(to))
+	if id == "" {
+		return ""
+	}
+	if _, ok := s.Hub.Get(id); ok {
+		return id
+	}
+	devs, err := s.Store.ListDevices()
+	if err != nil {
+		return id
+	}
+	for _, d := range devs {
+		if d.Revoked {
+			continue
+		}
+		if strings.ToLower(d.MemberID) != id {
+			continue
+		}
+		if _, ok := s.Hub.Get(d.ID); ok {
+			return d.ID
+		}
+	}
+	return id
+}
+
+func decodeCallPayload(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
 }
 
 func (s *Server) handleAck(ctx context.Context, from *clientConn, messageID string) {
@@ -556,6 +745,25 @@ func (h *Hub) Drop(id string) {
 	h.mu.Lock()
 	delete(h.clients, id)
 	h.mu.Unlock()
+}
+
+func (h *Hub) DropIf(id string, c *clientConn) {
+	h.mu.Lock()
+	if h.clients[id] == c {
+		delete(h.clients, id)
+	}
+	h.mu.Unlock()
+}
+
+func (s *Server) broadcastPresence() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	devices := s.Hub.Online()
+	for _, id := range devices {
+		if dest, ok := s.Hub.Get(id); ok {
+			_ = dest.write(ctx, wsOut{Type: "presence", Devices: devices})
+		}
+	}
 }
 
 func (h *Hub) Get(id string) (*clientConn, bool) {

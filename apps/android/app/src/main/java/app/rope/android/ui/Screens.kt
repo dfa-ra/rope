@@ -1,21 +1,57 @@
 package app.rope.android
 
 import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -26,11 +62,33 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import app.rope.android.data.DirectoryDevice
-import app.rope.android.data.MessageStatus
+import app.rope.android.data.RoleRules
+import app.rope.android.data.ThemeMode
+import app.rope.android.RopeShapes
+import app.rope.android.provision.ProvisionForm
+import app.rope.android.provision.ServerTarget
+import app.rope.android.ui.BrandBackdrop
+import app.rope.android.ui.CallsPane
+import app.rope.android.ui.FadeIn
+import app.rope.android.ui.GlowButton
+import app.rope.android.ui.HomePane
+import app.rope.android.ui.InitialsAvatar
+import app.rope.android.ui.PeoplePane
+import app.rope.android.ui.QuietButton
+import app.rope.android.ui.RopeEmptyState
+import app.rope.android.ui.RopeLogoMark
+import app.rope.android.ui.RopeSplash
+import app.rope.android.ui.SectionCard
+import app.rope.android.ui.rememberSplashOverlay
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
@@ -39,58 +97,359 @@ import com.google.zxing.qrcode.QRCodeWriter
 fun RopeScaffold(
     state: UiState,
     onGo: (Screen) -> Unit,
-    onProvision: (String, Int, String, String, String, Int, String, String, Boolean) -> Unit,
+    onProvision: (ProvisionForm) -> Unit,
     onJoin: (String, String) -> Unit,
     onJoinDev: (String, Int, String, String) -> Unit,
-    onOpenChat: (DirectoryDevice) -> Unit,
+    onOpenConversation: (app.rope.android.data.Conversation) -> Unit,
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onInvite: () -> Unit,
     onStatus: () -> Unit,
     onScan: () -> Unit,
+    onUpdateApp: () -> Unit,
+    onUpgradeCore: (String, String) -> Unit,
+    onRestoreBackup: () -> Unit,
+    onAttach: () -> Unit,
+    onVoiceStart: () -> Unit,
+    onVoiceFinish: (Boolean) -> Unit,
+    onCall: () -> Unit,
+    onPlay: (app.rope.android.data.ChatMessage) -> Unit,
+    onReact: (app.rope.android.data.ChatMessage, String) -> Unit,
+    onEnsureMedia: (app.rope.android.data.ChatMessage) -> Unit,
+    onGroupName: (String) -> Unit,
+    onToggleMember: (String) -> Unit,
+    onCreateGroup: () -> Unit,
+    onAddMember: (String) -> Unit,
+    onRemoveMember: (String) -> Unit,
+    onLeaveGroup: () -> Unit = {},
+    onAcceptCall: () -> Unit,
+    onRejectCall: () -> Unit,
+    onHangup: () -> Unit,
+    onToggleTheme: () -> Unit,
+    onReply: (app.rope.android.data.ChatMessage) -> Unit,
+    onEdit: (app.rope.android.data.ChatMessage) -> Unit,
+    onDelete: (app.rope.android.data.ChatMessage) -> Unit,
+    onForward: (app.rope.android.data.ChatMessage) -> Unit,
+    onCancelComposer: () -> Unit,
+    onCancelForward: () -> Unit,
+    onChatQuery: (String) -> Unit,
+    onMessageQuery: (String) -> Unit,
+    onPinChat: (String) -> Unit,
+    onMuteChat: (String) -> Unit,
+    onCopy: (app.rope.android.data.ChatMessage) -> Unit,
+    onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
+    onJump: (String?) -> Unit,
+    onOpenImage: (app.rope.android.data.ChatMessage) -> Unit,
+    onCloseImage: () -> Unit,
+    onConsumedScroll: () -> Unit,
+    onDismissNotice: () -> Unit,
+    onBack: () -> Boolean = { false },
+    onTab: (Screen) -> Unit = onGo,
 ) {
+    val signedIn = state.profile != null
+    val splash = rememberSplashOverlay(state)
+    val selectedTab = NavRules.selectedTab(state.screen)
+    BackHandler(enabled = BackStack.consumesSystemBack(state)) {
+        onBack()
+    }
+    Box {
     Scaffold(
         topBar = {
+            if (InstantUi.showsAppBar(state.screen)) {
             TopAppBar(
-                title = { Text(if (state.offline) "Rope · offline" else "Rope") },
+                navigationIcon = {},
+                title = {
+                    val title = NavRules.chromeTitle(state.screen, offline = state.offline)
+                    val opensHome = NavRules.titleOpensHome(state.screen, signedIn)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RopeLogoMark(
+                            modifier = Modifier
+                                .semantics { contentDescription = "На главную" }
+                                .clickable(enabled = opensHome) { onTab(Screen.Home) },
+                            size = 28.dp,
+                            animate = true,
+                            breathe = state.screen == Screen.Home || state.screen == Screen.Start,
+                            replayKey = selectedTab?.ordinal ?: state.screen.ordinal,
+                        )
+                        if (title.isNotBlank()) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(title)
+                        }
+                    }
+                },
                 actions = {
-                    if (state.profile != null) {
-                        TextButton(onClick = onInvite) { Text("Invite") }
-                        TextButton(onClick = onStatus) { Text("Server") }
-                        TextButton(onClick = { onGo(Screen.Chats) }) { Text("Chats") }
+                    IconButton(onClick = onToggleTheme) {
+                        Icon(
+                            if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                            contentDescription = if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
+                        )
+                    }
+                    if (signedIn) {
+                        if (RoleRules.canShowInviteQr(state.profile?.role)) {
+                            IconButton(onClick = onInvite) {
+                                Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                            }
+                        }
+                        IconButton(onClick = onStatus) {
+                            Icon(Icons.Outlined.Dns, contentDescription = "Сервер")
+                        }
+                        if (NavRules.chromeShowsUserChip(true)) {
+                            val me = state.profile?.displayName.orEmpty()
+                            IconButton(
+                                onClick = { onTab(Screen.Home) },
+                                modifier = Modifier.semantics {
+                                    contentDescription = me.ifBlank { "Профиль" }
+                                },
+                            ) {
+                                InitialsAvatar(
+                                    title = me.ifBlank { "?" },
+                                    group = false,
+                                    online = !state.offline,
+                                    size = 32.dp,
+                                )
+                            }
+                        }
                     }
                 },
             )
+            }
+        },
+        bottomBar = {
+            if (NavRules.showsBottomBar(state.screen, signedIn)) {
+                RopeBottomBar(state.screen, onTab)
+            }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            if (state.busy) CircularProgressIndicator()
-            when (state.screen) {
-                Screen.Start -> StartPane(onGo)
-                Screen.Provision -> ProvisionPane(onProvision, { onGo(Screen.Start) })
-                Screen.Join -> JoinPane(onJoin, onJoinDev, onScan, { onGo(Screen.Start) })
-                Screen.Chats -> ChatsPane(state, onOpenChat)
-                Screen.Chat -> ChatPane(state, onDraft, onSend)
-                Screen.Invite -> InvitePane(state.inviteUrl.orEmpty())
-                Screen.Status -> Text(state.statusText)
-                Screen.Settings -> Text("Settings")
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding(),
+        ) {
+            if (state.busy && InstantUi.busyBlocksUi(state.screen)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
             }
+            state.notice?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .clickable(onClick = onDismissNotice),
+                )
+            }
+            state.error?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .heightIn(max = 120.dp)
+                        .verticalScroll(rememberScrollState()),
+                )
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                AnimatedContent(
+                    targetState = state.screen,
+                    transitionSpec = { screenTransition(initialState, targetState) },
+                    label = "screen",
+                ) { screen ->
+                    when (screen) {
+                        Screen.Start -> StartPane(onGo, onRestoreBackup)
+                        Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onBack() }
+                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onBack() }
+                        Screen.Home -> HomePane(state, onGo, onStatus, onInvite)
+                        Screen.Chats, Screen.Groups -> app.rope.android.ui.ChatsPane(
+                            state,
+                            onOpenConversation,
+                            { onGo(Screen.NewGroup) },
+                            onUpdateApp,
+                            onCancelForward,
+                            onChatQuery,
+                            onPinChat,
+                            onMuteChat,
+                            listMode = NavRules.listMode(screen),
+                        )
+                        Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)
+                        Screen.People -> PeoplePane(state, onOpenConversation, onInvite)
+                        Screen.Chat -> app.rope.android.ui.ChatPane(
+                            state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
+                            onReact, onEnsureMedia,
+                            onGroupInfo = { onGo(Screen.GroupInfo) },
+                            onBack = { onBack() },
+                            onReply = onReply,
+                            onEdit = onEdit,
+                            onDelete = onDelete,
+                            onForward = onForward,
+                            onCancelComposer = onCancelComposer,
+                            onCopy = onCopy,
+                            onPinMessage = onPinMessage,
+                            onJump = onJump,
+                            onOpenImage = onOpenImage,
+                            onMessageQuery = onMessageQuery,
+                            onConsumedScroll = onConsumedScroll,
+                        )
+                        Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
+                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                        } else {
+                            HomePane(state, onGo, onStatus, onInvite)
+                        }
+                        Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onTab(Screen.Home) }
+                        Screen.Settings -> SettingsPane(state, onToggleTheme) { onTab(Screen.Home) }
+                        Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
+                    }
+                }
+            }
+        }
+    }
+    state.call?.let { call ->
+        app.rope.android.ui.CallOverlay(
+            call,
+            state.profile?.iceServersJson.orEmpty(),
+            onAcceptCall,
+            onRejectCall,
+            onHangup,
+        )
+    }
+    state.viewingImage?.let { img ->
+        app.rope.android.ui.ImageViewer(img, onCloseImage)
+    }
+    if (splash.visible) {
+        RopeSplash(caption = splash.caption, loop = splash.loop, compact = splash.compact)
+    }
+    }
+}
+
+@Composable
+private fun RopeBottomBar(
+    screen: Screen,
+    onTab: (Screen) -> Unit,
+) {
+    val selected = NavRules.selectedTab(screen)
+    NavigationBar {
+        NavRules.tabs.forEach { tab ->
+            NavigationBarItem(
+                selected = selected == tab.screen,
+                onClick = { onTab(tab.screen) },
+                icon = { Icon(tabIcon(tab.screen), contentDescription = tab.label) },
+                label = { Text(tab.label) },
+            )
+        }
+    }
+}
+
+private fun screenTransition(from: Screen, to: Screen): ContentTransform {
+    if (InstantUi.instantTransition(from, to)) {
+        return EnterTransition.None togetherWith ExitTransition.None
+    }
+    val enterMessenger = from == Screen.Home && NavRules.isMessengerShell(to)
+    val leaveMessenger = to == Screen.Home && NavRules.isMessengerShell(from)
+    return when {
+        enterMessenger ->
+            (slideInHorizontally(tween(220)) { it / 6 } + fadeIn(tween(160))) togetherWith
+                (slideOutHorizontally(tween(160)) { -it / 10 } + fadeOut(tween(120)))
+        leaveMessenger ->
+            (slideInHorizontally(tween(220)) { -it / 6 } + fadeIn(tween(160))) togetherWith
+                (slideOutHorizontally(tween(160)) { it / 10 } + fadeOut(tween(120)))
+        else -> fadeIn(tween(80)) togetherWith fadeOut(tween(60))
+    }
+}
+
+private fun tabIcon(screen: Screen): ImageVector = when (screen) {
+    Screen.Chats -> Icons.AutoMirrored.Outlined.Chat
+    Screen.Groups -> Icons.Outlined.Groups
+    Screen.Calls -> Icons.Outlined.Call
+    Screen.People -> Icons.Outlined.People
+    else -> Icons.Outlined.Dns
+}
+
+@Composable
+private fun StartPane(onGo: (Screen) -> Unit, onRestore: () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        BrandBackdrop()
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FadeIn(40) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    RopeLogoMark(size = 132.dp, animate = true)
+                    Spacer(Modifier.height(10.dp))
+                    Text("self-hosted · E2EE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Личный мессенджер на своём VPS", style = MaterialTheme.typography.headlineSmall)
+                }
+            }
+            FadeIn(160) {
+                Text(
+                    "Поднимите сервер с телефона или войдите по QR от организатора.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            FadeIn(220) {
+                GlowButton("Создать сервер", { onGo(Screen.Provision) }, Modifier.fillMaxWidth())
+            }
+            FadeIn(280) {
+                QuietButton("Войти по QR или ссылке", { onGo(Screen.Join) }, Modifier.fillMaxWidth())
+            }
+            TextButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) {
+                Text("Восстановить устройство из Загрузок")
+            }
+            Text(
+                "Если пришлось удалить приложение из‑за другой подписи: выберите файл rope-device.backup из Загрузок.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
 
 @Composable
-private fun StartPane(onGo: (Screen) -> Unit) {
-    Text("Private self-hosted messenger", style = MaterialTheme.typography.headlineSmall)
-    Text("Create a server on your VPS or join with a QR invite.")
-    Button(onClick = { onGo(Screen.Provision) }, modifier = Modifier.fillMaxWidth()) { Text("Create server") }
-    Button(onClick = { onGo(Screen.Join) }, modifier = Modifier.fillMaxWidth()) { Text("Join with QR / link") }
+private fun SettingsPane(state: UiState, onToggleTheme: () -> Unit, onHome: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        FadeIn(40) { Text("О приложении", style = MaterialTheme.typography.titleLarge) }
+        FadeIn(120) {
+            val me = state.profile?.displayName.orEmpty()
+            SectionCard {
+                Text("Rope ${app.rope.android.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+                if (me.isNotBlank()) {
+                    Text("Вы · $me", style = MaterialTheme.typography.titleSmall)
+                }
+                Text(
+                    "Приватный self-hosted мессенджер. Тема: ${if (state.theme == ThemeMode.DARK) "тёмная" else "светлая"}.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        FadeIn(200) {
+            GlowButton(
+                if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
+                onToggleTheme,
+                Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }
 
 @Composable
 private fun ProvisionPane(
-    onProvision: (String, Int, String, String, String, Int, String, String, Boolean) -> Unit,
+    enabled: Boolean,
+    onProvision: (ProvisionForm) -> Unit,
     onBack: () -> Unit,
 ) {
     var host by remember { mutableStateOf("") }
@@ -98,96 +457,340 @@ private fun ProvisionPane(
     var user by remember { mutableStateOf("root") }
     var password by remember { mutableStateOf("") }
     var key by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
     var listen by remember { mutableStateOf("8443") }
-    var name by remember { mutableStateOf("owner") }
-    var url by remember { mutableStateOf("https://github.com/dfa-ra/rope/releases/latest/download/rope-server-linux-amd64") }
-    OutlinedTextField(host, { host = it }, label = { Text("VPS host") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(sshPort, { sshPort = it }, label = { Text("SSH port") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(user, { user = it }, label = { Text("SSH user") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(password, { password = it }, label = { Text("SSH password") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(key, { key = it }, label = { Text("SSH private key (optional)") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(listen, { listen = it }, label = { Text("Rope port") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(name, { name = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(url, { url = it }, label = { Text("Server binary URL") }, modifier = Modifier.fillMaxWidth())
-    Button(
-        onClick = {
-            onProvision(host, sshPort.toIntOrNull() ?: 22, user, password, key, listen.toIntOrNull() ?: 8443, url, name, false)
-        },
-        modifier = Modifier.fillMaxWidth(),
-    ) { Text("Install and connect") }
-    TextButton(onClick = onBack) { Text("Back") }
+    var name by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var target by remember { mutableStateOf(ServerTarget.AUTO) }
+    var advanced by remember { mutableStateOf(false) }
+    var confirmWipe by remember { mutableStateOf(false) }
+    val canInstall = enabled && host.isNotBlank() && user.isNotBlank() &&
+        (password.isNotBlank() || key.isNotBlank()) && LoginRules.isValid(name)
+
+    fun form(upgrade: Boolean, reinstall: Boolean = false) = ProvisionForm(
+        host = host.trim(),
+        sshPort = sshPort.toIntOrNull() ?: 22,
+        user = user.trim(),
+        password = password,
+        keyPem = key,
+        listenPort = listen.toIntOrNull() ?: 8443,
+        target = target,
+        binaryUrl = url.trim(),
+        displayName = name.trim().ifBlank { "owner" },
+        githubToken = token.trim(),
+        upgrade = upgrade,
+        reinstall = reinstall,
+    )
+
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FadeIn(40) { Text("Создание сервера", style = MaterialTheme.typography.titleLarge) }
+            FadeIn(100) {
+                Text(
+                    "Нужен VPS с Ubuntu/Debian и SSH. Если Rope уже стоит — обычная установка не затрёт его: обновите ядро или сотрите и зайдите заново как owner.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedTextField(
+                host,
+                { host = it },
+                label = { Text("IP или hostname VPS") },
+                singleLine = true,
+                enabled = enabled,
+                shape = RoundedCornerShape(RopeShapes.field),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    sshPort,
+                    { sshPort = it },
+                    label = { Text("SSH порт") },
+                    singleLine = true,
+                    enabled = enabled,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    user,
+                    { user = it },
+                    label = { Text("SSH пользователь") },
+                    singleLine = true,
+                    enabled = enabled,
+                    modifier = Modifier.weight(1.4f),
+                )
+            }
+            OutlinedTextField(
+                password,
+                { password = it },
+                label = { Text("SSH пароль") },
+                singleLine = true,
+                enabled = enabled,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(onClick = { showKey = !showKey }, enabled = enabled) {
+                Text(if (showKey) "Скрыть SSH-ключ" else "Вставить SSH-ключ вместо пароля")
+            }
+            if (showKey) {
+                OutlinedTextField(
+                    key,
+                    { key = it },
+                    label = { Text("SSH ключ (если нет пароля)") },
+                    enabled = enabled,
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 140.dp),
+                )
+            }
+            OutlinedTextField(
+                name,
+                { name = it },
+                label = { Text("Ваш логин") },
+                singleLine = true,
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ArchPicker(target = target, enabled = enabled, onSelect = { target = it })
+            TextButton(onClick = { advanced = !advanced }, enabled = enabled) {
+                Text(if (advanced) "Скрыть доп. настройки" else "Дополнительно: порт, обновление, переустановка")
+            }
+            if (advanced) {
+                OutlinedTextField(
+                    listen,
+                    { listen = it },
+                    label = { Text("Порт Rope на VPS") },
+                    singleLine = true,
+                    enabled = enabled,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    url,
+                    { url = it },
+                    label = { Text("Свой URL бинарника (необязательно)") },
+                    singleLine = true,
+                    enabled = enabled,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    token,
+                    { token = it },
+                    label = { Text("GitHub token (приватный репозиторий)") },
+                    singleLine = true,
+                    enabled = enabled,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = { onProvision(form(upgrade = true)) },
+                    enabled = canInstall,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Обновить ядро, данные сохранить") }
+                Text(
+                    "Как обновление в Amnezia: бинарник меняется, чаты и owner остаются.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = {
+                        if (!confirmWipe) {
+                            confirmWipe = true
+                        } else {
+                            onProvision(form(upgrade = false, reinstall = true))
+                        }
+                    },
+                    enabled = canInstall,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (confirmWipe) "Точно стереть owner и чаты?" else "Стереть старое и стать владельцем")
+                }
+                Text(
+                    "Если потеряли телефон-owner: сотрёт data.db и выдаст новый setup token. Сертификат TLS останется.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Токен GitHub остаётся на телефоне и на VPS не копируется.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        HorizontalDivider()
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GlowButton(
+                "Установить и подключить",
+                { onProvision(form(false)) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canInstall,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArchPicker(
+    target: ServerTarget,
+    enabled: Boolean,
+    onSelect: (ServerTarget) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Архитектура VPS", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "На большинстве облаков — Linux x86_64. «Авто» спросит сервер по SSH.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ServerTarget.entries.forEach { option ->
+                FilterChip(
+                    selected = target == option,
+                    onClick = { onSelect(option) },
+                    enabled = enabled,
+                    label = { Text(option.title) },
+                )
+            }
+        }
+    }
 }
 
 @Composable
 private fun JoinPane(
+    enabled: Boolean,
+    initialInvite: String,
     onJoin: (String, String) -> Unit,
     onJoinDev: (String, Int, String, String) -> Unit,
     onScan: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var url by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("guest") }
+    var url by remember(initialInvite) { mutableStateOf(initialInvite) }
+    var name by remember { mutableStateOf("") }
     var host by remember { mutableStateOf("10.0.2.2") }
     var port by remember { mutableStateOf("8443") }
     var token by remember { mutableStateOf("") }
-    OutlinedTextField(url, { url = it }, label = { Text("rope://join?...") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(name, { name = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-    Button(onClick = { onJoin(url, name) }, modifier = Modifier.fillMaxWidth()) { Text("Join link") }
-    Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) { Text("Scan QR") }
-    Text("Debug HTTP (emulator)", style = MaterialTheme.typography.labelLarge)
-    OutlinedTextField(host, { host = it }, label = { Text("Host") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(port, { port = it }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(token, { token = it }, label = { Text("setup/invite token") }, modifier = Modifier.fillMaxWidth())
-    Button(
-        onClick = { onJoinDev(host, port.toIntOrNull() ?: 8443, token, name) },
-        modifier = Modifier.fillMaxWidth(),
-    ) { Text("Join debug HTTP") }
-    TextButton(onClick = onBack) { Text("Back") }
-}
+    var debug by remember { mutableStateOf(false) }
 
-@Composable
-private fun ChatsPane(state: UiState, onOpen: (DirectoryDevice) -> Unit) {
-    if (state.devices.isEmpty()) {
-        Text("No other devices yet. Create an invite.")
-    }
-    LazyColumn {
-        items(state.devices, key = { it.deviceId }) { d ->
-            Column(Modifier.fillMaxWidth().clickable { onOpen(d) }.padding(vertical = 8.dp)) {
-                Text(d.displayName.ifBlank { d.deviceId.take(12) }, style = MaterialTheme.typography.titleMedium)
-                Text(d.deviceId.take(16), style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FadeIn(40) { Text("Вход", style = MaterialTheme.typography.titleLarge) }
+            OutlinedTextField(
+                name,
+                { name = it },
+                label = { Text("Придумайте логин") },
+                singleLine = true,
+                enabled = enabled,
+                shape = RoundedCornerShape(RopeShapes.field),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                url,
+                { url = it },
+                label = { Text("Ссылка rope://join?...") },
+                enabled = enabled,
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(onClick = { debug = !debug }, enabled = enabled) {
+                Text(if (debug) "Скрыть отладку" else "Отладка: HTTP / эмулятор")
             }
+            if (debug) {
+                OutlinedTextField(host, { host = it }, label = { Text("Host") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    port,
+                    { port = it },
+                    label = { Text("Port") },
+                    singleLine = true,
+                    enabled = enabled,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(token, { token = it }, label = { Text("setup / invite token") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
+                OutlinedButton(
+                    onClick = { onJoinDev(host, port.toIntOrNull() ?: 8443, token, name) },
+                    enabled = enabled && LoginRules.isValid(name),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Войти по HTTP") }
+            }
+        }
+        HorizontalDivider()
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            GlowButton("Сканировать QR", onScan, Modifier.fillMaxWidth(), enabled = enabled)
+            QuietButton(
+                "Войти по ссылке",
+                { onJoin(url, name) },
+                Modifier.fillMaxWidth(),
+                enabled = enabled && url.isNotBlank() && LoginRules.isValid(name),
+            )
         }
     }
 }
 
 @Composable
-private fun ChatPane(state: UiState, onDraft: (String) -> Unit, onSend: () -> Unit) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text(state.peer?.displayName ?: "chat", style = MaterialTheme.typography.titleLarge)
-    LazyColumn(Modifier.weight(1f, fill = true)) {
-        items(state.messages, key = { it.id }) { m ->
-            val who = if (m.outgoing) "You" else "Them"
-            val mark = when (m.status) {
-                MessageStatus.CREATED -> "·"
-                MessageStatus.SENT_TO_SERVER -> "✓"
-                MessageStatus.DELIVERED_TO_DEVICE -> "✓✓"
+private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
+    Box(Modifier.fillMaxSize()) {
+        BrandBackdrop()
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            FadeIn(40) { RopeLogoMark(size = 72.dp, animate = true) }
+            FadeIn(120) { Text("Приглашение", style = MaterialTheme.typography.titleLarge) }
+            FadeIn(180) {
+                Text(
+                    "Покажите QR гостю. Ссылка одноразовая и сгорит по TTL.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text("$who $mark  ${m.text}")
+            if (url.isNotBlank()) {
+                FadeIn(240) {
+                    SectionCard {
+                        Image(
+                            bitmap = qrBitmap(url).asImageBitmap(),
+                            contentDescription = "invite",
+                            modifier = Modifier
+                                .size(260.dp)
+                                .align(Alignment.CenterHorizontally),
+                        )
+                        Text(url, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            } else {
+                RopeEmptyState(
+                    title = "Ссылка ещё готовится",
+                    body = "Подождите секунду. Петля в шапке вернёт на главную.",
+                )
+            }
         }
-    }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(state.draftText, onDraft, modifier = Modifier.weight(1f), label = { Text("Message") })
-        Button(onClick = onSend) { Text("Send") }
-    }
-    }
-}
-
-@Composable
-private fun InvitePane(url: String) {
-    Text("Show this QR to the guest. One-time, expires.")
-    if (url.isNotBlank()) {
-        Image(bitmap = qrBitmap(url).asImageBitmap(), contentDescription = "invite", modifier = Modifier.size(240.dp))
-        Text(url, style = MaterialTheme.typography.bodySmall)
     }
 }
 

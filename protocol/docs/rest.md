@@ -20,14 +20,26 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 
 ### `GET /health`
 
+`ok` is the Go process. `turn_running` is a live TCP probe of coturn on `turn_port` (listening), not “`turn_secret` exists”. `turn_allocate_ok` is a local TURN Allocate (HMAC + XOR-RELAYED-ADDRESS). Listening without a successful Allocate still yields `turn_running: true` and a `turn_error` (typical: wrong `relay-ip` / `external-ip`, HMAC mismatch). `/health` `ok` stays true so the installer can finish.
+
 ```json
-{ "ok": true }
+{
+  "ok": true,
+  "turn_running": true,
+  "turn_allocate_ok": true,
+  "turn_relayed_ip": "203.0.113.9",
+  "turns_listening": true,
+  "turn_port": 3478,
+  "turns_port": 443
+}
 ```
+
+Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running": false, "turn_allocate_ok": false }`. A down coturn does **not** make `/health` fail — installer still greps `"ok"`.
 
 ### `GET /version`
 
 ```json
-{ "server": "0.1.0", "protocol": 1 }
+{ "server": "0.2.15", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -36,18 +48,38 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 {
   "server_id": "hex",
   "protocol_version": 1,
-  "fingerprint": "hex sha256 of TLS cert DER"
+  "fingerprint": "hex sha256 of TLS cert DER",
+  "public_ip": "203.0.113.9",
+  "ice_servers": [
+    { "urls": ["stun:vps.example:3478"], "hostname": "vps.example" },
+    {
+      "urls": [
+        "turns:vps.example:443?transport=tcp",
+        "turns:vps.example:443",
+        "turn:vps.example:3478?transport=tcp",
+        "turn:vps.example:3478?transport=udp",
+        "turn:vps.example:3478"
+      ],
+      "username": "<unix_expiry>:rope",
+      "credential": "base64(HMAC-SHA1(turn_secret, username))",
+      "hostname": "vps.example"
+    }
+  ]
 }
 ```
 
 On `--allow-http` debug servers `fingerprint` is the SHA-256 of the ASCII string `rope-http-dev`.
 
+`ice_servers` is present when the VPS has coturn (`public_host` + `turn_secret` in `/etc/rope/config.json`). Guests and the owner both read this unauthenticated endpoint. Credentials are time-limited (coturn REST / HMAC-SHA1, username `<unix_expiry>:rope`, default TTL 7 days); the long-term secret never leaves the VPS. If 443 is already taken or did not bind, installer uses TURNS on 5349 (or omits `turns:`). Without TURN (local `--allow-http`) the field is omitted.
+
+`public_ip` is the VPS IPv4 (from `public_ip` in config, a raw `public_host`, or installer `external_ip`) so the client can duplicate `turn`/`turns` URLs when DNS for `public_host` fails. `ice_servers[].hostname` is the DNS/SNI name for self-signed TURNS when the URL host is a raw IP (`public_host` DNS name, or `tls_hostname` if URLs stay on an IP). Omitted when there is no DNS name.
+
 ### `POST /v1/bootstrap`
 
 ```json
 {
-  "token": "setup_token or invite token",
-  "display_name": "optional",
+    "token": "setup_token or invite token",
+    "display_name": "required unique login, 2-24 letters/digits/_ . -",
   "public_identity": "base64 ROPP blob",
   "device_id": "hex ed25519 pk"
 }
@@ -87,7 +119,8 @@ Public identities of non-revoked devices so clients can encrypt.
     "device_id": "hex",
     "member_id": "uuid",
     "public_identity": "base64",
-    "last_seen": "RFC3339"
+    "last_seen": "RFC3339",
+    "online": true
   }]
 }
 ```
@@ -97,12 +130,75 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.1.0",
+  "version": "0.2.15",
   "protocol_version": 1,
   "member_count": 2,
-  "mailbox_count": 0
+  "device_count": 2,
+  "mailbox_count": 0,
+  "object_count": 0,
+  "object_bytes": 0,
+  "group_count": 0,
+  "listen": "0.0.0.0:8443",
+  "max_object_bytes": 26214400,
+  "online_devices": 1,
+  "public_host": "203.0.113.9",
+  "turn_port": 3478,
+  "turns_port": 5349,
+  "ice_enabled": true,
+  "turn_running": true,
+  "turn_allocate_ok": true,
+  "turns_listening": true,
+  "turn_listen": "0.0.0.0",
+  "turn_external_ip": "203.0.113.9",
+  "turn_relayed_ip": "203.0.113.9",
+  "turn_error": "",
+  "ice_urls": ["turns:203.0.113.9:5349?transport=tcp", "turn:203.0.113.9:3478?transport=tcp"]
 }
 ```
+
+### `POST /v1/objects`
+
+Auth signs the **raw ciphertext body**. Optional `X-Rope-SHA256` must match SHA-256 of that body. Limits: 25 MiB object, 512 MiB server quota. Response:
+
+```json
+{ "object_id": "uuid", "sha256": "hex", "size": 123, "expires_at": "RFC3339" }
+```
+
+### `GET /v1/objects/{id}`
+
+Returns `application/octet-stream` plus `X-Rope-SHA256`. Any authenticated member who knows the id can download (capability is the E2EE media payload).
+
+### `POST /v1/groups`
+
+```json
+{ "name": "crew" }
+```
+
+```json
+{ "group_id": "uuid", "name": "crew", "epoch": 1, "members": ["device_hex"] }
+```
+
+### `GET /v1/groups`
+
+```json
+{ "groups": [{ "group_id": "...", "name": "...", "epoch": 2, "members": [] }] }
+```
+
+### `POST /v1/groups/{id}/members`
+
+```json
+{ "device_id": "hex" }
+```
+
+Bumps epoch. Caller must already be a member.
+
+### `POST /v1/groups/{id}/remove`
+
+```json
+{ "device_id": "hex" }
+```
+
+Soft-removes the member and bumps epoch. Removed devices no longer see the group.
 
 ### `POST /v1/admin/revoke-member` (owner)
 

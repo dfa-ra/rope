@@ -57,7 +57,7 @@ sudo ./deployment/scripts/install.sh \
   --port 8443
 ```
 
-The script is idempotent. It prints the TLS fingerprint and one-time `setup_token`. Re-running with `--upgrade` replaces the binary and keeps `data.db` + config.
+The script is idempotent. It prints the TLS fingerprint and one-time `setup_token`. A re-run on an existing install (or `--upgrade`) replaces the binary, restarts the unit, and keeps `data.db`. `--reinstall` wipes the database and config so a new device can become owner.
 
 ## Android
 
@@ -92,3 +92,5 @@ If these repository secrets exist, the APK is signed:
 | `ANDROID_KEY_PASSWORD` | key password |
 
 Without those secrets the workflow uploads a debug APK and writes a warning on the release notes. Play Store / AAB is out of scope for MVP.
+
+Private GitHub repos: release assets are private too. The phone downloads them with an optional PAT (Contents: Read) and SFTP-uploads the binary. The VPS never stores the token. See [rollout.md](rollout.md).

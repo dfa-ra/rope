@@ -1,6 +1,7 @@
 package app.rope.android.net
 
 import app.rope.android.data.DirectoryDevice
+import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -18,6 +19,7 @@ class ServerApi(
     private val identity: DeviceIdentity,
 ) {
     private val json = "application/json; charset=utf-8".toMediaType()
+    private val octet = "application/octet-stream".toMediaType()
     private val client: OkHttpClient = if (profile.useTls) {
         PinnedClient.pinned(profile.fingerprint)
     } else {
@@ -52,6 +54,7 @@ class ServerApi(
                 displayName = members[mid].orEmpty().ifBlank { d.getString("device_id").take(8) },
                 publicIdentity = blob,
                 lastSeen = d.optString("last_seen"),
+                online = d.optBoolean("online"),
             )
         }
         return out
@@ -64,6 +67,73 @@ class ServerApi(
     }
 
     fun status(): JSONObject = authed("GET", "/v1/admin/status", ByteArray(0))
+
+    fun uploadObject(ciphertext: ByteArray, sha256: String): JSONObject {
+        val path = "/v1/objects"
+        val header = sendAuthHeader("POST", path, ciphertext)
+        val req = Request.Builder()
+            .url(baseHttp + path)
+            .header("Authorization", header)
+            .header("X-Rope-SHA256", sha256)
+            .post(ciphertext.toRequestBody(octet))
+            .build()
+        client.newBuilder()
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
+            .newCall(req)
+            .execute()
+            .use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) error("upload ${resp.code}: $text")
+                return JSONObject(text)
+            }
+    }
+
+    fun downloadObject(objectId: String): Pair<ByteArray, String> {
+        val path = "/v1/objects/$objectId"
+        val header = sendAuthHeader("GET", path, ByteArray(0))
+        val req = Request.Builder()
+            .url(baseHttp + path)
+            .header("Authorization", header)
+            .get()
+            .build()
+        client.newBuilder()
+            .readTimeout(120, TimeUnit.SECONDS)
+            .build()
+            .newCall(req)
+            .execute()
+            .use { resp ->
+                val bytes = resp.body?.bytes() ?: ByteArray(0)
+                if (!resp.isSuccessful) error("download ${resp.code}")
+                return bytes to resp.header("X-Rope-SHA256").orEmpty()
+            }
+    }
+
+    fun createGroup(name: String): RopeGroup {
+        val body = JSONObject().put("name", name).toString().toByteArray()
+        return parseGroup(authed("POST", "/v1/groups", body))
+    }
+
+    fun listGroups(): List<RopeGroup> {
+        val obj = authed("GET", "/v1/groups", ByteArray(0))
+        val arr = obj.optJSONArray("groups") ?: JSONArray()
+        val out = mutableListOf<RopeGroup>()
+        for (i in 0 until arr.length()) {
+            out += parseGroup(arr.getJSONObject(i))
+        }
+        return out
+    }
+
+    fun addGroupMember(groupId: String, deviceId: String): RopeGroup {
+        val body = JSONObject().put("device_id", deviceId).toString().toByteArray()
+        return parseGroup(authed("POST", "/v1/groups/$groupId/members", body))
+    }
+
+    fun removeGroupMember(groupId: String, deviceId: String): RopeGroup {
+        val body = JSONObject().put("device_id", deviceId).toString().toByteArray()
+        return parseGroup(authed("POST", "/v1/groups/$groupId/remove", body))
+    }
 
     fun bootstrap(host: String, port: Int, useTls: Boolean, fingerprint: String, token: String, displayName: String): JSONObject {
         val body = JSONObject()
@@ -95,6 +165,18 @@ class ServerApi(
 
     fun sendAuthHeader(method: String, path: String, body: ByteArray): String =
         identity.authHeader(method, path, uniffi.rope_core.unixTimestamp(), body)
+
+    private fun parseGroup(obj: JSONObject): RopeGroup {
+        val members = obj.optJSONArray("members") ?: JSONArray()
+        val ids = buildList { for (i in 0 until members.length()) add(members.getString(i)) }
+        return RopeGroup(
+            groupId = obj.getString("group_id"),
+            name = obj.getString("name"),
+            epoch = obj.optInt("epoch"),
+            members = ids,
+            createdBy = obj.optString("created_by").ifBlank { obj.optString("createdBy") },
+        )
+    }
 
     private fun get(path: String): JSONObject {
         val req = Request.Builder().url(baseHttp + path).get().build()
