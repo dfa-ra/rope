@@ -82,14 +82,6 @@ fun HomePane(
             Spacer(Modifier.height(10.dp))
             FadeIn(280) {
                 QuietButton(
-                    "Открыть веб-лендинг",
-                    { runCatching { uri.openUri(BrandLinks.GITHUB) } },
-                    Modifier.fillMaxWidth(),
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(340) {
-                QuietButton(
                     "Скачать / о приложении",
                     { runCatching { uri.openUri(BrandLinks.RELEASES) } },
                     Modifier.fillMaxWidth(),

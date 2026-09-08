@@ -6,7 +6,6 @@ import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.MessageKind
 
 object BrandLinks {
-    const val GITHUB = "https://github.com/dfa-ra/rope"
     const val RELEASES = "https://github.com/dfa-ra/rope/releases"
 }
 
