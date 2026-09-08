@@ -4,18 +4,18 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.MessageKind
+import app.rope.android.data.RoleRules
 
 data class HomeShortcut(
     val label: String,
     val destination: Screen,
 )
 
+/** In-app brand CTAs. No browser / landing / download buttons. */
 object HomeCtas {
-    val shortcuts: List<HomeShortcut> = listOf(
-        HomeShortcut("К чатам", Screen.Chats),
-        HomeShortcut("К статусу сервера", Screen.Status),
-        HomeShortcut("К группам", Screen.Groups),
-    )
+    val messenger = HomeShortcut("Перейти к мессенджеру", Screen.Chats)
+    val status = HomeShortcut("К статусу", Screen.Status)
+    val shortcuts: List<HomeShortcut> = listOf(messenger, status)
 }
 
 data class MainTab(
@@ -24,24 +24,31 @@ data class MainTab(
 )
 
 object NavRules {
+    /** Brand destination. Outside the messenger tab host. */
+    val signedInRoot: Screen = Screen.Home
+
+    /** Default tab after «Перейти к мессенджеру». */
+    val messengerRoot: Screen = Screen.Chats
+
     val tabs: List<MainTab> = listOf(
-        MainTab(Screen.Home, "Главная"),
         MainTab(Screen.Chats, "Чаты"),
         MainTab(Screen.Groups, "Группы"),
         MainTab(Screen.Calls, "Звонки"),
+        MainTab(Screen.People, "Люди"),
         MainTab(Screen.Status, "Статус"),
     )
 
-    fun showsBottomBar(screen: Screen, signedIn: Boolean): Boolean {
-        if (!signedIn) return false
-        return screen == Screen.Home ||
-            screen == Screen.Chats ||
-            screen == Screen.Groups ||
-            screen == Screen.Calls ||
-            screen == Screen.Status ||
-            screen == Screen.People ||
-            screen == Screen.Settings
+    fun isMessengerTab(screen: Screen): Boolean = tabs.any { it.screen == screen }
+
+    fun isMessengerShell(screen: Screen): Boolean = when (screen) {
+        Screen.Chats, Screen.Groups, Screen.Calls, Screen.People, Screen.Status,
+        Screen.Chat, Screen.NewGroup, Screen.GroupInfo,
+        -> true
+        else -> false
     }
+
+    fun showsBottomBar(screen: Screen, signedIn: Boolean): Boolean =
+        signedIn && isMessengerTab(screen)
 
     fun canOpenHome(screen: Screen, signedIn: Boolean): Boolean =
         signedIn && screen != Screen.Home &&
@@ -51,11 +58,15 @@ object NavRules {
 
     fun titleOpensHome(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
 
+    fun showsHomeAction(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
+
+    fun showsInviteCta(role: String?): Boolean = RoleRules.isOwner(role)
+
     fun selectedTab(screen: Screen): Screen? = when (screen) {
-        Screen.Home, Screen.Invite, Screen.People, Screen.Settings -> Screen.Home
         Screen.Chats, Screen.Chat -> Screen.Chats
         Screen.Groups, Screen.NewGroup, Screen.GroupInfo -> Screen.Groups
         Screen.Calls -> Screen.Calls
+        Screen.People -> Screen.People
         Screen.Status -> Screen.Status
         else -> null
     }
@@ -74,6 +85,15 @@ object NavRules {
 
     fun peopleOf(devices: List<DirectoryDevice>, selfId: String?): List<DirectoryDevice> =
         devices.filter { it.deviceId != selfId }
+
+    fun homePeopleHint(role: String?, people: List<DirectoryDevice>): String =
+        if (people.isNotEmpty()) {
+            people.take(4).joinToString(" · ") { it.displayName.ifBlank { it.deviceId.take(6) } }
+        } else if (showsInviteCta(role)) {
+            "Пока никого. Покажите QR — человек появится здесь."
+        } else {
+            "Пока никого. Когда организатор пригласит человека, он появится здесь."
+        }
 
     fun refreshesLists(screen: Screen): Boolean =
         screen == Screen.Chats ||

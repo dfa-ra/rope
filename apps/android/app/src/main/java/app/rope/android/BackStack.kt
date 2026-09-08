@@ -29,13 +29,7 @@ data class OverlayHints(
  * Hardware/gesture Back and on-screen arrows share [decide] / [pop].
  */
 object BackStack {
-    val tabRoots: Set<Screen> = setOf(
-        Screen.Home,
-        Screen.Chats,
-        Screen.Groups,
-        Screen.Calls,
-        Screen.Status,
-    )
+    val tabRoots: Set<Screen> = NavRules.tabs.map { it.screen }.toSet()
 
     fun currentStack(backStack: List<Screen>, screen: Screen): List<Screen> = when {
         backStack.isEmpty() -> listOf(screen)

@@ -105,6 +105,21 @@ class BackStackTest {
     }
 
     @Test
+    fun tabRootsAreMessengerOnly() {
+        assertEquals(
+            setOf(Screen.Chats, Screen.Groups, Screen.Calls, Screen.People, Screen.Status),
+            BackStack.tabRoots,
+        )
+        assertFalse(Screen.Home in BackStack.tabRoots)
+        var stack = BackStack.push(listOf(Screen.Home), Screen.Chats)
+        stack = BackStack.switchTab(stack, Screen.People)
+        assertEquals(listOf(Screen.Home, Screen.People), stack)
+        stack = BackStack.pop(stack)
+        assertEquals(listOf(Screen.Home), stack)
+        assertEquals(BackLayer.Exit, BackStack.decide(UiState(screen = Screen.Home, backStack = stack)))
+    }
+
+    @Test
     fun switchTabDropsNestedChatAndKeepsHomePrefix() {
         assertEquals(
             listOf(Screen.Groups),

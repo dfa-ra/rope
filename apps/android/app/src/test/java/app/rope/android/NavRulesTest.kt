@@ -9,6 +9,7 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,6 +23,7 @@ class NavRulesTest {
         signedIn.forEach { screen ->
             assertTrue(screen.name, NavRules.canOpenHome(screen, signedIn = true))
             assertTrue(screen.name, NavRules.titleOpensHome(screen, signedIn = true))
+            assertTrue(screen.name, NavRules.showsHomeAction(screen, signedIn = true))
         }
         assertFalse(NavRules.canOpenHome(Screen.Home, signedIn = true))
         assertFalse(NavRules.canOpenHome(Screen.Chats, signedIn = false))
@@ -30,21 +32,32 @@ class NavRulesTest {
     }
 
     @Test
-    fun bottomBarShowsOnMainTabsAndPeople() {
-        assertTrue(NavRules.showsBottomBar(Screen.Home, true))
+    fun homeHasNoTabBarMessengerHasTabBar() {
+        assertFalse(NavRules.showsBottomBar(Screen.Home, true))
+        assertFalse(NavRules.isMessengerTab(Screen.Home))
+        assertFalse(NavRules.isMessengerShell(Screen.Home))
+        assertEquals(Screen.Home, NavRules.signedInRoot)
+        assertEquals(Screen.Chats, NavRules.messengerRoot)
         assertTrue(NavRules.showsBottomBar(Screen.Chats, true))
         assertTrue(NavRules.showsBottomBar(Screen.Groups, true))
         assertTrue(NavRules.showsBottomBar(Screen.Calls, true))
-        assertTrue(NavRules.showsBottomBar(Screen.Status, true))
         assertTrue(NavRules.showsBottomBar(Screen.People, true))
+        assertTrue(NavRules.showsBottomBar(Screen.Status, true))
         assertFalse(NavRules.showsBottomBar(Screen.Chat, true))
+        assertFalse(NavRules.showsBottomBar(Screen.Settings, true))
+        assertFalse(NavRules.showsBottomBar(Screen.Invite, true))
         assertFalse(NavRules.showsBottomBar(Screen.Home, false))
         assertFalse(NavRules.showsBottomBar(Screen.Start, false))
+        assertTrue(NavRules.isMessengerShell(Screen.Chat))
+        assertTrue(NavRules.isMessengerShell(Screen.People))
     }
 
     @Test
     fun selectedTabMapsNestedScreens() {
-        assertEquals(Screen.Home, NavRules.selectedTab(Screen.People))
+        assertNull(NavRules.selectedTab(Screen.Home))
+        assertNull(NavRules.selectedTab(Screen.Invite))
+        assertNull(NavRules.selectedTab(Screen.Settings))
+        assertEquals(Screen.People, NavRules.selectedTab(Screen.People))
         assertEquals(Screen.Chats, NavRules.selectedTab(Screen.Chat))
         assertEquals(Screen.Groups, NavRules.selectedTab(Screen.NewGroup))
         assertEquals(Screen.Calls, NavRules.selectedTab(Screen.Calls))
@@ -81,10 +94,14 @@ class NavRulesTest {
 
     @Test
     fun homeShortcutsStayInApp() {
+        assertEquals(HomeCtas.messenger, HomeCtas.shortcuts[0])
+        assertEquals(HomeCtas.status, HomeCtas.shortcuts[1])
         assertEquals(
-            listOf(Screen.Chats, Screen.Status, Screen.Groups),
+            listOf(Screen.Chats, Screen.Status),
             HomeCtas.shortcuts.map { it.destination },
         )
+        assertEquals("Перейти к мессенджеру", HomeCtas.messenger.label)
+        assertEquals("К статусу", HomeCtas.status.label)
         HomeCtas.shortcuts.forEach { shortcut ->
             val label = shortcut.label.lowercase()
             assertFalse(shortcut.label, label.contains("лендинг"))
@@ -99,9 +116,24 @@ class NavRulesTest {
     }
 
     @Test
-    fun fiveMainTabsAndListRefresh() {
+    fun guestStillHasNoAdminQr() {
+        for (role in listOf("guest", "member", "GUEST", null, "")) {
+            assertFalse(role.toString(), NavRules.showsInviteCta(role))
+            assertFalse(role.toString(), NavRules.homePeopleHint(role, emptyList()).contains("QR", ignoreCase = true))
+        }
+        assertTrue(NavRules.showsInviteCta("owner"))
+        assertTrue(NavRules.showsInviteCta("OWNER"))
+        assertTrue(NavRules.homePeopleHint("owner", emptyList()).contains("QR"))
+    }
+
+    @Test
+    fun messengerTabsExcludeHomeAndRefreshLists() {
         assertEquals(5, NavRules.tabs.size)
-        assertEquals(listOf(Screen.Home, Screen.Chats, Screen.Groups, Screen.Calls, Screen.Status), NavRules.tabs.map { it.screen })
+        assertEquals(
+            listOf(Screen.Chats, Screen.Groups, Screen.Calls, Screen.People, Screen.Status),
+            NavRules.tabs.map { it.screen },
+        )
+        assertFalse(NavRules.tabs.any { it.screen == Screen.Home })
         assertTrue(NavRules.refreshesLists(Screen.Home))
         assertTrue(NavRules.refreshesLists(Screen.People))
         assertFalse(NavRules.refreshesLists(Screen.Chat))

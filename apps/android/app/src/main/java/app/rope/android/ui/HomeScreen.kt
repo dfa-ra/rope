@@ -35,7 +35,9 @@ fun HomePane(
     val me = state.profile?.displayName.orEmpty()
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val groups = NavRules.groupsOf(state.conversations)
-    val owner = RoleRules.isOwner(state.profile?.role)
+    val role = state.profile?.role
+    val owner = RoleRules.isOwner(role)
+    val canInvite = NavRules.showsInviteCta(role)
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -85,51 +87,35 @@ fun HomePane(
                 }
             }
             Spacer(Modifier.height(22.dp))
-            FadeIn(400) {
+            FadeIn(320) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     MiniStat("Чаты", state.conversations.size.toString(), Modifier.weight(1f)) { onGo(Screen.Chats) }
                     MiniStat("Группы", groups.size.toString(), Modifier.weight(1f)) { onGo(Screen.Groups) }
                     MiniStat("Люди", people.size.toString(), Modifier.weight(1f)) { onGo(Screen.People) }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            FadeIn(460) {
-                SectionCard(onClick = { onGo(Screen.Calls) }) {
-                    Text("Звонки", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Входящие и исходящие — из личного чата. История на этой вкладке.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(520) {
-                SectionCard(onClick = onInvite) {
-                    Text("Пригласить по QR", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Одноразовая ссылка. Гость входит без прав owner.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(580) {
-                SectionCard(onClick = { onGo(Screen.People) }) {
-                    Text("Люди на сервере", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (people.isEmpty()) {
-                            "Пока никого. Покажите QR — человек появится здесь."
-                        } else {
-                            people.take(4).joinToString(" · ") { it.displayName.ifBlank { it.deviceId.take(6) } }
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            if (canInvite) {
+                Spacer(Modifier.height(12.dp))
+                FadeIn(400) {
+                    SectionCard(onClick = onInvite) {
+                        Text("Пригласить по QR", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Одноразовая ссылка. Гость входит без прав owner.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))
+            Text(
+                NavRules.homePeopleHint(role, people),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            Spacer(Modifier.height(12.dp))
             Text(
                 "Приложение ${BuildConfig.VERSION_NAME}" + if (owner) " · owner" else " · гость",
                 style = MaterialTheme.typography.labelSmall,

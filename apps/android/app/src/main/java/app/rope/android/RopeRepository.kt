@@ -1250,7 +1250,7 @@ class RopeRepository(private val app: Application) {
         val withIce = refreshIceServers(profile)
         store.saveProfile(withIce)
         api = ServerApi(withIce, identity!!)
-        _state.value = applyNav(Screen.Chats, NavMode.Reset).copy(
+        _state.value = applyNav(NavRules.signedInRoot, NavMode.Reset).copy(
             profile = withIce,
             busy = false,
             error = null,

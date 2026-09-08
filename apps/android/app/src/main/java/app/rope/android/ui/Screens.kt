@@ -2,8 +2,12 @@ package app.rope.android
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -34,8 +38,8 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Groups
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -178,6 +182,9 @@ fun RopeScaffold(
                     }
                 },
                 actions = {
+                    if (NavRules.showsHomeAction(state.screen, signedIn)) {
+                        TextButton(onClick = { onTab(Screen.Home) }) { Text("На главную") }
+                    }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
                             if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
@@ -185,8 +192,10 @@ fun RopeScaffold(
                         )
                     }
                     if (signedIn) {
-                        IconButton(onClick = onInvite) {
-                            Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                        if (NavRules.showsInviteCta(state.profile?.role)) {
+                            IconButton(onClick = onInvite) {
+                                Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                            }
                         }
                         IconButton(onClick = onStatus) {
                             Icon(Icons.Outlined.Dns, contentDescription = "Сервер")
@@ -234,7 +243,7 @@ fun RopeScaffold(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 AnimatedContent(
                     targetState = state.screen,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    transitionSpec = { screenTransition(initialState, targetState) },
                     label = "screen",
                 ) { screen ->
                     when (screen) {
@@ -312,11 +321,25 @@ private fun RopeBottomBar(
     }
 }
 
+private fun screenTransition(from: Screen, to: Screen): ContentTransform {
+    val enterMessenger = from == Screen.Home && NavRules.isMessengerShell(to)
+    val leaveMessenger = to == Screen.Home && NavRules.isMessengerShell(from)
+    return when {
+        enterMessenger ->
+            (slideInHorizontally(tween(340)) { it / 4 } + fadeIn(tween(280))) togetherWith
+                (slideOutHorizontally(tween(280)) { -it / 8 } + fadeOut(tween(200)))
+        leaveMessenger ->
+            (slideInHorizontally(tween(340)) { -it / 4 } + fadeIn(tween(280))) togetherWith
+                (slideOutHorizontally(tween(280)) { it / 8 } + fadeOut(tween(200)))
+        else -> fadeIn(tween(200)) togetherWith fadeOut(tween(160))
+    }
+}
+
 private fun tabIcon(screen: Screen): ImageVector = when (screen) {
-    Screen.Home -> Icons.Outlined.Home
     Screen.Chats -> Icons.AutoMirrored.Outlined.Chat
     Screen.Groups -> Icons.Outlined.Groups
     Screen.Calls -> Icons.Outlined.Call
+    Screen.People -> Icons.Outlined.People
     else -> Icons.Outlined.Dns
 }
 
