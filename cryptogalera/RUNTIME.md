@@ -4,7 +4,7 @@ How Cursor subagents are **spawned, tasked, and reported**. Binding. Compact.
 
 **Who is who:** [CONSTITUTION.md](CONSTITUTION.md). **Who may work:** [AGENTS.md](../AGENTS.md). **Live company memory:** `.cryptogalera/` (PO-owned; see below). This file is the spawn/report contract, not a product spec.
 
-Mode is **STABILIZATION / ship 0.3.2**. D-005 A is done. Every completed product task ends with PR → review → merge to `main` → tagged release. CG-007 is unfrozen for CG-044 (land notify + Telegram-menus, tag `v0.3.2`). Do not invent iOS/ratchet/landing. No VK/Yandex/WB tunnels. Do not retag v0.2.15 / v0.3.0 / v0.3.1.
+Mode is **STABILIZATION**. D-005 A is done. Last ship is **v0.3.2**. Every completed product task ends with PR → review → merge to `main` → tagged release. Do not invent iOS/ratchet/landing. No VK/Yandex/WB tunnels. Do not retag v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2.
 
 ---
 
