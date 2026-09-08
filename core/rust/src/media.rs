@@ -115,6 +115,9 @@ fn open_chunked(key: &[u8; 32], blob: &[u8]) -> Result<Vec<u8>, RopeError> {
             .map_err(|_| RopeError::crypto("object decrypt"))?;
         out.extend_from_slice(&part);
     }
+    if !rest.is_empty() {
+        return Err(RopeError::crypto("trailing object bytes"));
+    }
     if out.len() != total {
         return Err(RopeError::crypto("object length mismatch"));
     }
@@ -147,5 +150,18 @@ mod tests {
     fn object_rejects_bad_hash() {
         let enc = encrypt_object(b"abc".to_vec()).unwrap();
         assert!(decrypt_object(enc.key, enc.ciphertext, "00".repeat(32)).is_err());
+    }
+
+    #[test]
+    fn object_rejects_trailing_garbage() {
+        let enc = encrypt_object(b"abc".to_vec()).unwrap();
+        let mut blob = enc.ciphertext;
+        blob.extend_from_slice(b"garbage!");
+        let hash = hex::encode(sha256(&blob));
+        let err = decrypt_object(enc.key, blob, hash).unwrap_err();
+        match err {
+            RopeError::Crypto(msg) => assert_eq!(msg, "trailing object bytes"),
+            other => panic!("expected trailing object bytes, got {other:?}"),
+        }
     }
 }

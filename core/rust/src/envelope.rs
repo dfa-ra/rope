@@ -18,6 +18,9 @@ pub const ENVELOPE_TYPE_CALL: u8 = 4;
 pub const ENVELOPE_TYPE_RECEIPT: u8 = 5;
 pub const HEADER_AAD_LEN: usize = 96;
 pub const MAX_CIPHERTEXT: usize = 65536;
+/// Reject envelopes whose `timestamp_ms` is more than this far ahead of local time.
+/// Old timestamps are accepted so offline delivery still works.
+pub const MAX_FUTURE_SKEW_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct EncryptedEnvelope {
@@ -214,6 +217,9 @@ pub fn decrypt_typed(
             },
         )
         .map_err(|_| RopeError::crypto("decrypt"))?;
+    if parsed.meta.msg_type == ENVELOPE_TYPE_CALL && inner.is_empty() {
+        return Err(RopeError::InvalidEnvelope);
+    }
     Ok(DecryptedPayload {
         message_id: parsed.meta.message_id,
         sender_id: parsed.meta.sender_id,
@@ -254,6 +260,12 @@ pub fn parse_envelope(bytes: &[u8]) -> Result<ParsedEnvelope<'_>, RopeError> {
     let signature = rest[ct_len..].try_into().unwrap();
     let signed_body = &bytes[..bytes.len() - 64];
     let message_id = Uuid::from_bytes(id).as_hyphenated().to_string();
+    if !known_envelope_type(msg_type) {
+        return Err(RopeError::InvalidEnvelope);
+    }
+    if timestamp_exceeds_future_skew(timestamp_ms, unix_ms()) {
+        return Err(RopeError::InvalidEnvelope);
+    }
     Ok(ParsedEnvelope {
         meta: EnvelopeMeta {
             version,
@@ -308,6 +320,10 @@ fn unix_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn timestamp_exceeds_future_skew(timestamp_ms: u64, now_ms: u64) -> bool {
+    timestamp_ms > now_ms.saturating_add(MAX_FUTURE_SKEW_MS)
 }
 
 pub fn cert_fingerprint_hex(der: &[u8]) -> String {
@@ -392,5 +408,109 @@ mod tests {
                 .text,
             "compat"
         );
+    }
+
+    #[test]
+    fn parse_rejects_unknown_msg_type_before_decrypt() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let mut env = encrypt_message(&alice, &bob.public_identity(), "x").unwrap();
+        env.bytes[6] = 99;
+        let err = match parse_envelope(&env.bytes) {
+            Err(e) => e,
+            Ok(_) => panic!("unknown msg_type must fail in parse_envelope"),
+        };
+        assert!(matches!(err, RopeError::InvalidEnvelope));
+        let meta_err = parse_envelope_meta(&env.bytes).unwrap_err();
+        assert!(matches!(meta_err, RopeError::InvalidEnvelope));
+    }
+
+    #[test]
+    fn parse_rejects_timestamp_beyond_future_skew() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let mut env = encrypt_message(&alice, &bob.public_identity(), "x").unwrap();
+        let now = unix_ms();
+        let far = now.saturating_add(MAX_FUTURE_SKEW_MS).saturating_add(1);
+        env.bytes[24..32].copy_from_slice(&far.to_le_bytes());
+        let err = match parse_envelope(&env.bytes) {
+            Err(e) => e,
+            Ok(_) => panic!("far-future timestamp must fail in parse_envelope"),
+        };
+        assert!(matches!(err, RopeError::InvalidEnvelope));
+    }
+
+    #[test]
+    fn parse_allows_old_timestamp() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let mut env = encrypt_message(&alice, &bob.public_identity(), "x").unwrap();
+        env.bytes[24..32].copy_from_slice(&0u64.to_le_bytes());
+        let parsed = parse_envelope(&env.bytes).unwrap();
+        assert_eq!(parsed.meta.timestamp_ms, 0);
+    }
+
+    #[test]
+    fn future_skew_window_is_seven_days() {
+        let now = 1_700_000_000_000u64;
+        assert_eq!(MAX_FUTURE_SKEW_MS, 7 * 24 * 60 * 60 * 1000);
+        assert!(!timestamp_exceeds_future_skew(now, now));
+        assert!(!timestamp_exceeds_future_skew(now + MAX_FUTURE_SKEW_MS, now));
+        assert!(timestamp_exceeds_future_skew(
+            now + MAX_FUTURE_SKEW_MS + 1,
+            now
+        ));
+        assert!(!timestamp_exceeds_future_skew(0, now));
+    }
+
+    #[test]
+    fn decrypt_with_peer_stays_text_only() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let media = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_MEDIA,
+            br#"{"kind":"voice"}"#,
+        )
+        .unwrap();
+        let err = decrypt_with_peer(&bob, &alice.public_identity(), &media.bytes).unwrap_err();
+        assert!(matches!(err, RopeError::InvalidEnvelope));
+        let typed = decrypt_typed(&bob, &alice.public_identity(), &media.bytes).unwrap();
+        assert_eq!(typed.msg_type, ENVELOPE_TYPE_MEDIA);
+
+        let call = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_CALL, b"sdp").unwrap();
+        assert!(decrypt_with_peer(&bob, &alice.public_identity(), &call.bytes).is_err());
+        let got = decrypt_typed(&bob, &alice.public_identity(), &call.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_CALL);
+        assert_eq!(got.body, b"sdp");
+    }
+
+    #[test]
+    fn decrypt_typed_rejects_empty_call_body() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_CALL, b"").unwrap();
+        assert_eq!(parse_envelope_meta(&env.bytes).unwrap().msg_type, ENVELOPE_TYPE_CALL);
+        let err = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap_err();
+        assert!(matches!(err, RopeError::InvalidEnvelope));
+    }
+
+    #[test]
+    fn decrypt_typed_accepts_types_one_through_five() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        for (ty, body) in [
+            (ENVELOPE_TYPE_TEXT, encode_text_payload("hi")),
+            (ENVELOPE_TYPE_MEDIA, br#"{"k":"m"}"#.to_vec()),
+            (ENVELOPE_TYPE_GROUP_TEXT, encode_text_payload("g")),
+            (ENVELOPE_TYPE_CALL, b"offer".to_vec()),
+            (ENVELOPE_TYPE_RECEIPT, b"ack".to_vec()),
+        ] {
+            let env = encrypt_typed(&alice, &bob.public_identity(), ty, &body).unwrap();
+            let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+            assert_eq!(got.msg_type, ty);
+            assert_eq!(got.body, body);
+        }
     }
 }
