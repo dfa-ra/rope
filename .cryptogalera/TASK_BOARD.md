@@ -11,8 +11,8 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-032 | Android UI + WSS E2EE audio fallback | AND-01 | DONE | worker + integrator fixes | CG-030 |
 | CG-033 | Go call-media relay | GO-01 | DONE | 16KiB cap + 40/s audio | CG-030 |
 | CG-034 | Rust envelope only if needed | RUST-01 | CANCELLED | reuse encryptTyped CALL | CG-030 |
-| CG-035 | Independent review | REV-01 | PENDING | after impl | CG-031 |
-| CG-036 | Ship **0.3.1** | PO | PENDING | tag v0.3.1; versionCode 25 | CG-035 |
+| CG-035 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; ICE label + audio fold + CALL type check addressed | CG-031 |
+| CG-036 | Ship **0.3.1** | PO | IN_PROGRESS | versionCode 25; tag after CI | CG-035 |
 | CG-003 | No extra overlapping feature agents | PO | IN_PROGRESS | D-006 | — |
 | CG-012 | Settings stub | — | BACKLOG | — | — |
 | CG-013 | Owner revoke UI | — | BACKLOG | — | — |

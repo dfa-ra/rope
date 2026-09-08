@@ -10,12 +10,13 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.0**. GitHub Release `v0.2.15` remains published history.
+The product trunk is **`main`**, shipping **0.3.1**. GitHub Releases `v0.2.15` and `v0.3.0` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.0` / `versionCode=24`, plus CryptoGalera operating layer |
-| **GitHub Release `v0.2.15`** | Previous Latest until `v0.3.0` publishes. Do not retag `v0.2.15`. |
+| **`main`** | Shipped tree: Android `versionName=0.3.1` / `versionCode=25`, plus CryptoGalera operating layer |
+| **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
+| **GitHub Release `v0.3.0`** | Previous Latest until `v0.3.1` publishes. Do not retag `v0.3.0`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -25,7 +26,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.0`).
+1. Install the Android app (this cycle ships `v0.3.1`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).
