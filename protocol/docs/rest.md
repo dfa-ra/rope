@@ -67,7 +67,6 @@ Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running":
   ],
   "ice_ttl_seconds": 604800
 }
-}
 ```
 
 On `--allow-http` debug servers `fingerprint` is the SHA-256 of the ASCII string `rope-http-dev`.
