@@ -23,6 +23,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
+import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
@@ -154,7 +155,7 @@ class RopeRepository(private val app: Application) {
     private var tone: ToneGenerator? = null
     private val mediaAttempts = mutableSetOf<String>()
     private var lastTypingSentAt = 0L
-    private val typingUntil = mutableMapOf<String, Pair<String, Long>>()
+    private val typingUntil = mutableMapOf<String, MutableMap<String, Pair<String, Long>>>()
     private var typingJob: Job? = null
     private var rtc: WebRtcSession? = null
     private val callMachine = CallMachine()
@@ -768,8 +769,10 @@ class RopeRepository(private val app: Application) {
             busy(true)
             try {
                 var g = api?.createGroup(name) ?: error("нет сети")
+                val me = identity?.deviceId().orEmpty()
+                g = g.copy(createdBy = g.createdBy.ifBlank { me })
                 for (id in _state.value.pickedMembers) {
-                    g = api?.addGroupMember(g.groupId, id) ?: g
+                    g = api?.addGroupMember(g.groupId, id)?.copy(createdBy = g.createdBy) ?: g
                 }
                 store.upsertGroup(g)
                 _state.value = _state.value.copy(busy = false, error = null)
@@ -783,9 +786,12 @@ class RopeRepository(private val app: Application) {
 
     fun addMemberToOpenGroup(deviceId: String) {
         val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!RoleRules.canManageGroupMembers(me in g.members, me, organizer, _state.value.profile?.role)) return
         scope.launch {
             try {
-                val updated = api?.addGroupMember(g.groupId, deviceId) ?: return@launch
+                val updated = api?.addGroupMember(g.groupId, deviceId)?.copy(createdBy = g.createdBy) ?: return@launch
                 store.upsertGroup(updated)
                 _state.value = _state.value.copy(group = updated)
                 refreshDirectory()
@@ -797,12 +803,37 @@ class RopeRepository(private val app: Application) {
 
     fun removeMemberFromOpenGroup(deviceId: String) {
         val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!RoleRules.canManageGroupMembers(me in g.members, me, organizer, _state.value.profile?.role)) return
         scope.launch {
             try {
-                val updated = api?.removeGroupMember(g.groupId, deviceId) ?: return@launch
+                val updated = api?.removeGroupMember(g.groupId, deviceId)?.copy(createdBy = g.createdBy) ?: return@launch
                 store.upsertGroup(updated)
                 _state.value = _state.value.copy(group = updated)
                 refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun leaveOpenGroup() {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId ?: return
+        if (!RoleRules.canLeaveGroup(me in g.members)) return
+        scope.launch {
+            try {
+                api?.removeGroupMember(g.groupId, me)
+                store.deleteGroup(g.groupId)
+                refreshDirectory()
+                _state.value = applyNav(Screen.Groups, NavMode.SwitchTab).copy(
+                    group = null,
+                    messages = emptyList(),
+                    replyTo = null,
+                    editTarget = null,
+                    notice = "Вы вышли из «${g.name}»",
+                )
             } catch (e: Exception) {
                 error(e)
             }
@@ -1315,15 +1346,19 @@ class RopeRepository(private val app: Application) {
         sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.TYPING, target).toJson().toByteArray())
     }
 
-    private fun noteTyping(chatId: String, name: String) {
-        typingUntil[chatId] = name.ifBlank { "печатает" } to System.currentTimeMillis() + TypingRules.TTL_MS
+    private fun noteTyping(chatId: String, deviceId: String, name: String) {
+        val slot = typingUntil.getOrPut(chatId) { mutableMapOf() }
+        slot[deviceId.ifBlank { name }] = name.ifBlank { "кто-то" } to System.currentTimeMillis() + TypingRules.TTL_MS
         publishTyping()
         if (typingJob?.isActive == true) return
         typingJob = scope.launch {
             while (typingUntil.isNotEmpty()) {
                 delay(800)
                 val now = System.currentTimeMillis()
-                typingUntil.entries.removeAll { !TypingRules.isActive(it.value.second, now) }
+                typingUntil.values.forEach { people ->
+                    people.entries.removeAll { !TypingRules.isActive(it.value.second, now) }
+                }
+                typingUntil.entries.removeAll { it.value.isEmpty() }
                 publishTyping()
             }
         }
@@ -1331,9 +1366,18 @@ class RopeRepository(private val app: Application) {
 
     private fun publishTyping() {
         val open = openChatId()
-        val name = open?.let { typingUntil[it]?.first }
-        if (_state.value.typingName != name) {
-            _state.value = _state.value.copy(typingName = name)
+        val now = System.currentTimeMillis()
+        val names = open?.let { chat ->
+            typingUntil[chat]
+                ?.filterValues { TypingRules.isActive(it.second, now) }
+                ?.values
+                ?.map { it.first }
+                ?.distinct()
+        }.orEmpty()
+        val line = GroupChatUx.typingLine(names, _state.value.group != null)
+        val next = line.ifBlank { null }
+        if (_state.value.typingName != next) {
+            _state.value = _state.value.copy(typingName = next)
         }
     }
 
@@ -1431,10 +1475,14 @@ class RopeRepository(private val app: Application) {
                     store.groups()
                 }
                 store.saveGroups(groups)
+                val stored = store.groups()
                 store.rehomeMisroutedMedia()
                 val peer = _state.value.peer?.let { cur -> devices.find { it.deviceId == cur.deviceId } ?: cur }
-                val group = _state.value.group?.let { cur -> groups.find { it.groupId == cur.groupId } ?: cur }
-                _state.value = _state.value.copy(devices = devices, groups = groups, peer = peer, group = group)
+                val group = _state.value.group?.let { cur ->
+                    val found = stored.find { it.groupId == cur.groupId }
+                    found?.copy(createdBy = found.createdBy.ifBlank { cur.createdBy }) ?: cur
+                }
+                _state.value = _state.value.copy(devices = devices, groups = stored, peer = peer, group = group)
                 refreshConversations()
                 refreshOpenChat()
             } catch (e: Exception) {
@@ -1471,7 +1519,7 @@ class RopeRepository(private val app: Application) {
             Conversation(
                 id = id,
                 title = g.name,
-                subtitle = last?.preview() ?: "${g.members.size} участников",
+                subtitle = GroupChatUx.groupSubtitle(last, g.members.size, identity?.deviceId().orEmpty()),
                 isGroup = true,
                 online = g.members.any { it in _state.value.onlineIds && it != identity?.deviceId() },
                 last = last,
@@ -1684,7 +1732,7 @@ class RopeRepository(private val app: Application) {
                     control?.kind == ChatControl.DELETE -> store.markDeleted(control.targetId)
                     control?.kind == ChatControl.TYPING -> {
                         val chatId = if (ChatIds.isGroup(control.targetId)) control.targetId else sender.deviceId
-                        noteTyping(chatId, sender.displayName)
+                        noteTyping(chatId, sender.deviceId, sender.displayName)
                     }
                     control?.kind == ChatControl.PIN -> {
                         val chatId = store.message(control.targetId)?.peerDeviceId

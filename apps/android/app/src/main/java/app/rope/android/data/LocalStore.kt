@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 5) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 6) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -58,7 +58,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
               id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
               epoch INTEGER NOT NULL,
-              members TEXT NOT NULL
+              members TEXT NOT NULL,
+              created_by TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent(),
         )
@@ -91,6 +92,9 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         }
         if (oldVersion < 5) {
             db.execSQL("ALTER TABLE messages ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'")
+        }
+        if (oldVersion < 6) {
+            db.execSQL("ALTER TABLE groups ADD COLUMN created_by TEXT NOT NULL DEFAULT ''")
         }
     }
 
@@ -269,11 +273,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     }
 
     fun saveGroups(groups: List<RopeGroup>) {
+        val prev = groups().associate { it.groupId to it.createdBy }
         writableDatabase.beginTransaction()
         try {
             writableDatabase.execSQL("DELETE FROM groups")
             for (g in groups) {
-                upsertGroup(g)
+                upsertGroup(g.copy(createdBy = g.createdBy.ifBlank { prev[g.groupId].orEmpty() }))
             }
             writableDatabase.setTransactionSuccessful()
         } finally {
@@ -284,19 +289,24 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     fun upsertGroup(g: RopeGroup) {
         val members = JSONArray().apply { g.members.forEach { put(it) } }.toString()
         writableDatabase.execSQL(
-            "INSERT OR REPLACE INTO groups(id, name, epoch, members) VALUES(?,?,?,?)",
-            arrayOf(g.groupId, g.name, g.epoch, members),
+            "INSERT OR REPLACE INTO groups(id, name, epoch, members, created_by) VALUES(?,?,?,?,?)",
+            arrayOf(g.groupId, g.name, g.epoch, members, g.createdBy),
         )
     }
 
+    fun deleteGroup(id: String) {
+        writableDatabase.execSQL("DELETE FROM groups WHERE id = ?", arrayOf(id))
+    }
+
     fun groups(): List<RopeGroup> {
-        val c = readableDatabase.rawQuery("SELECT id, name, epoch, members FROM groups", null)
+        val c = readableDatabase.rawQuery("SELECT id, name, epoch, members, created_by FROM groups", null)
         val out = mutableListOf<RopeGroup>()
         c.use {
             while (it.moveToNext()) {
                 val arr = JSONArray(it.getString(3))
                 val members = buildList { for (i in 0 until arr.length()) add(arr.getString(i)) }
-                out += RopeGroup(it.getString(0), it.getString(1), it.getInt(2), members)
+                val createdBy = if (it.columnCount > 4 && !it.isNull(4)) it.getString(4).orEmpty() else ""
+                out += RopeGroup(it.getString(0), it.getString(1), it.getInt(2), members, createdBy)
             }
         }
         return out

@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -83,7 +84,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -95,6 +99,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ComposerRules
+import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.Conversation
@@ -420,11 +425,17 @@ fun ChatPane(
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
     } ?: (state.peer?.online == true)
+    val typing = state.typingName
     val subtitle = when {
-        !state.typingName.isNullOrBlank() ->
-            if (state.group != null) "${state.typingName} печатает…" else "печатает…"
+        !typing.isNullOrBlank() -> typing
         state.group != null -> "${state.group.members.size} участников · ${if (online) "кто-то в сети" else "все офлайн"}"
         else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
+    }
+    val mentionNames = remember(state.group, state.devices, state.profile?.displayName) {
+        (state.devices.map { it.displayName } + listOfNotNull(state.profile?.displayName, GroupChatUx.YOU))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
     }
     val visible = state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     val list = rememberLazyListState()
@@ -531,13 +542,16 @@ fun ChatPane(
                     .weight(1f)
                     .fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                items(visible, key = { it.id }) { m ->
+                itemsIndexed(visible, key = { _, m -> m.id }) { index, m ->
                     MessageBubble(
                         m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
                         onCopy, onPinMessage, onJump, onOpenImage,
                         highlighted = flashId == m.id,
+                        clusterFirst = GroupChatUx.firstInCluster(visible, index),
+                        clusterLast = GroupChatUx.lastInCluster(visible, index),
+                        mentionNames = mentionNames,
                     )
                 }
             }
@@ -563,8 +577,12 @@ private fun MessageBubble(
     onJump: (String?) -> Unit,
     onOpenImage: (ChatMessage) -> Unit,
     highlighted: Boolean = false,
+    clusterFirst: Boolean = true,
+    clusterLast: Boolean = true,
+    mentionNames: List<String> = emptyList(),
 ) {
     val mine = m.outgoing
+    val inGroup = state.group != null
     val dark = MaterialTheme.colorScheme.background == RopeDarkBg
     val outBg = if (dark) OutBubbleDark else OutBubbleLight
     val outFg = if (dark) Color(0xFFF4F4F5) else Color.White
@@ -589,9 +607,18 @@ private fun MessageBubble(
         animationSpec = tween(180),
         label = "bubbleFlash",
     )
+    val senderLabel = m.senderName.ifBlank { m.senderId.take(8) }
+    val senderColor = Color(GroupChatUx.senderColorArgb(m.senderId, senderLabel))
+    val showName = GroupChatUx.showSenderName(inGroup, mine, clusterFirst) && !m.deleted
+    val showAvatar = inGroup && !mine && clusterLast
+    val topPad = if (clusterFirst) 8.dp else 2.dp
+    val corner = RopeShapes.bubble
+    val tight = 8.dp
+    val tail = RopeShapes.bubbleTail
     Column(
         Modifier
             .fillMaxWidth()
+            .padding(top = topPad)
             .graphicsLayer {
                 val s = 0.94f + 0.06f * appear
                 scaleX = s * selectScale
@@ -600,14 +627,40 @@ private fun MessageBubble(
             },
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (inGroup && !mine) {
+                Box(Modifier.width(28.dp), contentAlignment = Alignment.BottomCenter) {
+                    if (showAvatar) {
+                        InitialsAvatar(
+                            title = senderLabel.ifBlank { "?" },
+                            group = false,
+                            online = false,
+                            size = 28.dp,
+                            tint = senderColor,
+                            showPresence = false,
+                        )
+                    }
+                }
+            }
         Surface(
             color = if (mine) outBg else if (dark) InBubbleDark else InBubbleLight,
             contentColor = if (mine) outFg else MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(
-                topStart = RopeShapes.bubble,
-                topEnd = RopeShapes.bubble,
-                bottomStart = if (mine) RopeShapes.bubble else RopeShapes.bubbleTail,
-                bottomEnd = if (mine) RopeShapes.bubbleTail else RopeShapes.bubble,
+                topStart = if (!mine && !clusterFirst) tight else corner,
+                topEnd = if (mine && !clusterFirst) tight else corner,
+                bottomStart = when {
+                    mine -> corner
+                    clusterLast -> tail
+                    else -> tight
+                },
+                bottomEnd = when {
+                    !mine -> corner
+                    clusterLast -> tail
+                    else -> tight
+                },
             ),
             modifier = Modifier
                 .widthIn(max = 300.dp)
@@ -618,14 +671,14 @@ private fun MessageBubble(
         ) {
             Box {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    if (!mine && state.group != null && !m.deleted) {
-                        Text(m.senderName.ifBlank { m.senderId.take(8) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    if (showName) {
+                        Text(senderLabel, style = MaterialTheme.typography.labelMedium, color = senderColor)
                     }
                     if (!m.deleted && !m.replyToId.isNullOrBlank()) {
                         ReplyQuote(
-                            name = m.replyName.ifBlank { "Ответ" },
+                            name = GroupChatUx.replyQuoteName(m.replyName, m.outgoing),
                             preview = m.replyPreview.ifBlank { "Сообщение" },
-                            accent = if (mine) outFg else MaterialTheme.colorScheme.primary,
+                            accent = if (mine) outFg else senderColor,
                             onClick = { onJump(m.replyToId) },
                         )
                     }
@@ -649,7 +702,12 @@ private fun MessageBubble(
                             MessageKind.FILE -> FileBubble(m)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
-                            else -> Text(m.text, style = MaterialTheme.typography.bodyLarge)
+                            else -> MentionText(
+                                m.text,
+                                mentionNames,
+                                mentionColor = if (mine) outFg else senderColor,
+                                styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
+                            )
                         }
                     }
                     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
@@ -667,6 +725,7 @@ private fun MessageBubble(
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = selectAlpha)),
                 )
             }
+        }
         }
         if (picker && !m.deleted) {
             ReactionPicker { emoji ->
@@ -709,6 +768,28 @@ private fun ReplyQuote(name: String, preview: String, accent: Color, onClick: ()
         Text(name, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(preview, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
+}
+
+
+@Composable
+private fun MentionText(text: String, names: List<String>, mentionColor: Color, styleLarge: Boolean) {
+    val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
+    val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
+    if (spans.isEmpty()) {
+        Text(text, style = style)
+        return
+    }
+    val annotated = buildAnnotatedString {
+        append(text)
+        spans.forEach { range ->
+            addStyle(
+                SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold),
+                range.first,
+                range.last + 1,
+            )
+        }
+    }
+    Text(annotated, style = style)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -877,7 +958,7 @@ private fun ComposerBar(
                 )
             } ?: state.replyTo?.let { target ->
                 ComposerHint(
-                    title = if (target.outgoing) "Ответ себе" else "Ответ · ${target.senderName.ifBlank { "сообщение" }}",
+                    title = "Ответ · ${GroupChatUx.replyQuoteName(target.senderName, target.outgoing)}",
                     body = target.preview(),
                     onCancel = onCancelComposer,
                 )
@@ -1114,16 +1195,19 @@ fun InitialsAvatar(
     group: Boolean,
     online: Boolean,
     size: Dp = 46.dp,
+    tint: Color? = null,
+    showPresence: Boolean = true,
 ) {
     val letter = title.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     val iconSize = if (size < 40.dp) 16.dp else 22.dp
     val dot = if (size < 40.dp) 8.dp else 12.dp
+    val bg = tint ?: if (group) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
     Box(contentAlignment = Alignment.BottomEnd) {
         Box(
             Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(if (group) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary),
+                .background(bg),
             contentAlignment = Alignment.Center,
         ) {
             if (group) {
@@ -1136,12 +1220,14 @@ fun InitialsAvatar(
                 )
             }
         }
-        Box(
-            Modifier
-                .size(dot)
-                .clip(CircleShape)
-                .background(if (online) Color(0xFF43A047) else Color(0xFF9E9E9E)),
-        )
+        if (showPresence) {
+            Box(
+                Modifier
+                    .size(dot)
+                    .clip(CircleShape)
+                    .background(if (online) Color(0xFF43A047) else Color(0xFF9E9E9E)),
+            )
+        }
     }
 }
 

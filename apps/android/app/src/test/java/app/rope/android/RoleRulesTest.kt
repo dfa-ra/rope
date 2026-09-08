@@ -42,6 +42,15 @@ class RoleRulesTest {
     }
 
     @Test
+    fun groupManageIsOrganizerOrServerOwner() {
+        assertTrue(RoleRules.canManageGroupMembers(true, "org", "org", "guest"))
+        assertFalse(RoleRules.canManageGroupMembers(true, "mem", "org", "guest"))
+        assertTrue(RoleRules.canManageGroupMembers(true, "mem", "org", "owner"))
+        assertTrue(RoleRules.canLeaveGroup(true))
+        assertFalse(RoleRules.canLeaveGroup(false))
+    }
+
+    @Test
     fun guestStillSeesStatusAndApkUpdate() {
         assertTrue(RoleRules.canOpenStatus("guest"))
         assertTrue(RoleRules.canOpenStatus("member"))

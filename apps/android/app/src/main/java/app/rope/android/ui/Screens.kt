@@ -120,6 +120,7 @@ fun RopeScaffold(
     onCreateGroup: () -> Unit,
     onAddMember: (String) -> Unit,
     onRemoveMember: (String) -> Unit,
+    onLeaveGroup: () -> Unit = {},
     onAcceptCall: () -> Unit,
     onRejectCall: () -> Unit,
     onHangup: () -> Unit,
@@ -305,7 +306,7 @@ fun RopeScaffold(
                         Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onTab(Screen.Home) }
                         Screen.Settings -> SettingsPane(state, onToggleTheme) { onTab(Screen.Home) }
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
                     }
                 }
             }
