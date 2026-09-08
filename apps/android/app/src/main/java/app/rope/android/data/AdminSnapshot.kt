@@ -25,17 +25,42 @@ data class AdminSnapshot(
                 AdminCard("Группы", n("group_count")),
                 AdminCard("Лимит файла", formatBytes(obj.optLong("max_object_bytes"))),
                 AdminCard("Listen", n("listen")),
-                AdminCard(
-                    "TURN",
-                    if (obj.optBoolean("ice_enabled")) "на этом VPS" else "нет",
-                    if (obj.optBoolean("ice_enabled")) {
-                        "stun/turn ${n("turn_port")} · turns ${n("turns_port")}"
-                    } else {
-                        "обновите ядро, чтобы звонки шли через сервер"
-                    },
-                ),
+                AdminCard("TURN", turnValue(obj), turnHint(obj)),
             )
             return AdminSnapshot(cards, obj.toString(2))
+        }
+
+        fun turnValue(obj: JSONObject): String {
+            val running = obj.optBoolean("turn_running")
+            val configured = obj.optBoolean("ice_enabled")
+            val err = obj.optString("turn_error").trim()
+            return when {
+                running -> "работает"
+                configured && err.isNotEmpty() -> "не слушает"
+                configured -> "настроен"
+                else -> "нет"
+            }
+        }
+
+        fun turnHint(obj: JSONObject): String {
+            val err = obj.optString("turn_error").trim()
+            val turn = obj.opt("turn_port")?.toString() ?: "3478"
+            val turns = obj.opt("turns_port")?.toString().orEmpty()
+            val listen = obj.optString("turn_listen").trim()
+            val ext = obj.optString("turn_external_ip").trim()
+            if (err.isNotEmpty() && !obj.optBoolean("turn_running")) {
+                return err
+            }
+            val bits = mutableListOf("stun/turn $turn")
+            if (turns.isNotEmpty() && turns != "0") bits += "turns $turns"
+            if (listen.isNotEmpty()) bits += "listen $listen"
+            if (ext.isNotEmpty()) bits += ext.removePrefix("external-ip=")
+            if (err.isNotEmpty()) bits += err
+            return if (bits.isEmpty()) {
+                "обновите ядро, чтобы звонки шли через сервер"
+            } else {
+                bits.joinToString(" · ")
+            }
         }
 
         fun formatBytes(n: Long): String = when {
