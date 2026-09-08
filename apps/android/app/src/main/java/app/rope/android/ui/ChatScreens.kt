@@ -425,8 +425,9 @@ fun ChatPane(
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
     } ?: (state.peer?.online == true)
+    val typing = state.typingName
     val subtitle = when {
-        !state.typingName.isNullOrBlank() -> state.typingName!!
+        !typing.isNullOrBlank() -> typing
         state.group != null -> "${state.group.members.size} участников · ${if (online) "кто-то в сети" else "все офлайн"}"
         else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
     }
