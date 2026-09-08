@@ -82,26 +82,44 @@ local_ipv4() {
     return
   fi
   local src dev
-  src="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
-  dev="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit }}')"
-  if is_ipv4 "$src" && [[ "$src" != "127.0.0.1" ]] && ! iface_is_virtual "$dev"; then
-    echo "$src"
-    return
+  if command -v ip >/dev/null 2>&1; then
+    src="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+    dev="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit }}')"
+    if is_ipv4 "$src" && [[ "$src" != "127.0.0.1" ]] && ! iface_is_virtual "$dev"; then
+      echo "$src"
+      return
+    fi
+    src="$(ip -4 -o addr show scope global 2>/dev/null | awk '
+      {
+        iface=$2; ip=$4; sub(/\/.*/, "", ip);
+        if (iface ~ /^(lo|docker|br-|veth|virbr|cni|flannel|tun|tap|wg|tailscale)/) next;
+        if (ip ~ /^127\./ || ip ~ /^169\.254\./) next;
+        print ip; exit
+      }')"
+    if is_ipv4 "$src"; then
+      echo "$src"
+      return
+    fi
   fi
-  ip -4 -o addr show scope global 2>/dev/null | awk '
-    {
-      iface=$2; ip=$4; sub(/\/.*/, "", ip);
-      if (iface ~ /^(lo|docker|br-|veth|virbr|cni|flannel|tun|tap|wg|tailscale)/) next;
-      if (ip ~ /^127\./ || ip ~ /^169\.254\./) next;
-      print ip; exit
-    }'
+  hostname -I 2>/dev/null | awk '{
+    for (i = 1; i <= NF; i++) {
+      if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $i !~ /^127\./ && $i !~ /^169\.254\./) {
+        print $i; exit
+      }
+    }
+  }'
 }
 
 ip_on_local_iface() {
   local want="$1"
   [[ -n "$want" ]] || return 1
-  ip -4 -o addr show scope global 2>/dev/null | awk -v w="$want" '{
-    ip=$4; sub(/\/.*/, "", ip); if (ip==w) found=1
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 -o addr show scope global 2>/dev/null | awk -v w="$want" '{
+      ip=$4; sub(/\/.*/, "", ip); if (ip==w) found=1
+    } END { exit !found }' && return 0
+  fi
+  hostname -I 2>/dev/null | awk -v w="$want" '{
+    for (i = 1; i <= NF; i++) if ($i == w) found=1
   } END { exit !found }'
 }
 

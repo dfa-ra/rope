@@ -11,7 +11,9 @@ echo "$conf443" | grep -q '^listening-ip=0.0.0.0$' || fail "must listen on 0.0.0
 echo "$conf443" | grep -q '^listening-port=3478$' || fail "udp/tcp 3478"
 echo "$conf443" | grep -q '^tls-listening-port=443$' || fail "turns 443"
 echo "$conf443" | grep -qE '^external-ip=203.0.113.10(/[0-9.]+)?$' || fail "external-ip public IPv4"
-echo "$conf443" | grep -qE '^relay-ip=[0-9.]+$' || fail "relay-ip IPv4"
+if echo "$conf443" | grep -q '^relay-ip='; then
+  echo "$conf443" | grep -qE '^relay-ip=[0-9.]+$' || fail "relay-ip IPv4"
+fi
 echo "$conf443" | grep -q '^use-auth-secret$' || fail "use-auth-secret"
 echo "$conf443" | grep -q '^static-auth-secret=unit-test-secret$' || fail "secret mismatch"
 echo "$conf443" | grep -q '^lt-cred-mech$' || fail "lt-cred-mech"

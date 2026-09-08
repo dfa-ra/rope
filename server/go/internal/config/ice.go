@@ -83,7 +83,11 @@ func IsPrivateIPv4(s string) bool {
 	if ip4 == nil {
 		return false
 	}
-	return ip4.IsPrivate() || ip4.IsLoopback() || ip4.IsUnspecified() || ip4.IsLinkLocalUnicast()
+	if ip4.IsPrivate() || ip4.IsLoopback() || ip4.IsUnspecified() || ip4.IsLinkLocalUnicast() {
+		return true
+	}
+	// RFC 6598 CGNAT — net.IP.IsPrivate does not include 100.64/10.
+	return ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127
 }
 
 func (c Config) iceURLHosts() []string {
