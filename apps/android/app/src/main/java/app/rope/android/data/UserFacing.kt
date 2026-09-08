@@ -14,7 +14,7 @@ object UserFacing {
         val t = raw?.trim().orEmpty()
         if (t.isEmpty()) return GENERIC
         if (t == LOGIN || t == FILE_TOO_BIG || t == NO_NETWORK || t == NO_PATH || t == GENERIC) return t
-        if (looksLikeTrace(t)) return GENERIC
+        if (looksLikeStackDump(t)) return GENERIC
         val lower = t.lowercase()
         return when {
             "25 мб" in lower || "25mb" in lower || "файл больше" in lower -> FILE_TOO_BIG
@@ -25,6 +25,7 @@ object UserFacing {
                 "нет сети" in lower || "not connected" in lower || "no server" in lower ||
                 "offline" in lower || "network" in lower -> NO_NETWORK
             "fingerprint" in lower || "mismatch" in lower -> "Сервер не совпал"
+            looksLikeExceptionName(t) -> GENERIC
             isHumanCopy(t) -> t
             t.length > 80 -> GENERIC
             else -> t
@@ -33,16 +34,17 @@ object UserFacing {
 
     private fun isHumanCopy(t: String): Boolean {
         if (t.length > 80) return false
-        if (looksLikeTrace(t)) return false
+        if (looksLikeStackDump(t) || looksLikeExceptionName(t)) return false
         val cyrillic = t.any { it in '\u0400'..'\u04FF' }
         return cyrillic && !t.contains('\n')
     }
 
-    private fun looksLikeTrace(t: String): Boolean {
-        if (t.contains('\n') && (t.contains("at ") || t.contains("Exception"))) return true
+    private fun looksLikeStackDump(t: String): Boolean =
+        t.contains('\n') && (t.contains("at ") || t.contains("Exception") || t.contains("\tat "))
+
+    private fun looksLikeExceptionName(t: String): Boolean {
         if (t.contains("Exception:") || t.contains("Error:")) return true
         if (t.contains("java.") || t.contains("kotlin.") || t.contains("org.webrtc")) return true
-        if (t.contains("\tat ")) return true
         return false
     }
 }
