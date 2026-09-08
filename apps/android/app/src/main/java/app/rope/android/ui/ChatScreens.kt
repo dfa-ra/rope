@@ -59,6 +59,7 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
@@ -1074,7 +1075,7 @@ private fun ComposerBar(
     var lastSeenDraft by remember { mutableStateOf(state.draftText) }
     val scope = rememberCoroutineScope()
     var debounce by remember { mutableStateOf<Job?>(null) }
-    val chatKey = state.group?.id ?: state.peer?.deviceId.orEmpty()
+    val chatKey = state.group?.groupId ?: state.peer?.deviceId.orEmpty()
     LaunchedEffect(chatKey) {
         localText = state.draftText
         lastSeenDraft = state.draftText
