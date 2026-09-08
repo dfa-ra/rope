@@ -25,7 +25,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CallEnd
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MicOff
-import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.SpeakerPhone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -243,9 +243,9 @@ fun CallOverlay(
                     )
                     CircleAction("Завершить", Color(0xFFE53935), Icons.Outlined.CallEnd, onHangup)
                     CircleAction(
-                        if (speakerOn) "Динамик вкл" else "Динамик",
+                        if (speakerOn) "Громкая связь вкл" else "Громкая связь",
                         if (speakerOn) Color(0xFF1565C0) else Color(0xFF3F3F46),
-                        Icons.Outlined.VolumeUp,
+                        Icons.Outlined.SpeakerPhone,
                         onToggleSpeaker,
                     )
                 }

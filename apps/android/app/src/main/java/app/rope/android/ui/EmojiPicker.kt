@@ -13,11 +13,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -125,27 +131,34 @@ fun EmojiPickerPanel(
 }
 
 @Composable
-fun ReactionPicker(onPick: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    BackHandler(enabled = expanded) { expanded = false }
+fun ReactionPicker(
+    onPick: (String) -> Unit,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+) {
+    BackHandler(enabled = expanded) { onToggleExpand() }
     Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
         tonalElevation = 6.dp,
         shadowElevation = 4.dp,
-        shape = RoundedCornerShape(RopeShapes.picker),
-        modifier = Modifier.padding(top = 4.dp),
+        shape = RoundedCornerShape(16.dp),
     ) {
         Column(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-            Row(Modifier.padding(horizontal = 4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) {
                 EmojiPack.quickReactions.forEach { emoji ->
                     ReactionPickEmoji(emoji, onPick)
                 }
-                Text(
-                    "⋯",
+                Icon(
+                    if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Ещё",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .clickable { expanded = !expanded }
-                        .padding(8.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        .size(36.dp)
+                        .clickable(onClick = onToggleExpand)
+                        .padding(6.dp),
                 )
             }
             if (expanded) {

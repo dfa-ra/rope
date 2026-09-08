@@ -269,6 +269,9 @@ class Stage2UxTest {
         assertTrue(ChatActions.canPin(incoming))
         assertFalse(ChatActions.canCopy(deleted))
         assertFalse(ChatActions.canPin(deleted))
+        assertFalse(ChatActions.canOpen(incoming))
+        assertTrue(ChatActions.canOpen(photo.copy(outgoing = false)))
+        assertFalse(ChatActions.canOpen(deleted.copy(kind = MessageKind.IMAGE)))
     }
 
     @Test

@@ -229,6 +229,8 @@ object ChatActions {
     fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
 
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
+
+    fun canOpen(msg: ChatMessage): Boolean = !msg.deleted && msg.kind == MessageKind.IMAGE
 }
 
 data class ChatPrefs(
@@ -389,7 +391,7 @@ data class ReactionPayload(
     companion object {
         const val SET = "set"
         const val CLEAR = "clear"
-        val EMOJIS = listOf("👍", "❤️", "😂", "🔥", "😮", "😢", "👏")
+        val EMOJIS = listOf("❤️", "👌", "🤯", "😃", "👍", "😇", "😢")
 
         fun parse(raw: String): ReactionPayload? {
             val o = JSONObject(raw)

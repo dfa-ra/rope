@@ -62,6 +62,10 @@ class VoiceEmojiTest {
         assertTrue(EmojiPack.gestures.contains("👍"))
         assertTrue(EmojiPack.hearts.contains("❤️"))
         assertEquals(ReactionPayload.EMOJIS, EmojiPack.quickReactions)
+        assertEquals(
+            listOf("❤️", "👌", "🤯", "😃", "👍", "😇", "😢"),
+            ReactionPayload.EMOJIS,
+        )
     }
 
     @Test

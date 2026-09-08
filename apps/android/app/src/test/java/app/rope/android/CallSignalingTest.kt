@@ -203,6 +203,7 @@ class CallSignalingTest {
         assertTrue(m.state.wssMedia)
         assertEquals(CallMedia.CHAT, m.state.media)
         assertTrue(first.contains(CallEffect.StartWssMedia))
+        assertTrue(first.contains(CallEffect.StopTone))
         assertTrue(first.any { it is CallEffect.Send && it.event == CallSignal.RELAY })
         assertFalse(first.contains(CallEffect.RestartIce))
         assertTrue(m.state.live)
@@ -231,6 +232,7 @@ class CallSignalingTest {
         assertFalse(m.state.wssMedia)
         val fallback = m.onIce("FAILED", false)
         assertTrue(fallback.contains(CallEffect.StartWssMedia))
+        assertTrue(fallback.contains(CallEffect.StopTone))
         assertTrue(m.state.wssMedia)
         assertEquals(CallLinkState.CONNECTING, m.state.link)
         val connected = m.onIce("CONNECTED", true)
@@ -386,5 +388,23 @@ class CallSignalingTest {
         val start = m.localStart("c1", "g:crew", "alice")
         assertTrue(start.isEmpty())
         assertFalse(m.state.live)
+    }
+
+    @Test
+    fun wssFallbackIncludesStopTone() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        m.onHasTurn(true, "")
+        m.onSessionAttached()
+        m.onLocalOfferSent()
+        m.media("bob", CallSignal.ANSWER, "c1", answer(), "alice")
+        m.onIce("CHECKING", false)
+        val fallback = m.onConnectTimeout()
+        assertTrue(fallback.contains(CallEffect.StopTone))
+        assertTrue(fallback.contains(CallEffect.StartWssMedia))
+        val again = m.onConnectTimeout()
+        assertFalse(again.contains(CallEffect.StopTone))
+        assertFalse(again.contains(CallEffect.StartWssMedia))
     }
 }

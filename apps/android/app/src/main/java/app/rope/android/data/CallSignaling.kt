@@ -412,7 +412,10 @@ class CallMachine {
             media = CallMedia.CHAT,
         )
         val out = mutableListOf<CallEffect>()
-        if (!already) out += CallEffect.StartWssMedia
+        if (!already) {
+            out += CallEffect.StopTone
+            out += CallEffect.StartWssMedia
+        }
         out += CallEffect.CancelWatch
         if (sendRelay && !already) {
             out += CallEffect.Send(state.callId, state.peerDeviceId, CallSignal.RELAY)

@@ -32,15 +32,12 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,23 +47,31 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -97,6 +102,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -116,6 +122,7 @@ import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
@@ -456,13 +463,19 @@ fun ChatPane(
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
+    var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
     val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
-    BackHandler(enabled = showSearch) {
+    val singleSelected = selectedMsgs.singleOrNull()
+    BackHandler(enabled = menuMessage != null) {
+        if (reactionExpanded) reactionExpanded = false else menuMessage = null
+    }
+    BackHandler(enabled = showSearch && menuMessage == null) {
         showSearch = false
         onMessageQuery("")
     }
-    BackHandler(enabled = selecting) { selectedIds = emptySet() }
+    BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
     LaunchedEffect(visible.size, state.messageQuery) {
         if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
     }
@@ -476,37 +489,76 @@ fun ChatPane(
         if (flashId == id) flashId = null
     }
     val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable(enabled = state.group != null, onClick = onGroupInfo)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            InitialsAvatar(title, state.group != null, online)
-            Column(Modifier.weight(1f)) {
+        if (selecting) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { selectedIds = emptySet() }) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Снять выделение")
+                }
                 Text(
-                    if (selecting) "${selectedIds.size}" else title,
+                    ChatSelection.title(selectedIds.size),
                     style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    if (selecting) "выбрано" else subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (singleSelected != null && ChatActions.canEdit(singleSelected)) {
+                    IconButton(onClick = { onEdit(singleSelected); selectedIds = emptySet() }) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Изменить")
+                    }
+                }
+                if (selectedMsgs.any { ChatActions.canForward(it) }) {
+                    IconButton(onClick = {
+                        selectedMsgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                        selectedIds = emptySet()
+                    }) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Переслать")
+                    }
+                }
+                if (selectedMsgs.any { ChatActions.canDelete(it) }) {
+                    IconButton(onClick = {
+                        selectedMsgs.filter { ChatActions.canDelete(it) }.forEach(onDelete)
+                        selectedIds = emptySet()
+                    }) {
+                        Icon(Icons.Outlined.Delete, contentDescription = "Удалить")
+                    }
+                }
             }
-            IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
-                Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
-            }
-            if (state.peer != null && state.group == null) {
-                IconButton(onClick = onCall) {
-                    Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = state.group != null, onClick = onGroupInfo)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                InitialsAvatar(title, state.group != null, online)
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
+                    Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
+                }
+                if (state.peer != null && state.group == null) {
+                    IconButton(onClick = onCall) {
+                        Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
+                    }
                 }
             }
         }
-        if (showSearch) {
+        if (showSearch && !selecting) {
             TextField(
                 value = state.messageQuery,
                 onValueChange = onMessageQuery,
@@ -574,8 +626,7 @@ fun ChatPane(
                 ) {
                     itemsIndexed(visible, key = { _, m -> m.id }) { index, m ->
                         MessageBubble(
-                            m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
-                            onCopy, onPinMessage, onJump, onOpenImage,
+                            m, state, onPlay, onReact, onEnsureMedia, onJump,
                             highlighted = flashId == m.id,
                             clusterFirst = GroupChatUx.firstInCluster(visible, index),
                             clusterLast = GroupChatUx.lastInCluster(visible, index),
@@ -585,36 +636,39 @@ fun ChatPane(
                             onToggleSelect = {
                                 selectedIds = if (m.id in selectedIds) selectedIds - m.id else selectedIds + m.id
                             },
-                            onEnterSelect = { if (!m.deleted) selectedIds = selectedIds + m.id },
+                            onEnterSelect = {
+                                if (!m.deleted) {
+                                    menuMessage = null
+                                    reactionExpanded = false
+                                    selectedIds = selectedIds + m.id
+                                }
+                            },
+                            onTap = {
+                                if (!m.deleted) {
+                                    menuMessage = m
+                                    reactionExpanded = false
+                                }
+                            },
                         )
                     }
                 }
             }
             if (selecting) {
-                SelectionGlassBar(
-                    messages = selectedMsgs,
-                    pinnedId = state.pinnedMessageId,
+                SelectionReplyForwardBar(
+                    canReply = singleSelected != null && ChatActions.canReply(singleSelected),
+                    canForward = selectedMsgs.any { ChatActions.canForward(it) },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 10.dp, vertical = 8.dp),
-                    onReply = { m -> onReply(m); selectedIds = emptySet() },
-                    onForward = { msgs ->
-                        msgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                    onReply = {
+                        singleSelected?.let { if (ChatActions.canReply(it)) onReply(it) }
                         selectedIds = emptySet()
                     },
-                    onCopy = { msgs ->
-                        msgs.filter { ChatActions.canCopy(it) }.forEach(onCopy)
+                    onForward = {
+                        selectedMsgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
                         selectedIds = emptySet()
                     },
-                    onDelete = { msgs ->
-                        msgs.filter { ChatActions.canDelete(it) }.forEach(onDelete)
-                        selectedIds = emptySet()
-                    },
-                    onPin = { m -> onPinMessage(m); selectedIds = emptySet() },
-                    onEdit = { m -> onEdit(m); selectedIds = emptySet() },
-                    onReact = { m, emoji -> onReact(m, emoji); selectedIds = emptySet() },
-                    onClear = { selectedIds = emptySet() },
                 )
             }
         }
@@ -629,6 +683,30 @@ fun ChatPane(
                 onCancelComposer = onCancelComposer,
             )
         }
+    }
+    menuMessage?.let { target ->
+        MessageTapOverlay(
+            message = target,
+            pinned = state.pinnedMessageId == target.id,
+            expanded = reactionExpanded,
+            onToggleExpand = { reactionExpanded = !reactionExpanded },
+            onDismiss = {
+                menuMessage = null
+                reactionExpanded = false
+            },
+            onReact = { emoji ->
+                onReact(target, emoji)
+                menuMessage = null
+                reactionExpanded = false
+            },
+            onReply = { onReply(target); menuMessage = null },
+            onCopy = { onCopy(target); menuMessage = null },
+            onForward = { onForward(target); menuMessage = null },
+            onPin = { onPinMessage(target); menuMessage = null },
+            onDelete = { onDelete(target); menuMessage = null },
+            onOpen = { onOpenImage(target); menuMessage = null },
+        )
+    }
     }
     if (showAttach) {
         AttachSheet(
@@ -657,14 +735,7 @@ private fun MessageBubble(
     onPlay: (ChatMessage) -> Unit,
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
-    onReply: (ChatMessage) -> Unit,
-    onEdit: (ChatMessage) -> Unit,
-    onDelete: (ChatMessage) -> Unit,
-    onForward: (ChatMessage) -> Unit,
-    onCopy: (ChatMessage) -> Unit,
-    onPinMessage: (ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
-    onOpenImage: (ChatMessage) -> Unit,
     highlighted: Boolean = false,
     clusterFirst: Boolean = true,
     clusterLast: Boolean = true,
@@ -673,6 +744,7 @@ private fun MessageBubble(
     selecting: Boolean = false,
     onToggleSelect: () -> Unit = {},
     onEnterSelect: () -> Unit = {},
+    onTap: () -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -723,9 +795,23 @@ private fun MessageBubble(
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
         Row(
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            if (selecting) {
+                SelectionMark(
+                    selected = selected,
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .clickable(onClick = onToggleSelect),
+                )
+            }
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = if (mine) Arrangement.spacedBy(6.dp, Alignment.End) else Arrangement.spacedBy(6.dp),
+            ) {
             if (inGroup && !mine) {
                 Box(Modifier.width(28.dp), contentAlignment = Alignment.BottomCenter) {
                     if (showAvatar) {
@@ -746,7 +832,7 @@ private fun MessageBubble(
                     onClick = {
                         when {
                             selecting -> onToggleSelect()
-                            m.kind == MessageKind.IMAGE && !m.deleted -> onOpenImage(m)
+                            !m.deleted -> onTap()
                         }
                     },
                     onLongClick = {
@@ -774,7 +860,7 @@ private fun MessageBubble(
                                 onClick = { onJump(m.replyToId) },
                             )
                         }
-                        ImageBubble(m, onEnsureMedia, onOpenImage, overlayMeta = true)
+                        ImageBubble(m, onEnsureMedia, overlayMeta = true)
                     }
                     Box(
                         Modifier
@@ -861,6 +947,7 @@ private fun MessageBubble(
         }
             }
         }
+        }
         if (m.reactions.isNotEmpty() && !m.deleted) {
             ReactionRow(m, me, mine, onReact)
         }
@@ -910,46 +997,149 @@ private fun MentionText(text: String, names: List<String>, mentionColor: Color, 
     Text(annotated, style = style)
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MessageActionRow(
+private fun SelectionMark(selected: Boolean, modifier: Modifier = Modifier) {
+    val green = Color(0xFF43A047)
+    Box(
+        modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .then(
+                if (selected) {
+                    Modifier.background(green)
+                } else {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), CircleShape)
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(
+                Icons.Outlined.Check,
+                contentDescription = "Выбрано",
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageTapOverlay(
+    message: ChatMessage,
+    pinned: Boolean,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onDismiss: () -> Unit,
+    onReact: (String) -> Unit,
+    onReply: () -> Unit,
+    onCopy: () -> Unit,
+    onForward: () -> Unit,
+    onPin: () -> Unit,
+    onDelete: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        )
+        Column(
+            Modifier
+                .align(Alignment.Center)
+                .widthIn(max = 300.dp)
+                .padding(horizontal = 24.dp, vertical = 24.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                )
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            ReactionPicker(
+                onPick = onReact,
+                expanded = expanded,
+                onToggleExpand = onToggleExpand,
+            )
+            MessageActionMenu(
+                m = message,
+                pinned = pinned,
+                onReply = onReply,
+                onCopy = onCopy,
+                onForward = onForward,
+                onPin = onPin,
+                onDelete = onDelete,
+                onOpen = onOpen,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageActionMenu(
     m: ChatMessage,
     pinned: Boolean,
     onReply: () -> Unit,
-    onForward: () -> Unit,
     onCopy: () -> Unit,
+    onForward: () -> Unit,
     onPin: () -> Unit,
-    onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onOpen: () -> Unit,
 ) {
     Surface(
-        tonalElevation = 4.dp,
-        shape = RoundedCornerShape(RopeShapes.action),
-        modifier = Modifier.padding(top = 4.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        FlowRow(
-            Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+        Column(Modifier.padding(vertical = 4.dp)) {
             if (ChatActions.canReply(m)) {
-                TextButton(onClick = onReply) { Text("Ответить") }
-            }
-            if (ChatActions.canForward(m)) {
-                TextButton(onClick = onForward) { Text("Переслать") }
+                MessageMenuRow(Icons.AutoMirrored.Outlined.Reply, "Ответить", onReply)
             }
             if (ChatActions.canCopy(m)) {
-                TextButton(onClick = onCopy) { Text("Копировать") }
+                MessageMenuRow(Icons.Outlined.ContentCopy, "Копировать", onCopy)
+            }
+            if (ChatActions.canForward(m)) {
+                MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)
             }
             if (ChatActions.canPin(m)) {
-                TextButton(onClick = onPin) { Text(if (pinned) "Открепить" else "Закрепить") }
-            }
-            if (ChatActions.canEdit(m)) {
-                TextButton(onClick = onEdit) { Text("Изменить") }
+                MessageMenuRow(
+                    Icons.Outlined.PushPin,
+                    if (pinned) "Открепить" else "Закрепить",
+                    onPin,
+                )
             }
             if (ChatActions.canDelete(m)) {
-                TextButton(onClick = onDelete) { Text("Удалить") }
+                MessageMenuRow(Icons.Outlined.Delete, "Удалить", onDelete)
+            }
+            if (ChatActions.canOpen(m)) {
+                MessageMenuRow(Icons.Outlined.OpenInFull, "Открыть", onOpen)
             }
         }
+    }
+}
+
+@Composable
+private fun MessageMenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -1004,7 +1194,6 @@ private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boo
 private fun ImageBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
-    onOpen: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
 ) {
     LaunchedEffect(m.id, m.localPath) {
@@ -1018,8 +1207,7 @@ private fun ImageBubble(
             modifier = Modifier
                 .width(box.widthDp.dp)
                 .height(box.heightDp.dp)
-                .clip(RoundedCornerShape(RopeShapes.media))
-                .clickable { onOpen(m) },
+                .clip(RoundedCornerShape(RopeShapes.media)),
         ) {
             Image(
                 bitmap = bmp.asImageBitmap(),
@@ -1388,69 +1576,66 @@ private fun ComposerHint(title: String, body: String, onCancel: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SelectionGlassBar(
-    messages: List<ChatMessage>,
-    pinnedId: String?,
+private fun SelectionReplyForwardBar(
+    canReply: Boolean,
+    canForward: Boolean,
     modifier: Modifier = Modifier,
-    onReply: (ChatMessage) -> Unit,
-    onForward: (List<ChatMessage>) -> Unit,
-    onCopy: (List<ChatMessage>) -> Unit,
-    onDelete: (List<ChatMessage>) -> Unit,
-    onPin: (ChatMessage) -> Unit,
-    onEdit: (ChatMessage) -> Unit,
-    onReact: (ChatMessage, String) -> Unit,
-    onClear: () -> Unit,
+    onReply: () -> Unit,
+    onForward: () -> Unit,
 ) {
-    val single = messages.singleOrNull()
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (canReply) {
+            GlassActionButton(
+                label = "Ответить",
+                icon = Icons.AutoMirrored.Outlined.Reply,
+                modifier = Modifier.weight(1f),
+                onClick = onReply,
+            )
+        }
+        if (canForward) {
+            GlassActionButton(
+                label = "Переслать",
+                icon = Icons.AutoMirrored.Outlined.ArrowForward,
+                modifier = Modifier.weight(1f),
+                onClick = onForward,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GlassActionButton(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Surface(
-        modifier = modifier.border(
-            1.dp,
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
-            RoundedCornerShape(RopeShapes.action),
-        ),
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+                RoundedCornerShape(16.dp),
+            ),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-        shape = RoundedCornerShape(RopeShapes.action),
+        shape = RoundedCornerShape(16.dp),
         tonalElevation = 8.dp,
     ) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${messages.size}",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Снять выделение")
-                }
-            }
-            if (single != null && ChatActions.canReply(single)) {
-                ReactionPicker { onReact(single, it) }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (single != null && ChatActions.canReply(single)) {
-                    TextButton(onClick = { onReply(single) }) { Text("Ответить") }
-                }
-                if (messages.any { ChatActions.canForward(it) }) {
-                    TextButton(onClick = { onForward(messages) }) { Text("Переслать") }
-                }
-                if (messages.any { ChatActions.canCopy(it) }) {
-                    TextButton(onClick = { onCopy(messages) }) { Text("Копировать") }
-                }
-                if (single != null && ChatActions.canPin(single)) {
-                    TextButton(onClick = { onPin(single) }) {
-                        Text(if (pinnedId == single.id) "Открепить" else "Закрепить")
-                    }
-                }
-                if (single != null && ChatActions.canEdit(single)) {
-                    TextButton(onClick = { onEdit(single) }) { Text("Изменить") }
-                }
-                if (messages.any { ChatActions.canDelete(it) }) {
-                    TextButton(onClick = { onDelete(messages) }) { Text("Удалить") }
-                }
-            }
+        Row(
+            Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

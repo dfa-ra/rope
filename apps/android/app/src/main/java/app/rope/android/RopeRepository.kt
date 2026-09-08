@@ -45,6 +45,7 @@ import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
+import app.rope.android.data.NotifyRules
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
@@ -55,6 +56,7 @@ import app.rope.android.media.VoiceRecorder
 import app.rope.android.media.WebRtcSession
 import app.rope.android.media.WssAudioSession
 import app.rope.android.net.ServerApi
+import app.rope.android.notify.RopeConnectionService
 import app.rope.android.notify.RopeNotifier
 import app.rope.android.protocol.InviteCodec
 import app.rope.android.protocol.InviteLink as ParsedInvite
@@ -65,6 +67,8 @@ import app.rope.android.update.DeviceBackup
 import app.rope.android.update.PublicDownloads
 import app.rope.android.update.AppRelease
 import app.rope.android.update.AppUpdater
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -168,6 +172,7 @@ class RopeRepository(private val app: Application) {
     private var rtc: WebRtcSession? = null
     private var wssAudio: WssAudioSession? = null
     private val wssFrameBusy = AtomicBoolean(false)
+    private val sessionStarted = AtomicBoolean(false)
     private val callMachine = CallMachine()
     private var callPeerName: String = ""
     private var connectWatch: Job? = null
@@ -177,6 +182,12 @@ class RopeRepository(private val app: Application) {
     private var iceCachedAtMs: Long = 0L
 
     fun start(pendingLink: String?) {
+        if (!sessionStarted.compareAndSet(false, true)) {
+            if (!pendingLink.isNullOrBlank() && store.profile() == null) {
+                prepareJoin(pendingLink)
+            }
+            return
+        }
         scope.launch {
             try {
                 val night = app.resources.configuration.uiMode and
@@ -1287,6 +1298,7 @@ class RopeRepository(private val app: Application) {
         )
         refreshDirectory()
         connectSocket(withIce)
+        RopeConnectionService.start(app)
         checkAppUpdate(openStatus = false)
     }
 
@@ -1579,6 +1591,7 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun connectSocket(profile: ServerProfile) {
+        RopeConnectionService.start(app)
         socket?.cancel()
         val id = identity ?: return
         val currentApi = ServerApi(profile, id)
@@ -1610,7 +1623,10 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun scheduleReconnect() {
-        if (store.profile() == null) return
+        if (store.profile() == null) {
+            RopeConnectionService.stop(app)
+            return
+        }
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             val wait = (1_000L * (1 shl reconnectAttempt.coerceAtMost(5))).coerceAtMost(30_000L)
@@ -1626,8 +1642,10 @@ class RopeRepository(private val app: Application) {
             "presence" -> applyPresence(obj.optJSONArray("devices"))
             "queued" -> {
                 val mid = obj.optString("message_id")
-                store.updateStatus(mid, MessageStatus.SENT_TO_SERVER)
-                refreshOpenChat()
+                if (mid.isNotBlank()) {
+                    store.updateStatus(mid, MessageStatus.SENT_TO_SERVER)
+                    refreshOpenChat()
+                }
             }
             "delivered" -> {
                 val mid = obj.optString("message_id")
@@ -1844,6 +1862,7 @@ class RopeRepository(private val app: Application) {
                     }
                 }
                 is CallEffect.StartRtc -> {
+                    stopTone()
                     if (!callMachine.state.wssMedia) {
                         audioMode(true)
                         scope.launch { startRtc(effect.asCaller) }
@@ -1862,7 +1881,10 @@ class RopeRepository(private val app: Application) {
                         }
                     }
                 }
-                CallEffect.StartWssMedia -> startWssMedia()
+                CallEffect.StartWssMedia -> {
+                    stopTone()
+                    startWssMedia()
+                }
                 is CallEffect.DeliverAudio -> playWssAudio(effect.signals)
                 CallEffect.RestartIce -> if (!callMachine.state.wssMedia) rtc?.restartIce()
                 CallEffect.FallbackDirect -> if (!callMachine.state.wssMedia) rtc?.allowDirect()
@@ -2205,8 +2227,9 @@ class RopeRepository(private val app: Application) {
 
     private fun startTone(outgoing: Boolean) {
         stopTone()
-        tone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80).also {
-            it.startTone(if (outgoing) ToneGenerator.TONE_SUP_RINGTONE else ToneGenerator.TONE_SUP_RINGTONE, 30_000)
+        val stream = if (outgoing) AudioManager.STREAM_VOICE_CALL else AudioManager.STREAM_RING
+        tone = ToneGenerator(stream, 80).also {
+            it.startTone(ToneGenerator.TONE_SUP_RINGTONE, 30_000)
         }
     }
 
@@ -2224,12 +2247,16 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun notifyIfHidden(title: String, body: String, chatId: String) {
-        val open = _state.value.screen == Screen.Chat && openChatId() == chatId
-        if (open) return
+        val chatOpen = _state.value.screen == Screen.Chat && openChatId() == chatId
+        val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val cur = store.chatPrefs(chatId)
-        store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
-        refreshConversations()
-        if (!cur.muted) notifier.message(title, body)
+        if (!chatOpen || !appForeground) {
+            store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
+            refreshConversations()
+        }
+        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted)) {
+            notifier.message(title, body)
+        }
     }
 
     private fun ack(messageId: String) {
