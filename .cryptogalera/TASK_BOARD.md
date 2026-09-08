@@ -11,7 +11,7 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-023 | Go TURN/ICE | GO-01 | DONE | this cycle | CG-020 |
 | CG-024 | Rust envelope/object harden | RUST-01 | DONE | this cycle | CG-020 |
 | CG-025 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS then ICE client follow-up | CG-021 |
-| CG-026 | Ship **0.3.0** | PO | INTEGRATING | user | CG-025 |
+| CG-026 | Ship **0.3.0** | PO | DONE | tag v0.3.0 = 69c35cb | CG-025 |
 | CG-003 | No extra overlapping feature agents | PO | IN_PROGRESS | D-006 | — |
 | CG-012 | Settings stub | — | BACKLOG | — | — |
 | CG-013 | Owner revoke UI | — | BACKLOG | — | — |
