@@ -47,22 +47,25 @@ class RopeConnectionService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(launch)
             .build()
-        return runCatching {
-            when {
-                Build.VERSION.SDK_INT >= 34 -> startForeground(
-                    ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
-                )
-                Build.VERSION.SDK_INT >= 29 -> startForeground(
-                    ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-                else -> startForeground(ID, notification)
+        if (Build.VERSION.SDK_INT >= 34) {
+            val both = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
+            if (runCatching { startForeground(ID, notification, both) }.isSuccess) return true
+            if (runCatching {
+                    startForeground(ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                }.isSuccess
+            ) {
+                return true
             }
-        }.isSuccess
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            if (runCatching {
+                    startForeground(ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                }.isSuccess
+            ) {
+                return true
+            }
+        }
+        return runCatching { startForeground(ID, notification) }.isSuccess
     }
 
     private fun ensureChannel() {
