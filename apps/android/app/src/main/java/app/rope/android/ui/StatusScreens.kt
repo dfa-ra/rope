@@ -78,16 +78,12 @@ fun StatusPane(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                if (!owner) {
-                    val host = state.profile?.host.orEmpty()
-                    val port = state.profile?.port ?: 0
-                    if (host.isNotBlank()) {
-                        Text(
-                            "Подключение: $host:$port",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                if (!owner && host.isNotBlank()) {
+                    Text(
+                        "Подключение: $host:${state.profile?.port ?: 0}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         } else {
