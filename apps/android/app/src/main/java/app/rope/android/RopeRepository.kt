@@ -43,6 +43,7 @@ import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.IceServers
+import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
@@ -1269,7 +1270,7 @@ class RopeRepository(private val app: Application) {
 
     private fun refreshIceServers(profile: ServerProfile): ServerProfile {
         val info = runCatching { api?.info() }.getOrNull() ?: return profile
-        val ice = info.optJSONArray("ice_servers")?.toString().orEmpty()
+        val ice = IceServers.infoJson(info) ?: return profile
         return profile.copy(iceServersJson = ice)
     }
 
@@ -1842,16 +1843,22 @@ class RopeRepository(private val app: Application) {
     }
 
     private suspend fun awaitIce(): List<IceServerSpec> {
-        val cur = store.profile() ?: _state.value.profile
-        val updated = withContext(Dispatchers.IO) {
-            cur?.let { refreshIceServers(it) } ?: cur
+        var profile = store.profile() ?: _state.value.profile
+        repeat(2) { attempt ->
+            val updated = withContext(Dispatchers.IO) {
+                profile?.let { refreshIceServers(it) } ?: profile
+            }
+            if (updated != null) {
+                store.saveProfile(updated)
+                _state.value = _state.value.copy(profile = updated)
+                profile = updated
+            }
+            val parsed = IceServers.parse(profile?.iceServersJson)
+            val resolved = IceServers.resolve(parsed, profile?.host)
+            if (!IceServers.missingTurn(resolved) || attempt == 1) return resolved
+            delay(400)
         }
-        if (updated != null) {
-            store.saveProfile(updated)
-            _state.value = _state.value.copy(profile = updated)
-        }
-        val parsed = IceServers.parse(updated?.iceServersJson)
-        return IceServers.resolve(parsed, updated?.host)
+        return IceServers.resolve(emptyList(), profile?.host)
     }
 
     private fun attachRtc(asCaller: Boolean, ice: List<IceServerSpec>) {
@@ -1868,6 +1875,7 @@ class RopeRepository(private val app: Application) {
                     iceServers = ice,
                     pinnedFingerprint = profile?.fingerprint.orEmpty(),
                     hintHost = profile?.host,
+                    polite = !asCaller,
                     onLocalSignal = { sig ->
                         val call = _state.value.call ?: return@WebRtcSession
                         val peer = _state.value.devices.find { it.deviceId == call.peerDeviceId }
@@ -1893,6 +1901,9 @@ class RopeRepository(private val app: Application) {
     private fun applyIceState(name: String, viaRelay: Boolean) {
         val cur = _state.value.call ?: return
         val (link, label) = CallLink.applyIce(name, viaRelay, cur.hasTurn)
+        if (cur.link == CallLinkState.FAILED && link != CallLinkState.CONNECTED && CallLink.iceIsFailed(name)) {
+            return
+        }
         _state.value = _state.value.copy(call = cur.copy(media = label, link = link))
         if (link == CallLinkState.CONNECTED) {
             connectWatch?.cancel()
@@ -2021,9 +2032,7 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun audioMode(on: Boolean) {
-        val am = app.getSystemService(AudioManager::class.java) ?: return
-        am.mode = if (on) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
-        am.isSpeakerphoneOn = false
+        CallAudio.apply(app, on)
     }
 
     private fun notifyIfHidden(title: String, body: String, chatId: String) {

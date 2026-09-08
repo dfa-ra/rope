@@ -61,8 +61,13 @@ object CallLink {
             "CONNECTED", "COMPLETED" -> CallLinkState.CONNECTED to connectedDetail(viaRelay)
             "FAILED", "CLOSED" -> CallLinkState.FAILED to iceFailedDetail(viaRelay, hasTurn)
             "DISCONNECTED" -> CallLinkState.CONNECTING to disconnectedDetail()
-            "CHECKING" -> CallLinkState.CONNECTING to connectingDetail(hasTurn)
+            "CHECKING", "CONNECTING", "NEW" -> CallLinkState.CONNECTING to connectingDetail(hasTurn)
             else -> CallLinkState.CONNECTING to if (hasTurn) "WebRTC · соединяем" else missingTurnDetail()
         }
+    }
+
+    fun iceIsFailed(ice: String): Boolean {
+        val name = ice.trim().uppercase()
+        return name == "FAILED" || name == "CLOSED"
     }
 }

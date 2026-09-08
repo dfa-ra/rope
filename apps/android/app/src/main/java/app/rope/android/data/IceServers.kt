@@ -7,30 +7,73 @@ data class IceServerSpec(
     val urls: List<String>,
     val username: String? = null,
     val credential: String? = null,
+    val hostname: String? = null,
 ) {
     val hasTurn: Boolean
         get() = urls.any { IceServers.isTurnUrl(it) }
 }
 
+/** Inputs for PeerConnection.RTCConfiguration — unit-testable without WebRTC. */
+data class IceRtcServer(
+    val urls: List<String>,
+    val username: String? = null,
+    val credential: String? = null,
+    val hostname: String? = null,
+    val insecureTls: Boolean = false,
+)
+
+data class IceRtcPlan(
+    val servers: List<IceRtcServer>,
+    val forceRelay: Boolean,
+) {
+    val hasTurn: Boolean
+        get() = servers.any { spec -> spec.urls.any { IceServers.isTurnUrl(it) } }
+}
+
 object IceServers {
+    // Optional /v1/info fields the TURN-server agent can add later (do not edit Go here):
+    // - ice_servers[].hostname : TLS SNI when urls use a raw IP
+    // - public_ip : second set of turn/turns URLs if DNS for public_host fails on the phone
     fun parse(raw: String?): List<IceServerSpec> {
         val text = raw?.trim().orEmpty()
         if (text.isEmpty() || text.equals("null", ignoreCase = true)) return emptyList()
         return try {
-            parseArray(JSONArray(text))
+            val trimmed = text.trim()
+            if (trimmed.startsWith("[")) {
+                parseArray(JSONArray(trimmed))
+            } else {
+                parseArray(iceArray(JSONObject(trimmed)))
+            }
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    fun fromInfo(obj: JSONObject): List<IceServerSpec> =
-        parseArray(obj.optJSONArray("ice_servers"))
+    fun fromInfo(obj: JSONObject): List<IceServerSpec> = parseArray(iceArray(obj))
+
+    /** Raw `ice_servers` JSON array, or null when the field is missing/empty/JSON null. */
+    fun infoJson(obj: JSONObject): String? {
+        val arr = iceArray(obj) ?: return null
+        if (arr.length() == 0) return null
+        return arr.toString()
+    }
+
+    fun iceArray(obj: JSONObject?): JSONArray? {
+        if (obj == null) return null
+        val raw = when {
+            obj.has("ice_servers") -> obj.opt("ice_servers")
+            obj.has("iceServers") -> obj.opt("iceServers")
+            else -> null
+        }
+        return asArray(raw)
+    }
 
     fun parseArray(arr: JSONArray?): List<IceServerSpec> {
         if (arr == null) return emptyList()
         val out = mutableListOf<IceServerSpec>()
         for (i in 0 until arr.length()) {
             val item = arr.opt(i) ?: continue
+            if (item === JSONObject.NULL) continue
             if (item is String) {
                 val url = item.trim()
                 if (url.isNotEmpty() && !url.equals("null", ignoreCase = true)) {
@@ -43,8 +86,9 @@ object IceServers {
             if (urls.isEmpty()) continue
             out += IceServerSpec(
                 urls = urls,
-                username = JsonIds.optional(item.optString("username")),
-                credential = JsonIds.optional(item.optString("credential")),
+                username = jsonText(item, "username"),
+                credential = jsonText(item, "credential"),
+                hostname = jsonText(item, "hostname"),
             )
         }
         return out
@@ -56,12 +100,56 @@ object IceServers {
                 urls = spec.urls.map { it.trim() }.filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) },
                 username = JsonIds.optional(spec.username),
                 credential = JsonIds.optional(spec.credential),
+                hostname = JsonIds.optional(spec.hostname),
             )
         }.filter { it.urls.isNotEmpty() }
         if (cleaned.isNotEmpty()) return cleaned
-        val fallback = fallbackStun().toMutableList()
-        stunHint(hintHost)?.let { fallback.add(0, it) }
-        return fallback
+        // Russia: Google/Cloudflare STUN is often blocked. Prefer the VPS host.
+        stunHint(hintHost)?.let { return listOf(it) }
+        return fallbackStun()
+    }
+
+    fun plan(serverProvided: List<IceServerSpec>, hintHost: String? = null): IceRtcPlan {
+        val resolved = resolve(serverProvided, hintHost)
+        val expanded = expandHosts(resolved, hintHost)
+        val servers = expanded.map { spec ->
+            val turns = spec.urls.any { isTurnsUrl(it) }
+            IceRtcServer(
+                urls = spec.urls,
+                username = spec.username,
+                credential = spec.credential,
+                hostname = JsonIds.optional(spec.hostname) ?: tlsHostname(spec, hintHost),
+                insecureTls = turns,
+            )
+        }
+        return IceRtcPlan(servers = servers, forceRelay = servers.any { spec -> spec.urls.any { isTurnUrl(it) } })
+    }
+
+    fun expandHosts(specs: List<IceServerSpec>, hintHost: String?): List<IceServerSpec> {
+        val hint = JsonIds.optional(hintHost) ?: return specs
+        if (hint == "localhost" || hint == "127.0.0.1" || hint == "::1") return specs
+        return specs.map { spec ->
+            val extra = mutableListOf<String>()
+            for (url in spec.urls) {
+                val host = urlHost(url) ?: continue
+                if (host.equals(hint, ignoreCase = true)) continue
+                val alt = replaceUrlHost(url, hint)
+                if (alt != null && alt !in spec.urls && alt !in extra) extra += alt
+            }
+            if (extra.isEmpty()) spec else spec.copy(urls = spec.urls + extra)
+        }
+    }
+
+    fun tlsHostname(spec: IceServerSpec, hintHost: String? = null): String? {
+        val fromJsonHint = JsonIds.optional(hintHost)
+        val urlHost = spec.urls.firstNotNullOfOrNull { urlHost(it) }
+        val ipUrl = spec.urls.any { host -> urlHost(host)?.let { looksLikeIp(it) } == true }
+        return when {
+            ipUrl && fromJsonHint != null && !looksLikeIp(fromJsonHint) -> fromJsonHint
+            urlHost != null && !looksLikeIp(urlHost) -> urlHost
+            fromJsonHint != null && !looksLikeIp(fromJsonHint) -> fromJsonHint
+            else -> urlHost
+        }
     }
 
     fun missingTurn(resolved: List<IceServerSpec>): Boolean = resolved.none { it.hasTurn }
@@ -87,11 +175,84 @@ object IceServers {
         return u.startsWith("turn:") || u.startsWith("turns:")
     }
 
+    fun isTurnsUrl(url: String): Boolean = url.trim().lowercase().startsWith("turns:")
+
+    fun urlHost(url: String): String? {
+        val rest = url.trim().substringAfter(':', "").removePrefix("//").substringBefore('?')
+        if (rest.isEmpty() || rest.equals("null", ignoreCase = true)) return null
+        if (rest.startsWith("[")) {
+            val inside = rest.substringAfter('[').substringBefore(']')
+            return JsonIds.optional(inside)
+        }
+        val host = rest.substringBeforeLast(':')
+        return JsonIds.optional(host)
+    }
+
+    fun replaceUrlHost(url: String, newHost: String): String? {
+        val raw = url.trim()
+        val scheme = raw.substringBefore(':', "")
+        if (scheme.isEmpty() || scheme.equals(raw, ignoreCase = true)) return null
+        val after = raw.substringAfter(':')
+        val query = if (after.contains('?')) "?" + after.substringAfter('?') else ""
+        val hostport = after.removePrefix("//").substringBefore('?')
+        val port = if (hostport.startsWith("[")) {
+            hostport.substringAfter(']', "").removePrefix(":")
+        } else if (hostport.contains(':')) {
+            hostport.substringAfterLast(':')
+        } else {
+            ""
+        }
+        val h = if (newHost.contains(":") && !newHost.startsWith("[")) "[$newHost]" else newHost
+        val hp = if (port.isNotEmpty()) "$h:$port" else h
+        return "$scheme:$hp$query"
+    }
+
+    fun looksLikeIp(host: String): Boolean {
+        val h = host.trim().removePrefix("[").removeSuffix("]")
+        if (h.contains(':')) return h.all { it.isDigit() || it == ':' || it == '.' }
+        val parts = h.split('.')
+        return parts.size == 4 && parts.all { it.toIntOrNull() in 0..255 }
+    }
+
+    fun jsonText(obj: JSONObject, key: String): String? {
+        if (!obj.has(key) || obj.isNull(key)) return null
+        val raw = obj.opt(key) ?: return null
+        if (raw === JSONObject.NULL) return null
+        return JsonIds.optional(raw.toString())
+    }
+
+    private fun asArray(raw: Any?): JSONArray? = when {
+        raw == null || raw === JSONObject.NULL -> null
+        raw is JSONArray -> raw
+        raw is JSONObject -> JSONArray().put(raw)
+        raw is String -> {
+            val text = raw.trim()
+            if (text.isEmpty() || text.equals("null", ignoreCase = true)) null
+            else try {
+                if (text.startsWith("[")) JSONArray(text)
+                else if (text.startsWith("{")) JSONArray().put(JSONObject(text))
+                else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+        else -> null
+    }
+
     private fun urlsOf(obj: JSONObject): List<String> {
-        val raw = obj.opt("urls")
+        val raw = when {
+            obj.has("urls") -> obj.opt("urls")
+            obj.has("url") -> obj.opt("url")
+            else -> null
+        }
         val values = when (raw) {
+            null, JSONObject.NULL -> emptyList()
             is JSONArray -> buildList {
-                for (i in 0 until raw.length()) add(raw.optString(i))
+                for (i in 0 until raw.length()) {
+                    val item = raw.opt(i) ?: continue
+                    if (item === JSONObject.NULL) continue
+                    add(item.toString())
+                }
             }
             is String -> listOf(raw)
             else -> emptyList()
