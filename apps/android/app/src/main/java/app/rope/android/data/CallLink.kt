@@ -10,6 +10,7 @@ enum class CallLinkState {
 /** Call ICE / UI mapping extracted so unit tests can cover timeout and copy. */
 object CallLink {
     const val CONNECT_TIMEOUT_MS = 25_000L
+    const val RING_TIMEOUT_MS = 45_000L
 
     fun heading(phase: CallPhase, link: CallLinkState): String = when (phase) {
         CallPhase.RINGING_IN -> "Входящий вызов"
@@ -25,8 +26,52 @@ object CallLink {
     fun timedOut(elapsedMs: Long, link: CallLinkState): Boolean =
         elapsedMs >= CONNECT_TIMEOUT_MS && link != CallLinkState.CONNECTED && link != CallLinkState.FAILED
 
+    fun ringTimedOut(elapsedMs: Long, phase: CallPhase): Boolean =
+        elapsedMs >= RING_TIMEOUT_MS &&
+            (phase == CallPhase.RINGING_IN || phase == CallPhase.RINGING_OUT)
+
     fun weCreateOffer(myDeviceId: String, peerDeviceId: String): Boolean =
         myDeviceId.isNotBlank() && myDeviceId < peerDeviceId
+
+    fun canonicalCallId(localId: String, remoteId: String): String {
+        val a = localId.trim()
+        val b = remoteId.trim()
+        if (a.isEmpty()) return b
+        if (b.isEmpty()) return a
+        return if (a <= b) a else b
+    }
+
+    fun matchesCall(
+        eventCallId: String,
+        eventFrom: String,
+        callId: String,
+        altCallId: String,
+        peerDeviceId: String,
+    ): Boolean {
+        if (eventFrom.isNotBlank() && eventFrom == peerDeviceId) {
+            if (eventCallId.isBlank() || callId.isBlank()) return true
+            return eventCallId == callId || eventCallId == altCallId
+        }
+        return eventCallId.isNotBlank() && (eventCallId == callId || eventCallId == altCallId)
+    }
+
+    fun shouldQueueSignal(
+        kind: String,
+        sessionReady: Boolean,
+        localOfferReady: Boolean,
+        remoteDescriptionReady: Boolean,
+    ): Boolean {
+        if (kind !in CallSignal.EVENTS) return false
+        if (!sessionReady) return true
+        return when (kind) {
+            CallSignal.ANSWER -> !localOfferReady
+            CallSignal.ICE -> !remoteDescriptionReady
+            else -> false
+        }
+    }
+
+    fun ringTimeoutDetail(outgoing: Boolean): String =
+        if (outgoing) "нет ответа" else "пропущен"
 
     fun missingTurn(resolved: List<IceServerSpec>): Boolean =
         resolved.none { it.hasTurn }

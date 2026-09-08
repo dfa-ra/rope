@@ -19,11 +19,36 @@ data class CallSignal(
         .toString()
 
     companion object {
+        const val RING = "ring"
+        const val ACCEPT = "accept"
+        const val REJECT = "reject"
+        const val HANGUP = "hangup"
         const val OFFER = "offer"
         const val ANSWER = "answer"
         const val ICE = "ice"
 
         val EVENTS = setOf(OFFER, ANSWER, ICE)
+        val CONTROL = setOf(RING, ACCEPT, REJECT, HANGUP)
+        val WIRE = EVENTS + CONTROL
+
+        fun parseEvent(raw: String?): String? {
+            val v = JsonIds.optional(raw)?.lowercase() ?: return null
+            return if (v in WIRE) v else null
+        }
+
+        fun parseMedia(event: String?, payload: Any?): CallSignal? {
+            val ev = parseEvent(event) ?: return null
+            if (ev !in EVENTS) return null
+            val parsed = parsePayload(payload) ?: return null
+            return if (parsed.kind == ev) parsed else parsed.copy(kind = ev)
+        }
+
+        fun envelopeJson(callId: String, event: String, payload: String = ""): String =
+            JSONObject()
+                .put("call_id", callId)
+                .put("event", event)
+                .put("payload", payload)
+                .toString()
 
         fun parsePayload(raw: Any?): CallSignal? = when (raw) {
             null -> null
