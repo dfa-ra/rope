@@ -129,7 +129,7 @@ data class UiState(
     val pinnedMessageId: String? = null,
 )
 
-enum class Screen { Start, Provision, Join, Chats, Chat, Invite, Status, Settings, NewGroup, GroupInfo }
+enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo }
 
 class RopeRepository(private val app: Application) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -193,7 +193,7 @@ class RopeRepository(private val app: Application) {
     fun go(screen: Screen) {
         if (screen != Screen.Chat) persistOpenDraft()
         _state.value = _state.value.copy(screen = screen, error = null, viewingImage = null)
-        if (screen == Screen.Chats) refreshConversations()
+        if (NavRules.refreshesLists(screen)) refreshConversations()
         if (screen == Screen.NewGroup) {
             _state.value = _state.value.copy(groupNameDraft = "", pickedMembers = emptySet())
         }

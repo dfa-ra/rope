@@ -10,9 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -38,6 +35,7 @@ fun StatusPane(
     state: UiState,
     onUpdateApp: () -> Unit,
     onUpgradeCore: (String, String) -> Unit,
+    onHome: () -> Unit = {},
 ) {
     var sshPassword by remember { mutableStateOf("") }
     var sshKey by remember { mutableStateOf("") }
@@ -50,11 +48,16 @@ fun StatusPane(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Сервер и обновления", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Приложение ${BuildConfig.VERSION_NAME}",
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        FadeIn(40) { Text("Сервер и обновления", style = MaterialTheme.typography.titleLarge) }
+        FadeIn(80) {
+            QuietButton("На главную", onHome, Modifier.fillMaxWidth())
+        }
+        FadeIn(120) {
+            Text(
+                "Приложение ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         Text(
             if (state.theme == ThemeMode.DARK) {
                 "Тема: тёмная · иконка солнца в шапке включает светлую"
@@ -67,20 +70,18 @@ fun StatusPane(
         val owner = RoleRules.isOwner(state.profile?.role)
         val cards = if (owner) state.admin?.cards.orEmpty() else emptyList()
         if (cards.isEmpty()) {
-            Text(
-                state.statusText.ifBlank {
-                    if (owner) "Статус сервера ещё не загружен." else "Вы гость. Приложение обновляется здесь, без прав owner."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            SectionCard {
+                Text(
+                    state.statusText.ifBlank {
+                        if (owner) "Статус сервера ещё не загружен." else "Вы гость. Приложение обновляется здесь, без прав owner."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         } else {
-            cards.forEach { card ->
-                Card(
-                    Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(RopeShapes.card),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            cards.forEachIndexed { index, card ->
+                FadeIn(140 + index * 50) {
+                    SectionCard {
                         Text(card.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(card.value, style = MaterialTheme.typography.titleLarge)
                         if (card.hint.isNotBlank()) {
@@ -90,20 +91,17 @@ fun StatusPane(
                 }
             }
         }
-        Button(
-            onClick = onUpdateApp,
+        GlowButton(
+            when {
+                state.pendingApkPath != null -> "Повторить установку APK"
+                state.appUpdateAvailable && state.latestAppVersion.isNotBlank() ->
+                    "Обновить приложение ${state.latestAppVersion}"
+                else -> "Обновить приложение"
+            },
+            onUpdateApp,
+            Modifier.fillMaxWidth(),
             enabled = !state.busy,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Text(
-                when {
-                    state.pendingApkPath != null -> "Повторить установку APK"
-                    state.appUpdateAvailable && state.latestAppVersion.isNotBlank() ->
-                        "Обновить приложение ${state.latestAppVersion}"
-                    else -> "Обновить приложение"
-                },
-            )
-        }
+        )
         Text(
             state.updateText.ifBlank {
                 "Скачает APK с GitHub и поставит поверх. Это может любой участник, owner для этого не нужен."
@@ -150,13 +148,12 @@ fun StatusPane(
                     modifier = Modifier.fillMaxWidth().height(120.dp),
                 )
             }
-            Button(
-                onClick = { onUpgradeCore(sshPassword, sshKey) },
+            GlowButton(
+                "Обновить ядро",
+                { onUpgradeCore(sshPassword, sshKey) },
+                Modifier.fillMaxWidth(),
                 enabled = !state.busy && (sshPassword.isNotBlank() || sshKey.isNotBlank()),
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) {
-                Text("Обновить ядро")
-            }
+            )
         }
     }
 }

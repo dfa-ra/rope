@@ -87,6 +87,7 @@ import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.ChatActions
+import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ComposerRules
@@ -116,8 +117,21 @@ fun ChatsPane(
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
+    listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
+        if (listMode == ChatListMode.GROUPS) {
+            FadeIn(40) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    Text("Группы", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "Общие чаты на вашем сервере. Состав виден реле, текст — нет.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         val forwarding = state.forwarding
         when {
             forwarding != null -> {
@@ -173,7 +187,15 @@ fun ChatsPane(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 6.dp),
-            placeholder = { Text("Поиск чатов") },
+            placeholder = {
+                Text(
+                    when (listMode) {
+                        ChatListMode.GROUPS -> "Поиск групп"
+                        ChatListMode.CALLS -> "Поиск звонков"
+                        ChatListMode.ALL -> "Поиск чатов"
+                    },
+                )
+            },
             singleLine = true,
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             trailingIcon = {
@@ -189,31 +211,17 @@ fun ChatsPane(
             ),
             shape = RoundedCornerShape(RopeShapes.search),
         )
-        val rows = state.conversations.filter { ChatListRules.matches(it, state.chatQuery) }
+        val rows = state.conversations.filter { ChatListRules.matches(it, state.chatQuery, listMode) }
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty()) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        if (state.chatQuery.isNotBlank()) "Ничего не нашли" else "Пока никого нет",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        if (state.forwarding != null) {
-                            "Некуда переслать. Пригласите человека или создайте группу."
-                        } else if (state.chatQuery.isNotBlank()) {
-                            "Попробуйте другое имя или текст последнего сообщения."
-                        } else {
-                            "Пригласите человека QR-кодом или создайте группу."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                RopeEmptyState(
+                    title = emptyTitle(listMode, state.chatQuery),
+                    body = emptyBody(listMode, state.chatQuery, state.forwarding != null),
+                    actionLabel = if (listMode != ChatListMode.CALLS && state.forwarding == null && state.chatQuery.isBlank()) {
+                        if (listMode == ChatListMode.GROUPS) "Новая группа" else null
+                    } else null,
+                    onAction = if (listMode == ChatListMode.GROUPS) onNewGroup else null,
+                )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(rows, key = { it.id }) { c ->
@@ -226,7 +234,7 @@ fun ChatsPane(
                     }
                 }
             }
-            if (state.forwarding == null) {
+            if (state.forwarding == null && listMode != ChatListMode.CALLS) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier
@@ -241,9 +249,24 @@ fun ChatsPane(
     }
 }
 
+private fun emptyTitle(mode: ChatListMode, query: String): String = when {
+    query.isNotBlank() -> "Ничего не нашли"
+    mode == ChatListMode.GROUPS -> "Групп пока нет"
+    mode == ChatListMode.CALLS -> "Звонков ещё не было"
+    else -> "Пока никого нет"
+}
+
+private fun emptyBody(mode: ChatListMode, query: String, forwarding: Boolean): String = when {
+    forwarding -> "Некуда переслать. Пригласите человека или создайте группу."
+    query.isNotBlank() -> "Попробуйте другое имя или текст последнего сообщения."
+    mode == ChatListMode.GROUPS -> "Создайте группу — сервер знает только состав, текст шифруется каждому."
+    mode == ChatListMode.CALLS -> "Позвоните из личного чата. Недавние вызовы появятся здесь."
+    else -> "Пригласите человека QR-кодом или создайте группу."
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ConversationRow(
+internal fun ConversationRow(
     c: Conversation,
     onClick: () -> Unit,
     onPin: () -> Unit,
@@ -261,7 +284,15 @@ private fun ConversationRow(
         animationSpec = tween(120),
         label = "chatRow",
     )
-    Column(Modifier.background(bg)) {
+    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, tween(120), label = "chatRowS")
+    Column(
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .background(bg),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -463,20 +494,32 @@ fun ChatPane(
                 }
             }
         }
-        LazyColumn(
-            state = list,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(visible, key = { it.id }) { m ->
-                MessageBubble(
-                    m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
-                    onCopy, onPinMessage, onJump, onOpenImage,
-                    highlighted = flashId == m.id,
-                )
+        if (visible.isEmpty()) {
+            RopeEmptyState(
+                title = if (state.messageQuery.isNotBlank()) "Ничего не нашли" else "Начните переписку",
+                body = if (state.messageQuery.isNotBlank()) {
+                    "Другой запрос — или очистите поиск."
+                } else {
+                    "Сообщения шифруются на этом телефоне. Сервер видит только конверт."
+                },
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            LazyColumn(
+                state = list,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(visible, key = { it.id }) { m ->
+                    MessageBubble(
+                        m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
+                        onCopy, onPinMessage, onJump, onOpenImage,
+                        highlighted = flashId == m.id,
+                    )
+                }
             }
         }
         ComposerBar(state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCancelComposer)
