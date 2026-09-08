@@ -4,23 +4,23 @@ PO-owned live snapshot. Not a changelog.
 
 ## Product Goal
 
-**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. An organizer provisions a VPS, invites people via QR / `rope://join`, and exchanges encrypted text (and, on the shipped trunk, voice/photos/files/groups/calls) through a Go relay that never sees plaintext.
+**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. An organizer provisions a VPS, invites people via QR / `rope://join`, and exchanges encrypted text, voice, photos, files, groups, and calls through a Go relay that never sees plaintext.
 
-**Trunk (D-005 A, user 2026-09-08):** GitHub Latest release **`v0.2.15`** is the product line to hang on `main`. Existing release assets stay; do not retag.
+**Trunk (D-005 A):** GitHub Latest **`v0.2.15`** hangs on **`main`**. Release assets were not retagged or replaced.
 
 ## Migration Status
 
-**ADOPTED_EXISTING_WORKSPACE** — control layer is **on `main`** (PR #4). Product trunk promotion **in progress** (CG-004): merge `v0.2.15` (`9694e80`) into `main` while keeping `cryptogalera/`, `.cryptogalera/`, `.cursor/`.
+**ADOPTED_EXISTING_WORKSPACE.** Control layer + shipped Stage-2 product are both on `main`.
 
 ## Current Phase
 
-Trunk promotion (T-004 / CG-004). New feature implementation remains frozen (CG-007 BACKLOG; CG-003 freeze for overlapping agents).
+Stabilization on the promoted trunk. New feature implementation frozen (CG-007 BACKLOG; CG-003 freeze for overlapping agents).
 
 ## Existing System
 
-Kotlin Compose Android client → Rust UniFFI (`rope_core`) for identity/crypto/invites → HTTPS/WSS Go `rope-server` + SQLite mailbox → `deployment/scripts/install.sh` on a personal VPS. Shipped trunk (tag `v0.2.15`): protocol includes objects, groups, call signaling; Android `versionName=0.2.15` `versionCode=23`.
+Kotlin Compose Android client → Rust UniFFI (`rope_core`) → HTTPS/WSS Go `rope-server` + SQLite → `deployment/scripts/install.sh`. Trunk protocol includes objects, groups, call signaling. Android `versionName=0.2.15` `versionCode=23`.
 
-Architecture evidence: `docs/architecture.md` plus code. Doc may still say Room; code uses `SQLiteOpenHelper` (`LocalStore.kt`) — doc drift (CG-014).
+Doc drift remains: architecture.md may still say Room; code is `SQLiteOpenHelper` (CG-014).
 
 ## Technology Stack
 
@@ -28,38 +28,35 @@ Unchanged: Android/Kotlin, Rust UniFFI, Go+SQLite, Ed25519/X25519/HKDF/XChaCha20
 
 ## Completed Capabilities
 
-CryptoGalera wrap on `main` @ `c6c1015`. Stage-2 product is published as GitHub Release `v0.2.15` (APK + `rope-server-linux-amd64` / `arm64` + `SHA256SUMS`). Integration onto `main` is CG-004.
+`main` @ `a869927` matches tag `v0.2.15` product trees plus CryptoGalera wrap. Published artifacts: `rope-0.2.15-debug.apk`, `rope-server-linux-amd64`, `rope-server-linux-arm64`, `SHA256SUMS`.
 
-## Work In Progress
+## Work In Progress / BACKLOG
 
-- CG-004: merge shipped tip onto `main`
-- CG-018: independent review of that merge
-- CG-019: delete only fully contained `cursor/*` branches; keep `telegram-chrome-872f` (1 unique commit `039e381`)
-- CG-012 / CG-013 / CG-014 still BACKLOG
+- CG-012 Settings, CG-013 revoke UI, CG-014 Room vs SQLite docs
+- Unique unshipped chrome on `cursor/telegram-chrome-872f` (`039e381`) — preserved, not merged
 
 ## Active Risks
 
-See [RISKS.md](RISKS.md). R-001 (dual line) is being closed by D-005 A. Do not delete GitHub Releases. Do not merge unique chrome work into this promotion.
+See [RISKS.md](RISKS.md). R-001 (dual line) **closed**. R-009 unique chrome branch remains. R-010 do not retag.
 
 ## Current Priorities
 
-1. Land `v0.2.15` product trees on `main` without dropping CryptoGalera
-2. Prove `apps/ core/ server/ deployment/ protocol/` match the tag
-3. Keep published release assets; close contained PRs #2/#3
-4. Delete contained branches only
+1. Do not retag or replace `v0.2.15` assets
+2. Do not merge unique chrome unless the user asks
+3. No new overlapping feature agents
+4. CG-012 / CG-013 / CG-014 when unfrozen
 
 ## Active Organization
 
 ```
 User
  └── PO
-      └── ENG-LEAD (CG-004, seated this cycle)
-           └── REV-01 (CG-018, after merge; reviewer ≠ author)
 ```
+
+ENG-LEAD released after CG-004. REV-01 released after CG-018.
 
 ## Canonical git
 
-- Default branch: **`main`** (not `master`)
-- Pre-promotion HEAD: `c6c1015` (CryptoGalera wrap + MVP)
-- Integration tip: tag `v0.2.15` = `9694e804691bfb32b9a2ecc9e1f9e7e2cf48f0a5`
-- Working branch: `cursor/promote-release-main-ae19`
+- Default branch: **`main`** @ `a869927`
+- Product tip contained: tag `v0.2.15` = `9694e804691bfb32b9a2ecc9e1f9e7e2cf48f0a5`
+- Remaining extra branch: `origin/cursor/telegram-chrome-872f` only

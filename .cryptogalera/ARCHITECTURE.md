@@ -8,4 +8,4 @@ PO-owned. Do not duplicate the product architecture.
 
 **Reconstructed correction (D-010):** client local store is `SQLiteOpenHelper` in `LocalStore.kt`, not Android Room, despite the architecture doc saying Room.
 
-**Trunk (D-005 A):** product trees `apps/`, `core/`, `server/`, `deployment/`, `protocol/` must match tag `v0.2.15` after the promotion merge. CryptoGalera wrap stays beside them.
+**Trunk (D-005 A):** product trees `apps/`, `core/`, `server/`, `deployment/`, `protocol/` on `main` match tag `v0.2.15`. CryptoGalera wrap stays beside them.

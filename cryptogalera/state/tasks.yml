@@ -58,22 +58,20 @@ tasks:
 
   - id: T-004
     title: Single integration after T-002
-    status: doing
+    status: done
     owner: engineering_lead
     goal: One branch to main matching tag v0.2.15; keep CryptoGalera wrap; close nested PRs #2 / #3 after contained; do not retag.
     depends_on: [T-002]
-    forbidden:
-      - merging PR #2 or #3 as the integration path
-      - retagging v0.2.15
-      - deleting unique telegram-chrome-872f work
+    notes: Landed 2026-09-08 on main a869927. 31 contained branches deleted. telegram-chrome-872f kept.
 
   - id: T-005
     title: Threat model + protocol sync (after trunk)
-    status: queued
+    status: done
     owner: engineering_lead
-    required_reviewer: independent_reviewer  # QA/Security; reviewer ≠ author
+    required_reviewer: independent_reviewer
     goal: threat-model.md and protocol/docs match the chosen trunk (or remain explicitly out).
     depends_on: [T-004]
+    notes: Taken from tag v0.2.15; git diff vs tag empty; CG-018 PASS_WITH_CONCERNS.
 
   - id: T-006
     title: Install CryptoGalera runtime around existing Rope
@@ -98,15 +96,14 @@ tasks:
     title: Unfreeze product implementation
     status: queued
     owner: founder_po
-    goal: Resume product work only when the user says so, and only after D-005 if that work would change the trunk.
+    goal: Resume new product work only when the user says so. Promoting v0.2.15 (T-004) is not a general unfreeze.
     unfreeze_requires:
       user_says_unfreeze: true
       d005_if_implementation_would_change_trunk: true
     depends_on: [T-006]
     notes: >-
-      T-003 freeze stays until this task is accepted. Engineering Lead is not
-      seated for product work until then. D-005 / T-002 is required only if
-      the intended implementation would change the trunk.
+      T-003 freeze stays until this task is accepted. Promoting v0.2.15 did not
+      unfreeze new feature work. D-005 A is already accepted.
 
 not_tasks:
   - Another Telegram-chrome polish agent

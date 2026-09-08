@@ -4,7 +4,7 @@ PO-owned. Only current risks.
 
 | ID | Risk | Severity | Mitigation |
 | --- | --- | --- | --- |
-| R-001 | Dual product: `main` 0.1.0 vs GitHub `v0.2.x` | high → closing | D-005 A: merge tag `v0.2.15` into `main`; keep published releases |
+| R-001 | Dual product: `main` 0.1.0 vs GitHub `v0.2.x` | closed | D-005 A landed: `main` matches tag `v0.2.15`; published assets kept |
 | R-002 | Protocol fork if mixed MVP/Stage-2 clients | high | After CG-004, `main` protocol **is** the shipped Stage-2 protocol; mixed old MVP clients unsupported |
 | R-003 | Agent sprawl on overlapping UI/calls/landing | medium | CG-003 freeze remains for **new** overlapping agents |
 | R-004 | Session SoT vs runtime drift | medium | After promotion, rewrite product.md / AGENTS.md to match trunk |

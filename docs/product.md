@@ -14,7 +14,7 @@ The product trunk is **`main`**, matching GitHub Latest release **`v0.2.15`**.
 
 | Line | What it is |
 | --- | --- |
-| **`main` (after CG-004)** | Shipped Stage-2 tree: Android `versionName=0.2.15` / `versionCode=23`, plus CryptoGalera operating layer |
+| **`main`** | Shipped Stage-2 tree: Android `versionName=0.2.15` / `versionCode=23`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Same product commit `9694e80`. Assets: `rope-0.2.15-debug.apk`, `rope-server-linux-amd64`, `rope-server-linux-arm64`, `SHA256SUMS`. **Do not retag or replace.** |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.

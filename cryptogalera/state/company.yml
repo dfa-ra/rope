@@ -47,6 +47,7 @@ runtime_docs:
 
 notes:
   - CryptoGalera is the company process; Rope is the product already in this repo.
-  - Workspace checkout before CG-004 is MVP Rope 0.1.0 plus CryptoGalera wrap.
-  - D-005 A: promote tag v0.2.15 (9694e80) onto main; keep GitHub Releases.
+  - Workspace checkout is Rope v0.2.15 on main plus CryptoGalera wrap (D-005 A).
+  - GitHub Release v0.2.15 assets kept; do not retag.
+  - Unique unshipped chrome remains on cursor/telegram-chrome-872f.
   - D-007: runtime wraps Rope. New feature work still needs CG-007.

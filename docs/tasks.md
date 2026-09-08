@@ -37,16 +37,16 @@ Notes: T-004 (promote `v0.2.15`) is the allowed integration, not a new feature s
 
 ### T-004: Single integration after T-002
 
-Status: doing
+Status: done
 Owner: Engineering Lead (CG-004)
 Goal: One branch to `main` that matches tag `v0.2.15`; keep CryptoGalera wrap; close nested PRs #2 / #3 after their commits are on `main`; sync README, protocol docs, and threat model.
 Definition of Done: `main` product trees match `v0.2.15`; GitHub Release `v0.2.15` still published with the same assets; contained `cursor/*` branches deleted; unique `telegram-chrome-872f` kept.
 Depends on: T-002
-Forbidden: merging PR #2 or #3 as the integration path (use the tag); retagging `v0.2.15`; deleting unique work.
+Notes: Landed 2026-09-08. `origin/main` @ `a869927`. PRs #2/#3/#5 merged. 31 contained branches deleted.
 
 ### T-005: Threat model + protocol sync (after trunk)
 
-Status: queued (lands with T-004 merge: take `docs/threat-model.md` + `protocol/docs` from tag `v0.2.15`)
+Status: done (protocol/docs and threat-model.md taken from tag `v0.2.15`; match confirmed by `git diff` empty + CG-018)
 Owner: Engineering Lead. Required reviewer: independent QA/Security (reports to PO; reviewer ≠ author).
 Goal: [threat-model.md](threat-model.md) and [protocol/docs](../protocol/docs) match the chosen trunk (TURN, objects, groups, call signaling).
 Depends on: T-004

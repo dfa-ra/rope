@@ -56,24 +56,15 @@ seated:
     does: persist live org/task/agent/inventory/decision facts in YAML
     notes: This role. Does not implement Rope. Does not edit docs/ or product trees.
 
+roles_exist_not_seated:
   - id: engineering_lead
     title: Engineering Lead
     kind: standing_role
-    seated: true
-    scope: CG-004
-    reports_to: founder_po
+    seated: false
+    reason: Released after CG-004 landed. Not a general unfreeze (CG-007).
     default_integration_owner: true
-    owns:
-      - apps/
-      - core/
-      - server/
-      - deployment/
-      - protocol/
-      - scripts/
-      - .github/
-    notes: Seated this cycle for T-004 / CG-004 only. Not a general unfreeze.
+    would_own: apps/, core/, server/, deployment/, protocol/, scripts/, CI
 
-roles_exist_not_seated:
   - id: qa_security
     title: QA / Security
     kind: standing_role
