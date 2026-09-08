@@ -90,7 +90,7 @@ object CallLink {
 
     fun timeoutDetail(hasTurn: Boolean): String =
         if (hasTurn) {
-            "нет пути за 25 с · проверьте TURN (3478 / 443 или 5349) или обновите ядро"
+            "нет пути за 25 с · TURN не выделил / ICE не соединил · проверьте 3478 / 443"
         } else {
             "нет пути за 25 с · нет TURN · обновите ядро"
         }
@@ -103,6 +103,14 @@ object CallLink {
 
     fun noAnswerDetail(): String = "абонент не ответил"
 
+    fun noSdpDetail(): String = "нет SDP-ответа · это сигналинг, не ICE"
+
+    fun waitingSdpDetail(): String = "WebRTC · ждём SDP…"
+
+    fun fallbackDirectDetail(): String = "WebRTC · пробуем host/srflx…"
+
+    fun iceRestartDetail(): String = "WebRTC · перезапуск ICE…"
+
     fun offlineDetail(): String = "абонент не в сети"
 
     fun iceFailedDetail(viaRelay: Boolean, hasTurn: Boolean): String = when {
@@ -113,8 +121,16 @@ object CallLink {
 
     fun disconnectedDetail(): String = "связь прервалась · ищем путь снова…"
 
-    fun connectingDetail(hasTurn: Boolean): String =
-        if (hasTurn) "WebRTC · ищем путь…" else missingTurnDetail()
+    fun connectingDetail(
+        hasTurn: Boolean,
+        remoteReady: Boolean = true,
+        fellBack: Boolean = false,
+    ): String = when {
+        !remoteReady -> waitingSdpDetail()
+        fellBack -> fallbackDirectDetail()
+        hasTurn -> "WebRTC · ищем путь…"
+        else -> missingTurnDetail()
+    }
 
     fun connectedDetail(viaRelay: Boolean): String =
         if (viaRelay) CallMedia.RELAY else CallMedia.DIRECT
@@ -181,13 +197,20 @@ object CallLink {
         }
     }
 
-    fun applyIce(ice: String, viaRelay: Boolean = false, hasTurn: Boolean = true): Pair<CallLinkState, String> {
+    fun applyIce(
+        ice: String,
+        viaRelay: Boolean = false,
+        hasTurn: Boolean = true,
+        remoteReady: Boolean = true,
+        fellBack: Boolean = false,
+    ): Pair<CallLinkState, String> {
         val name = ice.trim().uppercase()
         return when (name) {
             "CONNECTED", "COMPLETED" -> CallLinkState.CONNECTED to connectedDetail(viaRelay)
             "FAILED", "CLOSED" -> CallLinkState.FAILED to iceFailedDetail(viaRelay, hasTurn)
             "DISCONNECTED" -> CallLinkState.CONNECTING to disconnectedDetail()
-            "CHECKING", "CONNECTING", "NEW" -> CallLinkState.CONNECTING to connectingDetail(hasTurn)
+            "CHECKING", "CONNECTING", "NEW" ->
+                CallLinkState.CONNECTING to connectingDetail(hasTurn, remoteReady, fellBack)
             else -> CallLinkState.CONNECTING to if (hasTurn) "WebRTC · соединяем" else missingTurnDetail()
         }
     }

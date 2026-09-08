@@ -191,19 +191,19 @@ class CallSignalingTest {
         m.localStart("c1", "bob", "alice")
         m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
         m.onHasTurn(true, "")
+        m.onSessionAttached()
+        m.onLocalOfferSent()
+        m.media("bob", CallSignal.ANSWER, "c1", answer(), "alice")
+        m.onIce("CHECKING", false)
 
         val first = m.onConnectTimeout()
-        assertTrue(first.contains(CallEffect.RestartIce))
-        assertEquals(CallLinkState.CONNECTING, m.state.link)
-
-        val second = m.onConnectTimeout()
         assertEquals(CallLinkState.FAILED, m.state.link)
-        assertFalse(second.contains(CallEffect.RestartIce))
-        assertTrue(second.any { it is CallEffect.Notice && it.message.contains("25") })
+        assertFalse(first.contains(CallEffect.RestartIce))
+        assertTrue(first.any { it is CallEffect.Notice && it.message.contains("25") })
         assertTrue(m.state.live)
 
-        val third = m.onConnectTimeout()
-        assertTrue(third.isEmpty())
+        val again = m.onConnectTimeout()
+        assertTrue(again.isEmpty())
     }
 
     @Test

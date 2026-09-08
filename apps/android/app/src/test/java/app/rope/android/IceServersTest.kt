@@ -152,6 +152,44 @@ class IceServersTest {
     }
 
     @Test
+    fun parseHostnameAndPublicIpFromInfoCache() {
+        val obj = JSONObject(
+            """{"ice_servers":[
+              {"urls":["turns:203.0.113.9:443","turn:203.0.113.9:3478"],
+               "username":"u","credential":"c","hostname":"vps.example"}
+            ],"public_ip":"203.0.113.9","hostname":"vps.example"}""",
+        )
+        val raw = IceServers.infoJson(obj)
+        assertEquals("203.0.113.9", IceServers.parsePublicIp(raw))
+        assertEquals("vps.example", IceServers.parseHostname(raw))
+        val fromArray = IceServers.parseHostname(
+            """[{"urls":["turn:203.0.113.9:3478"],"hostname":"rope.example"}]""",
+        )
+        assertEquals("rope.example", fromArray)
+        assertNull(IceServers.parseHostname(null))
+        assertNull(IceServers.parsePublicIp("[]"))
+    }
+
+    @Test
+    fun planAddsHostnameUrlsAndTcpWhenIceUrlsAreRawIp() {
+        val specs = IceServers.parse(
+            """[{"urls":["turns:203.0.113.9:443?transport=tcp","turn:203.0.113.9:3478?transport=udp"],
+                "username":"u","credential":"c","hostname":"vps.example"}]""",
+        )
+        val plan = IceServers.plan(specs, hintHost = "203.0.113.9", publicIp = "203.0.113.9")
+        assertTrue(plan.forceRelay)
+        assertEquals("vps.example", plan.servers[0].hostname)
+        assertTrue(plan.servers[0].urls.any { it.startsWith("turns:vps.example:") })
+        assertTrue(plan.servers[0].urls.any { it.startsWith("turn:vps.example:") })
+        assertTrue(plan.servers[0].urls.any { it.startsWith("turn:203.0.113.9:") && it.contains("transport=tcp") })
+        assertEquals(
+            "turn:203.0.113.9:3478?transport=tcp",
+            IceServers.tcpVariant("turn:203.0.113.9:3478?transport=udp"),
+        )
+        assertNull(IceServers.tcpVariant("turns:vps.example:443?transport=tcp"))
+    }
+
+    @Test
     fun infoJsonKeepsArrayForCache() {
         val obj = JSONObject(
             """{"ice_servers":[{"urls":["turn:vps:3478"],"username":"u","credential":"c"}]}""",

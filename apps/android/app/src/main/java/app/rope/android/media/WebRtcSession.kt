@@ -3,12 +3,15 @@ package app.rope.android.media
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import app.rope.android.data.CallMedia
 import app.rope.android.data.CallSignal
 import app.rope.android.data.IceRtcPlan
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.IceServers
+import app.rope.android.data.IceUnstick
 import app.rope.android.net.PinnedClient
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
@@ -54,7 +57,14 @@ class WebRtcSession(
     private var makingOffer = false
     private var pendingRemote: CallSignal? = null
     private var viaRelay = false
+    private var fellBack = false
     private var closed = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val fallbackDirect = Runnable {
+        if (closed || viaRelay || fellBack) return@Runnable
+        Log.w("rope-webrtc", "no relay candidate in ${IceUnstick.NO_PROGRESS_MS}ms — fallback ALL")
+        allowDirect()
+    }
 
     private val observer = object : PeerConnection.Observer {
         override fun onIceCandidate(candidate: IceCandidate) {
@@ -77,6 +87,11 @@ class WebRtcSession(
 
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
             if (closed) return
+            if (state == PeerConnection.IceConnectionState.CONNECTED ||
+                state == PeerConnection.IceConnectionState.COMPLETED
+            ) {
+                attachRemoteAudio()
+            }
             onIce(state.name, viaRelay)
         }
 
@@ -95,11 +110,11 @@ class WebRtcSession(
         }
 
         override fun onAddTrack(receiver: org.webrtc.RtpReceiver, streams: Array<out MediaStream>) {
-            receiver.track()?.setEnabled(true)
+            enableRemoteTrack(receiver.track())
         }
 
         override fun onTrack(transceiver: RtpTransceiver) {
-            transceiver.receiver.track()?.setEnabled(true)
+            enableRemoteTrack(transceiver.receiver.track())
         }
 
         override fun onSignalingChange(p0: PeerConnection.SignalingState) = Unit
@@ -169,6 +184,9 @@ class WebRtcSession(
             "rope-webrtc",
             "pc ice=${plan.servers.flatMap { it.urls }} relay=${plan.forceRelay} creds=${plan.servers.any { !it.username.isNullOrBlank() }}",
         )
+        if (plan.forceRelay) {
+            mainHandler.postDelayed(fallbackDirect, IceUnstick.NO_PROGRESS_MS)
+        }
     }
 
     fun createOffer(iceRestart: Boolean = false) {
@@ -208,7 +226,17 @@ class WebRtcSession(
         callee = true
     }
 
+    fun allowDirect() {
+        if (closed || fellBack) return
+        fellBack = true
+        mainHandler.removeCallbacks(fallbackDirect)
+        val cfg = rtcConfig(plan.copy(forceRelay = false))
+        val ok = runCatching { pc?.setConfiguration(cfg) == true }.getOrDefault(false)
+        Log.i("rope-webrtc", "setConfiguration ALL=$ok (was relay-only=${plan.forceRelay})")
+    }
+
     fun restartIce() {
+        if (!viaRelay) allowDirect()
         if (callee) return
         pendingRemote = null
         remoteSet = false
@@ -247,6 +275,7 @@ class WebRtcSession(
 
     fun close() {
         closed = true
+        mainHandler.removeCallbacks(fallbackDirect)
         try {
             audioTrack?.setEnabled(false)
             audioTrack?.dispose()
@@ -302,6 +331,22 @@ class WebRtcSession(
     private fun flushIce() {
         pendingIce.forEach { pc?.addIceCandidate(it) }
         pendingIce.clear()
+    }
+
+    private fun enableRemoteTrack(track: MediaStreamTrack?) {
+        if (track == null) return
+        track.setEnabled(true)
+        if (track is AudioTrack || track.kind() == MediaStreamTrack.AUDIO_TRACK_KIND) {
+            attachRemoteAudio()
+            Log.i("rope-webrtc", "remote ${track.kind()} ${track.id()} enabled")
+        }
+    }
+
+    private fun attachRemoteAudio() {
+        pc?.setAudioPlayout(true)
+        pc?.setAudioRecording(true)
+        audioTrack?.setEnabled(true)
+        CallAudio.confirm(app)
     }
 
     companion object {
