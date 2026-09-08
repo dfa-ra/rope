@@ -11,7 +11,7 @@ Company process is the **runtime** at [cryptogalera/README.md](cryptogalera/READ
 - Reusable Cursor roles: `.cursor/agents/` (engineering-lead, researcher, implementation-worker, verification-engineer, security-reviewer). Not a department per microtask.
 - Task IDs: `CG-XXX`.
 
-Mode is **MIGRATION**: product implementation is frozen (D-007). Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` until the PO unfreezes. D-005 remains user-only. The documents below are unverified session SoT — preserve them; do not revert.
+Mode is **MIGRATION / trunk promotion**. D-005 A is accepted: `main` must match shipped `v0.2.15`. New feature coding stays frozen (CG-007). Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` except CG-004 (merge those trees from the tag). The documents below are unverified session SoT — preserve them; do not revert.
 
 ## Company
 
@@ -23,9 +23,9 @@ Org size matches the task, not a real-world org chart. Do not invent departments
 
 ## Product
 
-**Rope** is a private self-hosted 1-to-1 Android E2EE messenger: Kotlin UI → Rust UniFFI core → Go + SQLite relay.
+**Rope** is a private self-hosted Android E2EE messenger: Kotlin UI → Rust UniFFI core → Go + SQLite relay. Trunk is `main` matching GitHub Latest `v0.2.15` ([D-005](docs/decisions.md#d-005-stage-2-parallel-line-escalated) A).
 
-Product contract: [docs/product.md](docs/product.md). Architecture: [docs/architecture.md](docs/architecture.md). **`main` is the documented MVP.** GitHub Releases `v0.2.x` and open PRs for calls / groups / Telegram UI / landing are a parallel fork — not scope. Do not spawn agents to “catch main up” until the user resolves [D-005](docs/decisions.md#d-005-stage-2-parallel-line-escalated). Feature freeze: [T-003](docs/tasks.md#t-003-feature-agent-freeze).
+Product contract: [docs/product.md](docs/product.md). Architecture: [docs/architecture.md](docs/architecture.md). Do not spawn overlapping chrome/calls/landing agents. Feature freeze for **new** duplicate work: [T-003](docs/tasks.md#t-003-feature-agent-freeze).
 
 ## How to organize
 

@@ -13,4 +13,4 @@ Inspect existing architecture before modifying. SEARCH → READ → UNDERSTAND �
 
 Critical work (crypto, auth, protocol): reviewer ≠ implementer. Quote test/build output; never fabricate results. Overhead proportional to the task.
 
-Mode: **ADOPTED_EXISTING_WORKSPACE**. Product coding of Stage-2 (calls/groups/Telegram UI) is frozen until the user accepts D-005. Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/` unless the task is on the board and unfrozen. Kotlin never implements crypto.
+Mode: **ADOPTED_EXISTING_WORKSPACE**. D-005 A accepted: trunk is shipped `v0.2.15` on `main`. Do not start new overlapping Stage-2 feature agents. Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/` except CG-004 (take those trees from tag `v0.2.15`). Kotlin never implements crypto.

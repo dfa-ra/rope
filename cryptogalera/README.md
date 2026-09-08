@@ -6,7 +6,7 @@ Product code stays in `apps/`, `core/`, `server/`, `deployment/`, and `protocol/
 
 ## Mode
 
-**MIGRATION.** Product implementation is frozen until the Product Owner changes mode (D-007). Do not implement, merge, or redesign Rope in this phase. D-005 remains a user-only trunk choice.
+**MIGRATION / trunk promotion.** D-005 A is accepted: hang shipped `v0.2.15` on `main` (CG-004). Do **not** start new overlapping feature work (calls/UI/landing agents). New product implementation stays frozen until CG-007.
 
 ## Map
 

@@ -1,71 +1,58 @@
 # Product — Rope
 
-Owner: Founder / Product Owner. This file is the product contract. If it conflicts with a prompt, a cloud-agent name, or a GitHub Release tag, **this file plus [README.md](../README.md) win** until the user changes them.
+Owner: Founder / Product Owner. This file is the product contract. If it conflicts with a prompt, a cloud-agent name, or an older MVP description, **this file plus [README.md](../README.md) win**.
 
 ## Goal
 
-Rope is a **private self-hosted 1-to-1 E2EE messenger for Android**. An organizer provisions a personal VPS from the app, invites a second device with a QR / deep link, and exchanges encrypted text through a Go relay that never sees plaintext.
+Rope is a **private self-hosted E2EE messenger for Android**. An organizer provisions a personal VPS from the app, invites people with a QR / deep link, and exchanges encrypted text, voice, photos, files, group chats, and calls through a Go relay that never sees plaintext.
 
 Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security core → HTTPS/WSS → Go + SQLite**.
 
-## Canonical line (operational)
+## Canonical line (D-005 A)
 
-Until the user answers [D-005](decisions.md#d-005-stage-2-parallel-line-escalated):
+The product trunk is **`main`**, matching GitHub Latest release **`v0.2.15`**.
 
-| Line | What it is | What agents may do |
-| --- | --- | --- |
-| **`main` (documented product)** | MVP `0.1.0` as described in this file and the README | Implement, fix, document, and review **this** product |
-| **GitHub Releases `v0.2.x` / open PRs** | A parallel Stage-2 fork (calls, groups, media, Telegram chrome, landing). **Not merged to `main`.** Latest published tag at the time of this writing: `v0.2.15` | Do **not** treat as scope. Do **not** spawn overlapping feature agents. Do **not** “catch main up” unless the user chooses that trunk |
+| Line | What it is |
+| --- | --- |
+| **`main` (after CG-004)** | Shipped Stage-2 tree: Android `versionName=0.2.15` / `versionCode=23`, plus CryptoGalera operating layer |
+| **GitHub Release `v0.2.15`** | Same product commit `9694e80`. Assets: `rope-0.2.15-debug.apk`, `rope-server-linux-amd64`, `rope-server-linux-arm64`, `SHA256SUMS`. **Do not retag or replace.** |
 
-A GitHub Release is **not** proof that `main` contains the feature. Tags `v0.2.0`–`v0.2.15` are **not ancestors of `main`**.
+Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
-## Success (MVP on `main`)
+Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part of this trunk.
+
+## Success
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app.
+1. Install the Android app (current published APK is `v0.2.15`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
-3. Invite a guest via QR / `rope://join?...` with TLS fingerprint binding.
-4. Exchange E2EE text in a 1-to-1 chat.
+3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
+4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).
 5. Trust the guarantees in [threat-model.md](threat-model.md) (server cannot read plaintext; cannot forge as another device).
 
 Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew test` (Android) green on `main`.
 
-## In scope (MVP)
+## In scope (current trunk)
 
-- Android client: provision, join, chats, 1-to-1 chat, invite, server status
+- Android client: provision, join, chats, groups, media, call UI already in `v0.2.15`
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
-- Go relay: REST + WSS mailbox, members/devices, single-use invites, owner revoke APIs
+- Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator
 - Local message history on device; opaque mailbox blobs on server
-- Idempotent VPS installer + systemd unit
-- GitHub Actions CI and tagged release artifacts **from the chosen trunk**
+- Idempotent VPS installer + systemd unit (TURN/coturn as in shipped installer)
+- Marketing landing at `web/index.html`
+- GitHub Actions CI and tagged release artifacts from `main`
 
-## Out of scope (MVP)
+## Out of scope
 
-Do not implement these because a prompt mentioned them. They require a user decision ([D-005](decisions.md#d-005-stage-2-parallel-line-escalated)):
+Do not implement these because a prompt mentioned them:
 
-- iOS, web app, desktop
-- Calls / WebRTC / TURN
-- Voice notes, files / object store, photos as a product feature
-- Groups (including pairwise fan-out “groups”)
+- iOS, web app as a messenger, desktop
 - Federation
-- Polished Telegram / Amnezia UI as a redesign
-- Signal/X3DH ratchet / forward secrecy
+- Signal/X3DH ratchet / MLS / forward secrecy
 - Public CA instead of pin-or-warn self-signed TLS
-- Marketing landing site as part of the messenger
-
-## Parallel line (facts, not approval)
-
-Unmerged work and off-`main` tags already contain some of the out-of-scope items:
-
-- PR #2 `cursor/rope-mvp-872f` — WebRTC audio, objects, groups, Stage-2 UX
-- PR #3 `cursor/telegram-ergonomics-872f` — superset of PR #2 plus Telegram-like chrome
-- Tags `v0.2.0`–`v0.2.15` — Stage-2 binaries published from side branches (all are GitHub Releases; latest is `v0.2.15`)
-
-Ancestry at the time of this writing: MVP content on `main` is in PR #2; PR #2 ⊂ PR #3 ⊂ tag `v0.2.15`. Nested PRs are not two independent features. Tag `v0.2.15` is **ahead of** PR #3 (extra TURN/ICE/call-stack commits). Do not treat PR #3 and `v0.2.15` as the same tip. The only `main` commit missing from that line is the PR #1 merge commit.
-
-This is an organizational failure (agent sprawl), not a product decision. New agents must not continue that line until D-005 is resolved.
+- New overlapping chrome/calls/landing agents (D-006 freeze)
 
 ## What CryptoGalera is optimizing for
 

@@ -9,12 +9,12 @@ Status: `accepted` = in force · `proposed` = needs user or PO · `superseded` =
 ### D-001: Documented product is `main` MVP
 
 Date: 2026-09-08
-Status: accepted (operational; user may override via D-005)
+Status: **superseded** by [D-005](#d-005-stage-2-parallel-line-escalated) option A (2026-09-08)
 Decider: Product Owner
-Context: README and `main` describe a 1-to-1 text MVP (`0.1.0`). Cloud agents shipped GitHub Releases `v0.2.x` from side branches that never merged to `main`. Agents were treating tags and PR titles as product.
-Decision: Until the user picks a trunk in D-005, the product contract is [`main` + product.md + README](product.md). Off-`main` features are not in scope. A Release tag does not change scope.
-Consequences: New work branches from `main`. No “catch up to 0.2.15” agents. Existing Stage-2 PRs stay open but are not the staffing baseline.
-Alternatives considered: Treat `v0.2.15` as canonical immediately (rejected — changes scope without the user). Ignore Releases (rejected — users may already have those APKs; the split must be visible).
+Context: README and `main` described a 1-to-1 text MVP (`0.1.0`). Cloud agents shipped GitHub Releases `v0.2.x` from side branches that never merged to `main`. Agents were treating tags and PR titles as product.
+Decision: Until the user picked a trunk in D-005, the product contract was [`main` + product.md + README](product.md). Off-`main` features were not in scope. A Release tag did not change scope.
+Consequences: Held until D-005 A. Historical: new work branched from `main`; Stage-2 PRs stayed open.
+Alternatives considered: Treat `v0.2.15` as canonical immediately (deferred to D-005). Ignore Releases (rejected — users may already have those APKs; the split must be visible).
 
 ---
 
@@ -57,20 +57,12 @@ Alternatives considered: Public CA + Let’s Encrypt as default (possible later;
 ### D-005: Stage-2 parallel line (escalated)
 
 Date: 2026-09-08
-Status: proposed (user decision)
-Decider: User (Product Owner will execute the choice)
-Context: README lists calls, files, groups, web/desktop, and polished Telegram UI as **not in MVP**. Unmerged PRs #2 and #3 and tags `v0.2.0`–`v0.2.15` implement much of that anyway. `main` is still `0.1.0`. Protocol on Stage-2 expands envelope types, objects, groups, and call signaling. Nested PRs: PR #2 ⊂ PR #3 ⊂ `v0.2.15`. Tag `v0.2.15` is not the same git tip as PR #3 (the tag is ahead).
-Decision needed — pick **one** trunk:
-
-| Option | Meaning |
-| --- | --- |
-| **A. Promote Stage-2** | Fast-forward `main` to a single named integration tip (likely tag `v0.2.15`, which is ahead of PR #3), rewrite product.md / protocol / threat model to match, close nested PRs |
-| **B. Keep MVP** | `main` stays 1-to-1 text. Treat `v0.2.x` as experimental. Stop publishing tags from side branches. Close or freeze Stage-2 PRs |
-| **C. Subset** | User names which Stage-2 pieces (e.g. UI chrome only, or calls only) may merge, with a new threat model and protocol bump |
-
-Recommendation: **Do not spawn more Stage-2 agents until this is answered.** If the user wants a messenger that already has calls/groups/Telegram chrome, choose A and then staff one integration owner. If the user wants the original private 1-to-1 product, choose B.
-Consequences: Until answered, D-001 holds. Protocol forks will break mixed-version installs if Stage-2 binaries are used against MVP servers without a migration story.
-Alternatives considered: Keep both lines forever (rejected — that is the current failure mode).
+Status: **accepted — option A**
+Decider: User (task: put current releases on `main`; verify they match; tidy extra branches; nothing lost)
+Context: README listed calls, files, groups, web/desktop, and polished Telegram UI as **not in MVP**. Unmerged PRs #2 and #3 and tags `v0.2.0`–`v0.2.15` implemented much of that anyway. `main` was still `0.1.0`. Nested PRs: PR #2 ⊂ PR #3 ⊂ `v0.2.15`. Tag `v0.2.15` is ahead of PR #3. `main` cannot fast-forward to the tag (6 CryptoGalera commits vs 92 Stage-2 commits from merge-base `30ebaa7`).
+Decision: **A. Promote the currently shipped line.** Merge tag **`v0.2.15`** (`9694e804691bfb32b9a2ecc9e1f9e7e2cf48f0a5`, same as `origin/cursor/release-0215-872f`) into `main`. Keep CryptoGalera wrap files. Keep existing GitHub Releases and the tag (do not retag, do not replace APK/server assets). Close nested PRs #2 / #3 only after their commits are on `main`. Delete `cursor/*` branches only when fully contained in `main` or in a kept tag. Preserve unique work on `cursor/telegram-chrome-872f` (`039e381`, not in the shipped tag).
+Consequences: Documented product becomes the Stage-2 tree that already shipped as Latest. D-001 is superseded. New overlapping feature agents stay frozen (D-006 / T-003). Do not rebuild `v0.2.15` unless product trees match and the user still wants a new tag.
+Alternatives considered: **B** keep MVP (rejected — user asked for current releases on `main`). **C** subset (rejected — user asked for the same APK/core as now). Keep both lines forever (rejected — that was the failure mode).
 
 ---
 

@@ -13,19 +13,13 @@ decisions:
   - id: D-001
     title: Documented product is main MVP
     date: "2026-09-08"
-    status: accepted
+    status: superseded
+    superseded_by: D-005
     decider: founder_po
     pointer: docs/decisions.md#d-001-documented-product-is-main-mvp
     summary: >-
-      Until the user picks a trunk in D-005, the product contract is main +
-      docs/product.md + README. Off-main features are not in scope. A Release
-      tag does not change scope.
-    operational: true
-    user_may_override_via: D-005
-    consequences:
-      - New work branches from main.
-      - No catch-up-to-0.2.15 agents.
-      - Existing Stage-2 PRs stay open but are not the staffing baseline.
+      Until the user picked a trunk in D-005, the product contract was main +
+      docs/product.md + README. Superseded by D-005 A.
 
   - id: D-002
     title: Client / core / relay stack
@@ -75,21 +69,14 @@ decisions:
   - id: D-005
     title: Stage-2 parallel line (escalated)
     date: "2026-09-08"
-    status: proposed
+    status: accepted
+    chosen: A
     decider: user
     pointer: docs/decisions.md#d-005-stage-2-parallel-line-escalated
     summary: >-
-      User must pick one trunk. Nested PRs: PR #2 ⊂ PR #3 ⊂ tag v0.2.15.
-      Tag v0.2.15 (9694e80) is ahead of PR #3. main is not a strict ancestor
-      of v0.2.15 (forked from pre-merge 30ebaa7).
-    options:
-      A:
-        meaning: Promote Stage-2; fast-forward main to a named tip (likely v0.2.15); rewrite product/protocol/threat model; close nested PRs
-      B:
-        meaning: Keep MVP 1-to-1 text; treat v0.2.x as experimental; stop side-branch tags; close or freeze Stage-2 PRs
-      C:
-        meaning: User names which Stage-2 pieces may merge, with a new threat model and protocol bump
-    recommendation: Do not spawn more Stage-2 agents until answered. Until then D-001 holds.
+      Promote shipped Stage-2. Merge tag v0.2.15 (9694e80) into main. Keep
+      CryptoGalera wrap and existing GitHub Releases. Do not retag. Close
+      nested PRs #2/#3 after contained. Keep unique telegram-chrome-872f.
     task: T-002
 
   - id: D-006

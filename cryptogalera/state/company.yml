@@ -12,13 +12,14 @@ product: Rope
 adopted_existing: true
 
 mode: ADOPTED_EXISTING_WORKSPACE
-product_implementation: frozen
-canonical_documented_line: "main MVP 0.1.0"
+product_implementation: frozen_except_cg004
+canonical_documented_line: "main matching GitHub Latest v0.2.15 (D-005 A)"
 runtime_root: cryptogalera/
 
-# Why product trees stay frozen.
+# Why new product trees stay frozen except CG-004.
 freeze_reason: >-
-  User ordered migration not implementation; D-005 unanswered.
+  D-005 A authorizes promoting shipped v0.2.15 onto main. New overlapping
+  feature agents remain frozen (T-003 / CG-007).
 
 # Session markdown adopted as unverified source of truth. Do not revert.
 sot_docs:
@@ -46,6 +47,6 @@ runtime_docs:
 
 notes:
   - CryptoGalera is the company process; Rope is the product already in this repo.
-  - Workspace checkout is MVP Rope 0.1.0 (Kotlin → Rust UniFFI → Go+SQLite).
-  - Stage-2 (tags v0.1.0–v0.2.15, PRs #2/#3, ~30 cursor/* branches) exists off this working tree; preserve, do not merge.
-  - D-007: runtime wraps Rope; product remains frozen until PO unfreezes (T-007) and D-005 if trunk would change.
+  - Workspace checkout before CG-004 is MVP Rope 0.1.0 plus CryptoGalera wrap.
+  - D-005 A: promote tag v0.2.15 (9694e80) onto main; keep GitHub Releases.
+  - D-007: runtime wraps Rope. New feature work still needs CG-007.

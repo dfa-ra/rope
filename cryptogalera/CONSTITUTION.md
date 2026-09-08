@@ -9,7 +9,7 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 ## 1. Identity and product
 
 1. **Company.** CryptoGalera is a small tech company. The name is informal; this process is not.
-2. **Product.** Rope is a private self-hosted 1-to-1 Android E2EE messenger: Kotlin UI → Rust UniFFI core → Go + SQLite relay. Scope is [docs/product.md](../docs/product.md). Do not invent new product scope.
+2. **Product.** Rope is a private self-hosted Android E2EE messenger: Kotlin UI → Rust UniFFI core → Go + SQLite relay. Scope is [docs/product.md](../docs/product.md). Trunk is `main` matching GitHub Latest `v0.2.15` (D-005 A). Do not invent new product scope.
 3. **Adopt, do not rewrite.** The existing Rope checkout is the product. Do not start a new messenger, move product code into `cryptogalera/`, or redesign the stack.
 4. **Wrap, do not replace (D-007).** Runtime lives in `cryptogalera/` and Cursor rules in `.cursor/rules/`. Session markdown (`AGENTS.md`, `docs/*`) is adopted as **unverified** source of truth and must be preserved.
 
@@ -36,8 +36,8 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 17. **Reversible vs irreversible.** Reversible local work in-ownership: worker or lead. Cross-cutting (protocol, architecture, shared docs): Engineering Lead; log in [docs/decisions.md](../docs/decisions.md). Irreversible / high-impact (crypto, threat model, auth, product/scope, data-dropping migrations): PO; **user** if it changes product, business model, scope, or fundamental requirements.
 18. **Escalation.** Silent high-impact assumptions are forbidden. Escalate with: decision needed, options, recommendation, blast radius, cost of waiting. Do not hide blockers.
 19. **Review.** Reviewer ≠ author before merge for security/threat-model, architecture, protocol, cryptography, auth, and data migrations. Ordinary in-scope UI copy/layout with no protocol/crypto: Engineering Lead review is enough.
-20. **Trunk freeze (D-005).** User-only. Until accepted (A / B / C), D-001 holds: documented product is `main` MVP `0.1.0`. Do not merge Stage-2 (PRs #2 / #3, tags `v0.2.x`) “to make progress.”
-21. **Mode MIGRATION.** Product implementation is frozen until the PO unfreezes. Feature-agent freeze (T-003 / D-006) remains in force. This constitution does not authorize product coding.
+20. **Trunk (D-005).** User accepted **A** (2026-09-08): documented product is `main` matching GitHub Latest `v0.2.15`. Integrate that tag; do not merge PRs #2 / #3 as a substitute; do not retag. D-001 is superseded.
+21. **Mode MIGRATION.** New product implementation is frozen until the PO unfreezes (CG-007). Feature-agent freeze (T-003 / D-006) remains in force against overlapping new agents. CG-004 (promote `v0.2.15`) is authorized.
 
 ## 5. Sources of truth and ownership
 
@@ -50,7 +50,7 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 23. **Session docs.** Adopted as unverified SoT. Do not revert, delete, or rewrite them from scratch because they are unverified.
 24. **Live state.** `cryptogalera/state/*.yml` is owned by State Lead; PO owns live state content. Process Lead does not create or overwrite those files.
 25. **File ownership (this repo).** Product trees: `apps/android` (Android; Kotlin never implements crypto), `core/rust` (Rust), `server/go` (Go), `protocol` (Engineering Lead), `deployment` (Go/deployment), `scripts` (Engineering Lead), `docs` (PO + Engineering Lead), `.github` + `Makefile` (Engineering Lead). Runtime: constitution, README, `RUNTIME.md`, and `rules/` = Process (PO is T-006 integrator, not a co-owner of those files); `cryptogalera/state/` = PO (content), State Lead (files); `.cryptogalera/` = PO; `.cursor/rules/` = Process. Do not edit another owner’s tree without the integration owner. Detail: [rules/file-ownership.md](rules/file-ownership.md).
-26. **API.** There is no second API. Current-trunk `protocol/docs` (REST, WSS, envelope, invite) is the wire SoT. Stage-2 protocol on other branches is not SoT until D-005.
+26. **API.** There is no second API. Current-trunk `protocol/docs` (REST, WSS, envelope, invite) is the wire SoT. That trunk is `v0.2.15` on `main` after CG-004.
 
 ## 6. Safety
 

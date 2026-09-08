@@ -15,7 +15,7 @@ seated:
     reports_to: null
     decides: product, business model, scope, fundamental requirements
     seated: true
-    notes: Not a staffed layer. D-005 (trunk A/B/C) is user-only.
+    notes: Not a staffed layer. D-005 A accepted 2026-09-08.
 
   - id: founder_po
     title: Founder / Product Owner
@@ -56,16 +56,24 @@ seated:
     does: persist live org/task/agent/inventory/decision facts in YAML
     notes: This role. Does not implement Rope. Does not edit docs/ or product trees.
 
-roles_exist_not_seated:
   - id: engineering_lead
     title: Engineering Lead
     kind: standing_role
-    seated: false
-    reason: ROLE EXISTS, NOT SEATED for product work while frozen
+    seated: true
+    scope: CG-004
+    reports_to: founder_po
     default_integration_owner: true
-    would_own: apps/, core/, server/, deployment/, protocol/, scripts/, CI
-    notes: Do not staff for product implementation until T-007 unfreeze (and D-005 if trunk would change).
+    owns:
+      - apps/
+      - core/
+      - server/
+      - deployment/
+      - protocol/
+      - scripts/
+      - .github/
+    notes: Seated this cycle for T-004 / CG-004 only. Not a general unfreeze.
 
+roles_exist_not_seated:
   - id: qa_security
     title: QA / Security
     kind: standing_role

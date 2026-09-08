@@ -4,7 +4,7 @@ How Cursor subagents are **spawned, tasked, and reported**. Binding. Compact.
 
 **Who is who:** [CONSTITUTION.md](CONSTITUTION.md). **Who may work:** [AGENTS.md](../AGENTS.md). **Live company memory:** `.cryptogalera/` (PO-owned; see below). This file is the spawn/report contract, not a product spec.
 
-Mode is **MIGRATION**. Product implementation stays frozen until the user unfreezes (T-007 / CG-007) and D-005 (trunk A/B/C). Do not invent product scope. Do not implement Rope.
+Mode is **MIGRATION / trunk promotion**. D-005 A is accepted (merge shipped `v0.2.15` onto `main`). New product implementation stays frozen until CG-007. Do not invent extra product scope. Do not spawn overlapping Stage-2 feature agents.
 
 ---
 
@@ -173,7 +173,7 @@ Degraded mode is honest sequential work. It is not a license to skip the freeze 
 
 ## Freeze and Definition of Done
 
-Until T-007 / CG-007 and D-005: do not implement, merge, or redesign Rope. Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` unless the PO unfreezes and the task is listed.
+Until T-007 / CG-007: do not implement **new** Rope features. CG-004 is the exception: merge tag `v0.2.15` into `main` and take Stage-2 `apps/`, `core/`, `server/`, `deployment/`, `protocol/` from that tag. Do not touch those trees for any other task unless it is listed and unfrozen.
 
 In MIGRATION, process work is done when the named runtime/docs files exist, product trees were not touched, and this protocol was followed. Stop at Definition of Done. Extra polish is new scope.
 

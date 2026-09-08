@@ -30,17 +30,21 @@ tasks:
 
   - id: T-002
     title: User chooses the product trunk (D-005)
-    status: blocked
-    blocked_on: user
+    status: done
+    blocked_on: null
     owner: user
     recorder: founder_po
     goal: End the dual-product split (main MVP vs Stage-2).
+    chosen: A
+    chosen_tip: v0.2.15
+    chosen_sha: 9694e804691bfb32b9a2ecc9e1f9e7e2cf48f0a5
     options:
-      - A: Promote Stage-2 to main (likely tag v0.2.15)
+      - A: Promote Stage-2 to main (tag v0.2.15)
       - B: Keep MVP; freeze/close Stage-2
       - C: Named subset with new threat model and protocol bump
     definition_of_done: D-005 status accepted with a single chosen option
     depends_on: [T-001]
+    notes: User 2026-09-08 — hang current APK/core on main; nothing lost.
 
   - id: T-003
     title: Feature-agent freeze
@@ -50,18 +54,18 @@ tasks:
     constraint: every lead refuses Stage-2 work that is not on this list
     goal: No new overlapping agents for calls, TURN/ICE, Telegram UI, groups, landing, or version bumps until T-002.
     depends_on: [D-006]
-    notes: Freeze remains in force during MIGRATION.
+    notes: Freeze remains in force against new overlapping feature agents after D-005 A.
 
   - id: T-004
     title: Single integration after T-002
-    status: queued
-    owner: engineering_lead  # named when T-002 is answered; role not seated while frozen
-    goal: One branch to main matching the chosen trunk; close nested PRs #2 / #3; sync README, protocol, threat model.
+    status: doing
+    owner: engineering_lead
+    goal: One branch to main matching tag v0.2.15; keep CryptoGalera wrap; close nested PRs #2 / #3 after contained; do not retag.
     depends_on: [T-002]
-    forbidden_until_then:
-      - merging PR #2 or #3 to make progress
-      - tagging from a side branch
-      - spawning UI and call agents in parallel
+    forbidden:
+      - merging PR #2 or #3 as the integration path
+      - retagging v0.2.15
+      - deleting unique telegram-chrome-872f work
 
   - id: T-005
     title: Threat model + protocol sync (after trunk)
