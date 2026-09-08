@@ -142,6 +142,8 @@ class MainActivity : AppCompatActivity() {
                     onCloseImage = repo::closeImage,
                     onConsumedScroll = repo::consumeScrollTo,
                     onDismissNotice = repo::dismissNotice,
+                    onBack = repo::goBack,
+                    onTab = { repo.go(it, tab = true) },
                 )
             }
         }

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -129,6 +130,9 @@ fun CallOverlay(
     onReject: () -> Unit,
     onHangup: () -> Unit,
 ) {
+    BackHandler {
+        if (call.phase == CallPhase.RINGING_IN) onReject() else onHangup()
+    }
     val reduce = rememberReduceMotion()
     val inf = rememberInfiniteTransition(label = "callRing")
     val ring by inf.animateFloat(

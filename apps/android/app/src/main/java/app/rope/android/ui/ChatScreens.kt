@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
@@ -41,6 +42,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -273,6 +275,7 @@ internal fun ConversationRow(
     onMute: () -> Unit,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
+    BackHandler(enabled = menu) { menu = false }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val bg by animateColorAsState(
@@ -391,6 +394,7 @@ fun ChatPane(
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
     onGroupInfo: () -> Unit,
+    onBack: () -> Unit = {},
     onReply: (ChatMessage) -> Unit = {},
     onEdit: (ChatMessage) -> Unit = {},
     onDelete: (ChatMessage) -> Unit = {},
@@ -417,6 +421,10 @@ fun ChatPane(
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
+    BackHandler(enabled = showSearch) {
+        showSearch = false
+        onMessageQuery("")
+    }
     LaunchedEffect(visible.size, state.messageQuery) {
         if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
     }
@@ -439,6 +447,9 @@ fun ChatPane(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад")
+            }
             InitialsAvatar(title, state.group != null, online)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
@@ -549,6 +560,7 @@ private fun MessageBubble(
     val outBg = if (dark) OutBubbleDark else OutBubbleLight
     val outFg = if (dark) Color(0xFFF4F4F5) else Color.White
     var picker by remember(m.id) { mutableStateOf(false) }
+    BackHandler(enabled = picker) { picker = false }
     val me = state.profile?.deviceId.orEmpty()
     val selected = picker || highlighted
     var appeared by remember(m.id) { mutableStateOf(false) }
@@ -827,6 +839,8 @@ private fun ComposerBar(
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
     var showEmoji by remember { mutableStateOf(false) }
+    BackHandler(enabled = showEmoji && !state.recording) { showEmoji = false }
+    BackHandler(enabled = state.recording) { onVoiceFinish(false) }
     LaunchedEffect(state.recording) {
         if (!state.recording) {
             recordingLocked = false
@@ -1076,6 +1090,7 @@ fun InitialsAvatar(title: String, group: Boolean, online: Boolean) {
 
 @Composable
 fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
     Box(
         Modifier
             .fillMaxSize()
@@ -1095,6 +1110,14 @@ fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
             )
         } else {
             Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        }
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(8.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color.White)
         }
     }
 }

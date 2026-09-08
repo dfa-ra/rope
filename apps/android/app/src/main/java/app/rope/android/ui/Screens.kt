@@ -26,7 +26,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.DarkMode
@@ -129,12 +131,25 @@ fun RopeScaffold(
     onCloseImage: () -> Unit,
     onConsumedScroll: () -> Unit,
     onDismissNotice: () -> Unit,
+    onBack: () -> Boolean = { false },
+    onTab: (Screen) -> Unit = onGo,
 ) {
     val signedIn = state.profile != null
+    BackHandler(enabled = BackStack.consumesSystemBack(state)) {
+        onBack()
+    }
     Box {
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    val showBack = BackStack.canPop(BackStack.currentStack(state.backStack, state.screen))
+                    if (showBack) {
+                        IconButton(onClick = { onBack() }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад")
+                        }
+                    }
+                },
                 title = {
                     val me = state.profile?.displayName.orEmpty()
                     val title = when {
@@ -146,7 +161,7 @@ fun RopeScaffold(
                     val opensHome = NavRules.titleOpensHome(state.screen, signedIn)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable(enabled = opensHome) { onGo(Screen.Home) },
+                        modifier = Modifier.clickable(enabled = opensHome) { onTab(Screen.Home) },
                     ) {
                         RopeKnot(
                             size = 28.dp,
@@ -176,7 +191,7 @@ fun RopeScaffold(
         },
         bottomBar = {
             if (NavRules.showsBottomBar(state.screen, signedIn)) {
-                RopeBottomBar(state.screen, onGo, onStatus)
+                RopeBottomBar(state.screen, onTab)
             }
         },
     ) { padding ->
@@ -218,8 +233,8 @@ fun RopeScaffold(
                 ) { screen ->
                     when (screen) {
                         Screen.Start -> StartPane(onGo, onRestoreBackup)
-                        Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onGo(Screen.Start) }
-                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
+                        Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onBack() }
+                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onBack() }
                         Screen.Home -> HomePane(state, onGo, onStatus, onInvite)
                         Screen.Chats, Screen.Groups -> app.rope.android.ui.ChatsPane(
                             state,
@@ -238,6 +253,7 @@ fun RopeScaffold(
                             state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
                             onReact, onEnsureMedia,
                             onGroupInfo = { onGo(Screen.GroupInfo) },
+                            onBack = { onBack() },
                             onReply = onReply,
                             onEdit = onEdit,
                             onDelete = onDelete,
@@ -250,11 +266,11 @@ fun RopeScaffold(
                             onMessageQuery = onMessageQuery,
                             onConsumedScroll = onConsumedScroll,
                         )
-                        Screen.Invite -> InvitePane(state.inviteUrl.orEmpty()) { onGo(Screen.Home) }
-                        Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onGo(Screen.Home) }
-                        Screen.Settings -> SettingsPane(state, onToggleTheme) { onGo(Screen.Home) }
-                        Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onGo(Screen.Groups) }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onGo(Screen.Chat) }
+                        Screen.Invite -> InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                        Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onTab(Screen.Home) }
+                        Screen.Settings -> SettingsPane(state, onToggleTheme) { onTab(Screen.Home) }
+                        Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onBack() }
                     }
                 }
             }
@@ -272,17 +288,14 @@ fun RopeScaffold(
 @Composable
 private fun RopeBottomBar(
     screen: Screen,
-    onGo: (Screen) -> Unit,
-    onStatus: () -> Unit,
+    onTab: (Screen) -> Unit,
 ) {
     val selected = NavRules.selectedTab(screen)
     NavigationBar {
         NavRules.tabs.forEach { tab ->
             NavigationBarItem(
                 selected = selected == tab.screen,
-                onClick = {
-                    if (tab.screen == Screen.Status) onStatus() else onGo(tab.screen)
-                },
+                onClick = { onTab(tab.screen) },
                 icon = { Icon(tabIcon(tab.screen), contentDescription = tab.label) },
                 label = { Text(tab.label) },
             )
@@ -686,7 +699,7 @@ private fun JoinPane(
 }
 
 @Composable
-private fun InvitePane(url: String, onHome: () -> Unit) {
+private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
