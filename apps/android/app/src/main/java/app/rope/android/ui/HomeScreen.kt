@@ -37,7 +37,7 @@ fun HomePane(
     val groups = NavRules.groupsOf(state.conversations)
     val role = state.profile?.role
     val owner = RoleRules.isOwner(role)
-    val canInvite = NavRules.showsInviteCta(role)
+    val canInvite = RoleRules.canShowInviteQr(role)
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(

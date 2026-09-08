@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
 import app.rope.android.provision.ProvisionForm
@@ -192,7 +193,7 @@ fun RopeScaffold(
                         )
                     }
                     if (signedIn) {
-                        if (NavRules.showsInviteCta(state.profile?.role)) {
+                        if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             IconButton(onClick = onInvite) {
                                 Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
                             }
@@ -281,7 +282,11 @@ fun RopeScaffold(
                             onMessageQuery = onMessageQuery,
                             onConsumedScroll = onConsumedScroll,
                         )
-                        Screen.Invite -> InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                        Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
+                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                        } else {
+                            HomePane(state, onGo, onStatus, onInvite)
+                        }
                         Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onTab(Screen.Home) }
                         Screen.Settings -> SettingsPane(state, onToggleTheme) { onTab(Screen.Home) }
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }

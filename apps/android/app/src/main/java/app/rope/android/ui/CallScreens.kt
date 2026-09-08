@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import app.rope.android.NavRules
 import app.rope.android.UiState
+import app.rope.android.data.RoleRules
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
@@ -65,11 +66,12 @@ fun CallsPane(
             }
         }
         if (recent.isEmpty() && people.isEmpty()) {
+            val role = state.profile?.role
             RopeEmptyState(
                 title = "Звонков ещё не было",
-                body = "Пригласите человека, откройте личный чат и нажмите трубку.",
-                actionLabel = "Пригласить",
-                onAction = onInvite,
+                body = RoleRules.callsEmptyBody(role),
+                actionLabel = RoleRules.peopleInviteAction(role),
+                onAction = if (RoleRules.canInvite(role)) onInvite else null,
             )
         } else {
             LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {

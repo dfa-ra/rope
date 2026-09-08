@@ -100,6 +100,7 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionCodec
+import app.rope.android.data.RoleRules
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import kotlinx.coroutines.delay
@@ -219,7 +220,7 @@ fun ChatsPane(
             if (rows.isEmpty()) {
                 RopeEmptyState(
                     title = emptyTitle(listMode, state.chatQuery),
-                    body = emptyBody(listMode, state.chatQuery, state.forwarding != null),
+                    body = emptyBody(listMode, state.chatQuery, state.forwarding != null, state.profile?.role),
                     actionLabel = if (listMode != ChatListMode.CALLS && state.forwarding == null && state.chatQuery.isBlank()) {
                         if (listMode == ChatListMode.GROUPS) "Новая группа" else null
                     } else null,
@@ -261,12 +262,16 @@ private fun emptyTitle(mode: ChatListMode, query: String): String = when {
     else -> "Пока никого нет"
 }
 
-private fun emptyBody(mode: ChatListMode, query: String, forwarding: Boolean): String = when {
-    forwarding -> "Некуда переслать. Пригласите человека или создайте группу."
+private fun emptyBody(mode: ChatListMode, query: String, forwarding: Boolean, role: String?): String = when {
+    forwarding -> if (RoleRules.canInvite(role)) {
+        "Некуда переслать. Пригласите человека или создайте группу."
+    } else {
+        "Некуда переслать. Когда появятся чаты, можно будет переслать сюда."
+    }
     query.isNotBlank() -> "Попробуйте другое имя или текст последнего сообщения."
     mode == ChatListMode.GROUPS -> "Создайте группу — сервер знает только состав, текст шифруется каждому."
     mode == ChatListMode.CALLS -> "Позвоните из личного чата. Недавние вызовы появятся здесь."
-    else -> "Пригласите человека QR-кодом или создайте группу."
+    else -> RoleRules.chatsEmptyBody(role)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

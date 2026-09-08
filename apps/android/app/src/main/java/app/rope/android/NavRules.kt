@@ -60,7 +60,7 @@ object NavRules {
 
     fun showsHomeAction(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
 
-    fun showsInviteCta(role: String?): Boolean = RoleRules.isOwner(role)
+    fun showsInviteCta(role: String?): Boolean = RoleRules.canShowInviteQr(role)
 
     fun selectedTab(screen: Screen): Screen? = when (screen) {
         Screen.Chats, Screen.Chat -> Screen.Chats
