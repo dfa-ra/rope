@@ -54,10 +54,13 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +74,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import android.net.Uri
 import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
@@ -110,6 +114,9 @@ fun RopeScaffold(
     onUpgradeCore: (String, String) -> Unit,
     onRestoreBackup: () -> Unit,
     onAttach: () -> Unit,
+    onAttachGallery: () -> Unit = {},
+    onAttachFile: () -> Unit = {},
+    onAttachUri: (Uri) -> Unit = {},
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
@@ -151,6 +158,13 @@ fun RopeScaffold(
     val signedIn = state.profile != null
     val splash = rememberSplashOverlay(state)
     val selectedTab = NavRules.selectedTab(state.screen)
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.notice) {
+        val msg = state.notice?.trim().orEmpty()
+        if (msg.isEmpty()) return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        onDismissNotice()
+    }
     BackHandler(enabled = BackStack.consumesSystemBack(state)) {
         onBack()
     }
@@ -221,6 +235,7 @@ fun RopeScaffold(
                 RopeBottomBar(state.screen, onTab)
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(
             Modifier
@@ -230,27 +245,6 @@ fun RopeScaffold(
         ) {
             if (state.busy && InstantUi.busyBlocksUi(state.screen)) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-            state.notice?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .clickable(onClick = onDismissNotice),
-                )
-            }
-            state.error?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .heightIn(max = 120.dp)
-                        .verticalScroll(rememberScrollState()),
-                )
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 AnimatedContent(
@@ -292,6 +286,9 @@ fun RopeScaffold(
                             onOpenImage = onOpenImage,
                             onMessageQuery = onMessageQuery,
                             onConsumedScroll = onConsumedScroll,
+                            onAttachGallery = onAttachGallery,
+                            onAttachFile = onAttachFile,
+                            onAttachUri = onAttachUri,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }

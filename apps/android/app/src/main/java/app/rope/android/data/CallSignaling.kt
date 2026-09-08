@@ -25,6 +25,7 @@ data class CallMachineState(
     val connectStartedAtMs: Long = 0L,
     val viaRelay: Boolean = false,
     val relayFellBack: Boolean = false,
+    val wssMedia: Boolean = false,
 ) {
     val live: Boolean get() = !ended && callId.isNotBlank()
 }
@@ -39,6 +40,8 @@ sealed class CallEffect {
 
     data class StartRtc(val asCaller: Boolean) : CallEffect()
     data class DeliverRemote(val signals: List<CallSignal>) : CallEffect()
+    object StartWssMedia : CallEffect()
+    data class DeliverAudio(val signals: List<CallSignal>) : CallEffect()
     object RestartIce : CallEffect()
     object FallbackDirect : CallEffect()
     object TearDown : CallEffect()
@@ -133,6 +136,7 @@ class CallMachine {
                 CallSignal.ACCEPT -> onAcceptLocked(fromId, id)
                 CallSignal.REJECT, CallSignal.HANGUP -> onRemoteEndLocked(fromId, id)
                 in CallSignal.EVENTS -> onMediaLocked(fromId, id, ev, payload)
+                CallSignal.RELAY, CallSignal.AUDIO -> onWssLocked(fromId, id, ev, payload)
                 else -> emptyList()
             }
         }
@@ -192,6 +196,7 @@ class CallMachine {
 
     fun onIce(name: String, viaRelay: Boolean): List<CallEffect> = synchronized(lock) {
         if (!state.live) return emptyList()
+        if (state.wssMedia) return emptyList()
         if (state.phase == CallPhase.RINGING_IN || state.phase == CallPhase.RINGING_OUT) return emptyList()
         val relay = state.viaRelay || viaRelay
         val (link, label) = CallLink.applyIce(
@@ -204,13 +209,17 @@ class CallMachine {
         state = state.copy(link = link, media = label, lastIce = name, iceReady = true, viaRelay = relay)
         val out = mutableListOf<CallEffect>()
         if (link == CallLinkState.CONNECTED) out += CallEffect.CancelWatch
-        if (link == CallLinkState.FAILED && state.hasTurn && !state.iceRestartUsed && state.role == CallRtcRole.OFFERER) {
-            state = state.copy(
-                iceRestartUsed = true,
-                link = CallLinkState.CONNECTING,
-                media = CallLink.iceRestartDetail(),
-            )
-            out += CallEffect.RestartIce
+        if (link == CallLinkState.FAILED) {
+            if (state.hasTurn && !state.iceRestartUsed && state.role == CallRtcRole.OFFERER) {
+                state = state.copy(
+                    iceRestartUsed = true,
+                    link = CallLinkState.CONNECTING,
+                    media = CallLink.iceRestartDetail(),
+                )
+                out += CallEffect.RestartIce
+            } else {
+                return startWssFallbackLocked(sendRelay = true)
+            }
         }
         out
     }
@@ -223,6 +232,7 @@ class CallMachine {
 
     fun onConnectTick(elapsedMs: Long): List<CallEffect> = synchronized(lock) {
         if (!state.live || state.phase != CallPhase.ACTIVE) return emptyList()
+        if (state.wssMedia) return emptyList()
         if (state.link == CallLinkState.CONNECTED || state.link == CallLinkState.FAILED) return emptyList()
         val decision = IceUnstick.decide(
             IceUnstick.Snapshot(
@@ -238,15 +248,9 @@ class CallMachine {
                 isOfferer = state.role == CallRtcRole.OFFERER,
             ),
         )
-        if (decision.failSignal) {
-            val detail = CallLink.noSdpDetail()
-            state = state.copy(link = CallLinkState.FAILED, media = detail)
-            return listOf(CallEffect.CancelWatch, CallEffect.Notice(detail))
-        }
-        if (decision.failIce) {
-            val detail = CallLink.timeoutDetail(state.hasTurn)
-            state = state.copy(link = CallLinkState.FAILED, media = detail)
-            return listOf(CallEffect.CancelWatch, CallEffect.Notice(detail))
+        if (decision.failSignal || decision.failIce) {
+            // WSS audio does not need SDP/ICE. If the call was already accepted, fall through.
+            return startWssFallbackLocked(sendRelay = true)
         }
         val out = mutableListOf<CallEffect>()
         if (decision.fallbackDirect) {
@@ -372,6 +376,47 @@ class CallMachine {
         if (!PeerIds.same(state.peerDeviceId, from) && !matchesLocked(from, callId)) return emptyList()
         hardEndLocked()
         return listOf(CallEffect.TearDown)
+    }
+
+    private fun onWssLocked(from: String, callId: String, event: String, payload: Any?): List<CallEffect> {
+        if (!state.live || !matchesLocked(from, callId)) return emptyList()
+        if (state.phase != CallPhase.ACTIVE) return emptyList()
+        val out = mutableListOf<CallEffect>()
+        if (!state.wssMedia) {
+            out += startWssFallbackLocked(sendRelay = true)
+        }
+        if (event == CallSignal.AUDIO) {
+            val sig = CallSignal.parseMedia(event, payload)
+            if (sig != null) out += CallEffect.DeliverAudio(listOf(sig))
+        }
+        if (state.link != CallLinkState.CONNECTED) {
+            state = state.copy(link = CallLinkState.CONNECTED, media = CallMedia.CHAT)
+            out += CallEffect.CancelWatch
+        }
+        return out
+    }
+
+    private fun startWssFallbackLocked(sendRelay: Boolean): List<CallEffect> {
+        if (!state.live) return emptyList()
+        val already = state.wssMedia
+        state = state.copy(
+            wssMedia = true,
+            rtcWanted = false,
+            phase = CallPhase.ACTIVE,
+            link = if (already && state.link == CallLinkState.CONNECTED) {
+                CallLinkState.CONNECTED
+            } else {
+                CallLinkState.CONNECTING
+            },
+            media = CallMedia.CHAT,
+        )
+        val out = mutableListOf<CallEffect>()
+        if (!already) out += CallEffect.StartWssMedia
+        out += CallEffect.CancelWatch
+        if (sendRelay && !already) {
+            out += CallEffect.Send(state.callId, state.peerDeviceId, CallSignal.RELAY)
+        }
+        return out
     }
 
     private fun onMediaLocked(from: String, callId: String, event: String, payload: Any?): List<CallEffect> {

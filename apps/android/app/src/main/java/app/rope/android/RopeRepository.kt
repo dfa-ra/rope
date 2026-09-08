@@ -47,11 +47,13 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
+import app.rope.android.data.UserFacing
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
 import app.rope.android.media.WebRtcSession
+import app.rope.android.media.WssAudioSession
 import app.rope.android.net.ServerApi
 import app.rope.android.notify.RopeNotifier
 import app.rope.android.protocol.InviteCodec
@@ -72,6 +74,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -163,6 +166,8 @@ class RopeRepository(private val app: Application) {
     private val typingUntil = mutableMapOf<String, MutableMap<String, Pair<String, Long>>>()
     private var typingJob: Job? = null
     private var rtc: WebRtcSession? = null
+    private var wssAudio: WssAudioSession? = null
+    private val wssFrameBusy = AtomicBoolean(false)
     private val callMachine = CallMachine()
     private var callPeerName: String = ""
     private var connectWatch: Job? = null
@@ -302,7 +307,7 @@ class RopeRepository(private val app: Application) {
     fun provision(form: ProvisionForm) {
         scope.launch {
             if (!form.upgrade && !LoginRules.isValid(form.displayName)) {
-                _state.value = _state.value.copy(error = "Придумайте логин: 2–24 символа, буквы/цифры/_ . -")
+                notice(UserFacing.LOGIN)
                 return@launch
             }
             busy(true)
@@ -346,7 +351,7 @@ class RopeRepository(private val app: Application) {
     fun join(url: String, displayName: String) {
         scope.launch {
             if (!LoginRules.isValid(displayName)) {
-                _state.value = _state.value.copy(error = "Придумайте логин: 2–24 символа, буквы/цифры/_ . -")
+                notice(UserFacing.LOGIN)
                 return@launch
             }
             busy(true)
@@ -404,7 +409,7 @@ class RopeRepository(private val app: Application) {
     fun joinDevHttp(host: String, port: Int, token: String, displayName: String) {
         scope.launch {
             if (!LoginRules.isValid(displayName)) {
-                _state.value = _state.value.copy(error = "Придумайте логин: 2–24 символа, буквы/цифры/_ . -")
+                notice(UserFacing.LOGIN)
                 return@launch
             }
             busy(true)
@@ -626,7 +631,7 @@ class RopeRepository(private val app: Application) {
                         forwardToPeer(c.peer, src)
                         openChat(c.peer)
                     }
-                    else -> _state.value = _state.value.copy(error = "некуда переслать")
+                    else -> notice("некуда переслать")
                 }
             } catch (e: Exception) {
                 error(e)
@@ -642,7 +647,7 @@ class RopeRepository(private val app: Application) {
                 val name = attachmentName(uri, mime)
                 var bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
                 if (bytes.size > 25 * 1024 * 1024) {
-                    _state.value = _state.value.copy(error = "Файл больше 25 МБ")
+                    notice(UserFacing.FILE_TOO_BIG)
                     return@launch
                 }
                 if (mime.startsWith("image/") || looksLikeImage(name, mime)) {
@@ -768,7 +773,7 @@ class RopeRepository(private val app: Application) {
     fun createGroup() {
         val name = _state.value.groupNameDraft.trim()
         if (name.isBlank()) {
-            _state.value = _state.value.copy(error = "Название группы")
+            notice("Название группы")
             return
         }
         scope.launch {
@@ -877,6 +882,7 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.callMicMuted
         _state.value = _state.value.copy(callMicMuted = next)
         rtc?.setMicEnabled(!next)
+        wssAudio?.setMuted(next)
     }
 
     fun toggleCallSpeaker() {
@@ -948,15 +954,15 @@ class RopeRepository(private val app: Application) {
     fun upgradeCore(password: String, keyPem: String) {
         val profile = store.profile()
         if (profile == null) {
-            _state.value = _state.value.copy(error = "сначала подключитесь к серверу")
+            notice("сначала подключитесь к серверу")
             return
         }
         if (!RoleRules.canUpgradeCore(profile.role)) {
-            _state.value = _state.value.copy(error = "Ядро на VPS обновляет только owner")
+            notice("Ядро на VPS обновляет только owner")
             return
         }
         if (password.isBlank() && keyPem.isBlank()) {
-            _state.value = _state.value.copy(error = "Введите SSH-пароль или ключ")
+            notice("Введите SSH-пароль или ключ")
             return
         }
         val ssh = store.sshTarget() ?: SshTarget(profile.host, 22, "root", profile.port)
@@ -1048,7 +1054,7 @@ class RopeRepository(private val app: Application) {
                 if (profile != null) {
                     attached(profile)
                 } else {
-                    _state.value = _state.value.copy(error = "восстановили ключ, но профиля сервера нет")
+                    notice("восстановили ключ, но профиля сервера нет")
                 }
             } catch (e: Exception) {
                 error(e)
@@ -1145,7 +1151,7 @@ class RopeRepository(private val app: Application) {
             try {
                 val members = group.members.filter { it != id.deviceId() }
                 if (members.isEmpty()) {
-                    _state.value = _state.value.copy(error = "В группе пока никого нет")
+                    notice("В группе пока никого нет")
                     return@launch
                 }
                 val devices = currentDevices()
@@ -1164,7 +1170,7 @@ class RopeRepository(private val app: Application) {
                     envelopes.put(Base64.encodeToString(env.bytes, Base64.NO_WRAP))
                 }
                 if (envelopes.length() == 0) {
-                    _state.value = _state.value.copy(error = "Нет ключей участников")
+                    notice("Нет ключей участников")
                     return@launch
                 }
                 val chatId = ChatIds.group(group.groupId)
@@ -1434,7 +1440,7 @@ class RopeRepository(private val app: Application) {
             return
         }
         if (src.extra.isBlank()) {
-            _state.value = _state.value.copy(error = "это вложение уже нельзя переслать")
+            notice("это вложение уже нельзя переслать")
             return
         }
         val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.MEDIA, src.extra.toByteArray())
@@ -1464,7 +1470,7 @@ class RopeRepository(private val app: Application) {
             return
         }
         if (src.extra.isBlank()) {
-            _state.value = _state.value.copy(error = "это вложение уже нельзя переслать")
+            notice("это вложение уже нельзя переслать")
             return
         }
         sendGroupPayload(
@@ -1640,7 +1646,7 @@ class RopeRepository(private val app: Application) {
                 if (ringingOut && (code == "not_found" || msg.contains("offline", ignoreCase = true))) {
                     applyCallEffects(callMachine.onRingSendFailed())
                 } else if (call == null || call.phase != CallPhase.ACTIVE) {
-                    _state.value = _state.value.copy(error = msg)
+                    notice(msg)
                 }
             }
         }
@@ -1807,7 +1813,7 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(updateText = "")
             refreshOpenChat()
         } catch (e: Exception) {
-            _state.value = _state.value.copy(error = "не скачалось вложение: ${e.message}")
+            notice("не скачалось вложение")
         }
     }
 
@@ -1838,20 +1844,28 @@ class RopeRepository(private val app: Application) {
                     }
                 }
                 is CallEffect.StartRtc -> {
-                    audioMode(true)
-                    scope.launch { startRtc(effect.asCaller) }
-                }
-                is CallEffect.DeliverRemote -> {
-                    val session = rtc
-                    effect.signals.forEach { sig ->
-                        if (sig.kind == CallSignal.ICE) {
-                            callMachine.onLocalCandidate(CallMedia.isRelayCandidate(sig.candidate))
-                        }
-                        session?.handleRemote(sig)
+                    if (!callMachine.state.wssMedia) {
+                        audioMode(true)
+                        scope.launch { startRtc(effect.asCaller) }
                     }
                 }
-                CallEffect.RestartIce -> rtc?.restartIce()
-                CallEffect.FallbackDirect -> rtc?.allowDirect()
+                is CallEffect.DeliverRemote -> {
+                    if (callMachine.state.wssMedia) {
+                        // serial fallback: ignore leftover SDP/ICE
+                    } else {
+                        val session = rtc
+                        effect.signals.forEach { sig ->
+                            if (sig.kind == CallSignal.ICE) {
+                                callMachine.onLocalCandidate(CallMedia.isRelayCandidate(sig.candidate))
+                            }
+                            session?.handleRemote(sig)
+                        }
+                    }
+                }
+                CallEffect.StartWssMedia -> startWssMedia()
+                is CallEffect.DeliverAudio -> playWssAudio(effect.signals)
+                CallEffect.RestartIce -> if (!callMachine.state.wssMedia) rtc?.restartIce()
+                CallEffect.FallbackDirect -> if (!callMachine.state.wssMedia) rtc?.allowDirect()
                 CallEffect.TearDown -> teardownCall()
                 CallEffect.RingOut -> {
                     startTone(true)
@@ -1878,7 +1892,7 @@ class RopeRepository(private val app: Application) {
                     ringWatch?.cancel()
                     ringWatch = null
                 }
-                is CallEffect.Notice -> _state.value = _state.value.copy(error = effect.message)
+                is CallEffect.Notice -> notice(effect.message)
             }
             if (effect !is CallEffect.TearDown) publishCall()
         }
@@ -1895,7 +1909,7 @@ class RopeRepository(private val app: Application) {
         val peer = resolveCallPeer(peerId, _state.value.peer)
         val to = PeerIds.wireId(peer, peerId)
         val sent = to.isNotBlank() && sendCall(callId, to, event, payload)
-        if (peer != null && peer.publicIdentity.isNotEmpty()) {
+        if (!CallSignal.skipMailbox(event) && peer != null && peer.publicIdentity.isNotEmpty()) {
             sendCallEnvelope(peer, callId, event, payload)
         }
         return sent
@@ -1904,6 +1918,7 @@ class RopeRepository(private val app: Application) {
     private suspend fun startRtc(asCaller: Boolean) {
         val ice = awaitIce()
         if (!callMachine.state.live || !callMachine.state.rtcWanted) return
+        if (callMachine.state.wssMedia) return
         val hasTurn = !CallLink.missingTurn(ice)
         applyCallEffects(callMachine.onHasTurn(hasTurn, CallLink.missingTurnDetail()))
         if (!callMachine.state.live) return
@@ -1935,6 +1950,81 @@ class RopeRepository(private val app: Application) {
             delay(400)
         }
         return IceServers.resolve(emptyList(), profile?.host)
+    }
+
+    private fun startWssMedia() {
+        audioMode(true)
+        synchronized(rtcLock) {
+            try {
+                rtc?.close()
+            } catch (_: Exception) {
+            }
+            rtc = null
+            if (wssAudio != null) {
+                if (_state.value.callMicMuted) wssAudio?.setMuted(true)
+                return
+            }
+            CallAudio.apply(app, true)
+            if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
+            wssAudio = WssAudioSession(app) { pcm ->
+                if (!wssFrameBusy.compareAndSet(false, true)) return@WssAudioSession
+                scope.launch {
+                    try {
+                        sendWssAudioFrame(pcm)
+                    } finally {
+                        wssFrameBusy.set(false)
+                    }
+                }
+            }
+            if (_state.value.callMicMuted) wssAudio?.setMuted(true)
+        }
+    }
+
+    private fun sendWssAudioFrame(pcm: ByteArray) {
+        if (pcm.isEmpty() || !callMachine.state.live || !callMachine.state.wssMedia) return
+        val id = identity ?: return
+        val callId = callMachine.state.callId
+        val peerId = callMachine.state.peerDeviceId
+        if (callId.isBlank() || peerId.isBlank()) return
+        val peer = resolveCallPeer(peerId, _state.value.peer) ?: return
+        if (peer.publicIdentity.isEmpty()) return
+        val to = PeerIds.wireId(peer, peerId)
+        if (to.isBlank()) return
+        try {
+            val env = id.encryptTyped(
+                publicIdentityFromBlob(peer.publicIdentity),
+                EnvelopeTypes.CALL,
+                pcm,
+            )
+            val payload = CallSignal(
+                kind = CallSignal.AUDIO,
+                frame = Base64.encodeToString(env.bytes, Base64.NO_WRAP),
+            ).toJson()
+            sendCall(callId, to, CallSignal.AUDIO, payload)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun playWssAudio(signals: List<CallSignal>) {
+        val id = identity ?: return
+        val peer = resolveCallPeer(callMachine.state.peerDeviceId, _state.value.peer) ?: return
+        if (peer.publicIdentity.isEmpty()) return
+        val session = wssAudio ?: return
+        for (sig in signals) {
+            if (sig.kind != CallSignal.AUDIO || sig.frame.isBlank()) continue
+            val bytes = try {
+                Base64.decode(sig.frame, Base64.NO_WRAP)
+            } catch (_: Exception) {
+                continue
+            }
+            if (bytes.isEmpty()) continue
+            val pcm = try {
+                id.decryptTyped(publicIdentityFromBlob(peer.publicIdentity), bytes).body
+            } catch (_: Exception) {
+                continue
+            }
+            session.play(pcm)
+        }
     }
 
     private fun attachRtc(asCaller: Boolean, ice: List<IceServerSpec>) {
@@ -1981,7 +2071,7 @@ class RopeRepository(private val app: Application) {
                     },
                 )
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "WebRTC: ${e.message}")
+                notice(UserFacing.NO_PATH)
                 return
             }
             rtc = session
@@ -2102,6 +2192,11 @@ class RopeRepository(private val app: Application) {
             } catch (_: Exception) {
             }
             rtc = null
+            try {
+                wssAudio?.close()
+            } catch (_: Exception) {
+            }
+            wssAudio = null
         }
         _state.value = _state.value.copy(call = null, callMicMuted = false, callSpeakerOn = false)
     }
@@ -2292,7 +2387,12 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(busy = v, error = null)
     }
 
+    private fun notice(msg: String) {
+        val text = UserFacing.of(msg)
+        _state.value = _state.value.copy(busy = false, error = text, notice = text)
+    }
+
     private fun error(e: Exception) {
-        _state.value = _state.value.copy(busy = false, error = e.message ?: e.toString())
+        notice(UserFacing.of(e))
     }
 }

@@ -78,6 +78,7 @@ object CallLink {
         localOfferReady: Boolean,
         remoteDescriptionReady: Boolean,
     ): Boolean {
+        if (kind in CallSignal.FALLBACK) return false
         if (kind !in CallSignal.EVENTS) return false
         if (!sessionReady) return true
         return when (kind) {
@@ -86,6 +87,8 @@ object CallLink {
             else -> false
         }
     }
+
+    fun chatDetail(): String = CallMedia.CHAT
 
     fun ringTimeoutDetail(outgoing: Boolean): String =
         if (outgoing) noAnswerDetail() else "пропущен"

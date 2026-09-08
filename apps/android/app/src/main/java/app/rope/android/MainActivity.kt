@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +37,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val picker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { (application as RopeApp).repo.sendAttachment(it) }
+    }
+
+    private val galleryPicker = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
         uri?.let { (application as RopeApp).repo.sendAttachment(it) }
     }
 
@@ -115,6 +122,13 @@ class MainActivity : AppCompatActivity() {
                     onUpgradeCore = repo::upgradeCore,
                     onRestoreBackup = { restorePicker.launch("*/*") },
                     onAttach = { picker.launch("*/*") },
+                    onAttachGallery = {
+                        galleryPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    onAttachFile = { picker.launch("*/*") },
+                    onAttachUri = { (application as RopeApp).repo.sendAttachment(it) },
                     onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
                     onCall = { withMic("call") { repo.startCall() } },

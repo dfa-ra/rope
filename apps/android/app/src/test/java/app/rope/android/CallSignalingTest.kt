@@ -4,12 +4,14 @@ import app.rope.android.data.CallEffect
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMachine
+import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.CallRtcRole
 import app.rope.android.data.CallSignal
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -186,7 +188,7 @@ class CallSignalingTest {
     }
 
     @Test
-    fun connectTimeoutSurfacesFailedWithoutSpin() {
+    fun connectTimeoutFallsBackToWssNotFailed() {
         val m = CallMachine()
         m.localStart("c1", "bob", "alice")
         m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
@@ -197,13 +199,94 @@ class CallSignalingTest {
         m.onIce("CHECKING", false)
 
         val first = m.onConnectTimeout()
-        assertEquals(CallLinkState.FAILED, m.state.link)
+        assertEquals(CallLinkState.CONNECTING, m.state.link)
+        assertTrue(m.state.wssMedia)
+        assertEquals(CallMedia.CHAT, m.state.media)
+        assertTrue(first.contains(CallEffect.StartWssMedia))
+        assertTrue(first.any { it is CallEffect.Send && it.event == CallSignal.RELAY })
         assertFalse(first.contains(CallEffect.RestartIce))
-        assertTrue(first.any { it is CallEffect.Notice && it.message.contains("25") })
         assertTrue(m.state.live)
 
         val again = m.onConnectTimeout()
         assertTrue(again.isEmpty())
+
+        val ack = m.onWire("bob", CallSignal.RELAY, "c1", "", "alice")
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+        assertTrue(ack.contains(CallEffect.CancelWatch))
+        assertEquals("Разговор", CallLink.heading(m.state.phase, m.state.link))
+    }
+
+    @Test
+    fun iceFailedAfterRestartStartsWss() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        m.onHasTurn(true, "")
+        m.onSessionAttached()
+        m.onLocalOfferSent()
+        m.media("bob", CallSignal.ANSWER, "c1", answer(), "alice")
+        val restart = m.onIce("FAILED", false)
+        assertTrue(restart.contains(CallEffect.RestartIce))
+        assertFalse(m.state.wssMedia)
+        val fallback = m.onIce("FAILED", false)
+        assertTrue(fallback.contains(CallEffect.StartWssMedia))
+        assertTrue(m.state.wssMedia)
+        assertEquals(CallLinkState.CONNECTING, m.state.link)
+        val connected = m.onIce("CONNECTED", true)
+        assertTrue(connected.isEmpty())
+        assertEquals(CallLinkState.CONNECTING, m.state.link)
+    }
+
+    @Test
+    fun audioAndRelayAreNotQueued() {
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.AUDIO,
+                sessionReady = false,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.RELAY,
+                sessionReady = false,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        val audio = m.onWire(
+            "bob",
+            CallSignal.AUDIO,
+            "c1",
+            CallSignal(kind = CallSignal.AUDIO, frame = "YWJj").toJson(),
+            "alice",
+        )
+        assertTrue(m.state.wssMedia)
+        assertTrue(audio.any { it is CallEffect.DeliverAudio })
+        assertTrue(m.state.queue.none { it.kind == CallSignal.AUDIO })
+    }
+
+    @Test
+    fun parsesAudioAndRelayWithoutSdp() {
+        val audio = CallSignal(kind = CallSignal.AUDIO, frame = "YWJj")
+        val parsed = CallSignal.parse(audio.toJson())!!
+        assertEquals(CallSignal.AUDIO, parsed.kind)
+        assertEquals("YWJj", parsed.frame)
+        assertTrue(parsed.sdp.isBlank())
+        assertEquals(CallSignal.AUDIO, CallSignal.parseEvent("AUDIO"))
+        assertEquals(CallSignal.RELAY, CallSignal.parseEvent("relay"))
+        val relay = CallSignal.parseMedia(CallSignal.RELAY, "")!!
+        assertEquals(CallSignal.RELAY, relay.kind)
+        val viaMedia = CallSignal.parseMedia(CallSignal.AUDIO, audio.toJson())!!
+        assertEquals("YWJj", viaMedia.frame)
+        assertTrue(CallSignal.skipMailbox(CallSignal.AUDIO))
+        assertTrue(CallSignal.skipMailbox(CallSignal.RELAY))
+        assertFalse(CallSignal.skipMailbox(CallSignal.OFFER))
+        assertNull(CallSignal.parse("""{"kind":"offer","sdp":""}"""))
     }
 
     @Test

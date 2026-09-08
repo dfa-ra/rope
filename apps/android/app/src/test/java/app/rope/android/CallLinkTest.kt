@@ -134,6 +134,22 @@ class CallLinkTest {
         assertTrue(CallLink.ringTimedOut(45_000, CallPhase.RINGING_OUT))
         assertFalse(CallLink.ringTimedOut(44_999, CallPhase.RINGING_IN))
         assertEquals("абонент не ответил", CallLink.ringTimeoutDetail(true))
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.AUDIO,
+                sessionReady = false,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
+        assertFalse(
+            CallLink.shouldQueueSignal(
+                CallSignal.RELAY,
+                sessionReady = true,
+                localOfferReady = false,
+                remoteDescriptionReady = false,
+            ),
+        )
     }
 
     @Test
@@ -240,5 +256,8 @@ class CallLinkTest {
         assertEquals("один тап — ответить", sub)
         assertFalse(sub.contains("конверт"))
         assertFalse(CallLink.connectedDetail(false).contains("конверт"))
+        assertEquals("через чат · E2EE", CallLink.chatDetail())
+        assertFalse(CallLink.chatDetail().contains("конверт"))
+        assertTrue(CallLink.chatDetail().length <= 24)
     }
 }

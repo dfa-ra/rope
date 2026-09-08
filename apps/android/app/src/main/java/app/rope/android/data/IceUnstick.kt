@@ -32,9 +32,11 @@ object IceUnstick {
         val restartIce: Boolean = false,
         val failSignal: Boolean = false,
         val failIce: Boolean = false,
+        /** CallMachine maps [failIce] to WSS E2EE audio instead of a terminal fail. */
+        val fallbackWss: Boolean = false,
     ) {
         val terminal: Boolean get() = failSignal || failIce
-        val acted: Boolean get() = fallbackDirect || restartIce || terminal
+        val acted: Boolean get() = fallbackDirect || restartIce || terminal || fallbackWss
     }
 
     fun searchingPath(ice: String): Boolean {

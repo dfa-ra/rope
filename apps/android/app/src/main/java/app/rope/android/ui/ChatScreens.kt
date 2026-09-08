@@ -1,5 +1,12 @@
 package app.rope.android.ui
 
+import android.Manifest
+import android.content.ContentUris
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -14,6 +21,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -38,18 +46,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Call
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
@@ -57,13 +66,17 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -73,16 +86,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -90,6 +107,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
@@ -104,11 +122,14 @@ import app.rope.android.data.MessageTime
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
+import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.RoleRules
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val OutBubbleLight = Color(0xFF3F3F46)
 private val OutBubbleDark = Color(0xFF3F3F46)
@@ -382,6 +403,7 @@ internal fun ConversationRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatPane(
     state: UiState,
@@ -407,6 +429,9 @@ fun ChatPane(
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
     onConsumedScroll: () -> Unit = {},
+    onAttachGallery: () -> Unit = onAttach,
+    onAttachFile: () -> Unit = onAttach,
+    onAttachUri: (Uri) -> Unit = {},
 ) {
     val title = state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
@@ -428,10 +453,15 @@ fun ChatPane(
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var showAttach by remember { mutableStateOf(false) }
+    val selecting = selectedIds.isNotEmpty()
+    val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
     BackHandler(enabled = showSearch) {
         showSearch = false
         onMessageQuery("")
     }
+    BackHandler(enabled = selecting) { selectedIds = emptySet() }
     LaunchedEffect(visible.size, state.messageQuery) {
         if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
     }
@@ -456,9 +486,12 @@ fun ChatPane(
         ) {
             InitialsAvatar(title, state.group != null, online)
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    subtitle,
+                    if (selecting) "${selectedIds.size}" else title,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    if (selecting) "выбрано" else subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -509,38 +542,109 @@ fun ChatPane(
                 }
             }
         }
-        if (visible.isEmpty()) {
-            RopeEmptyState(
-                title = if (state.messageQuery.isNotBlank()) "Ничего не нашли" else "Начните переписку",
-                body = if (state.messageQuery.isNotBlank()) {
-                    "Другой запрос — или очистите поиск."
-                } else {
-                    RoleRules.threadEmptyBody()
-                },
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            LazyColumn(
-                state = list,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
-                itemsIndexed(visible, key = { _, m -> m.id }) { index, m ->
-                    MessageBubble(
-                        m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
-                        onCopy, onPinMessage, onJump, onOpenImage,
-                        highlighted = flashId == m.id,
-                        clusterFirst = GroupChatUx.firstInCluster(visible, index),
-                        clusterLast = GroupChatUx.lastInCluster(visible, index),
-                        mentionNames = mentionNames,
-                    )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (visible.isEmpty()) {
+                RopeEmptyState(
+                    title = if (state.messageQuery.isNotBlank()) "Ничего не нашли" else "Начните переписку",
+                    body = if (state.messageQuery.isNotBlank()) {
+                        "Другой запрос — или очистите поиск."
+                    } else {
+                        RoleRules.threadEmptyBody()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                LazyColumn(
+                    state = list,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 8.dp,
+                        // glass bar sits over the last bubbles
+                    ).let { base ->
+                        PaddingValues(
+                            start = 10.dp,
+                            end = 10.dp,
+                            top = 8.dp,
+                            bottom = if (selecting) 88.dp else 8.dp,
+                        )
+                    },
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    itemsIndexed(visible, key = { _, m -> m.id }) { index, m ->
+                        MessageBubble(
+                            m, state, onPlay, onReact, onEnsureMedia, onReply, onEdit, onDelete, onForward,
+                            onCopy, onPinMessage, onJump, onOpenImage,
+                            highlighted = flashId == m.id,
+                            clusterFirst = GroupChatUx.firstInCluster(visible, index),
+                            clusterLast = GroupChatUx.lastInCluster(visible, index),
+                            mentionNames = mentionNames,
+                            selected = m.id in selectedIds,
+                            selecting = selecting,
+                            onToggleSelect = {
+                                selectedIds = if (m.id in selectedIds) selectedIds - m.id else selectedIds + m.id
+                            },
+                            onEnterSelect = { if (!m.deleted) selectedIds = selectedIds + m.id },
+                        )
+                    }
                 }
             }
+            if (selecting) {
+                SelectionGlassBar(
+                    messages = selectedMsgs,
+                    pinnedId = state.pinnedMessageId,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    onReply = { m -> onReply(m); selectedIds = emptySet() },
+                    onForward = { msgs ->
+                        msgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                        selectedIds = emptySet()
+                    },
+                    onCopy = { msgs ->
+                        msgs.filter { ChatActions.canCopy(it) }.forEach(onCopy)
+                        selectedIds = emptySet()
+                    },
+                    onDelete = { msgs ->
+                        msgs.filter { ChatActions.canDelete(it) }.forEach(onDelete)
+                        selectedIds = emptySet()
+                    },
+                    onPin = { m -> onPinMessage(m); selectedIds = emptySet() },
+                    onEdit = { m -> onEdit(m); selectedIds = emptySet() },
+                    onReact = { m, emoji -> onReact(m, emoji); selectedIds = emptySet() },
+                    onClear = { selectedIds = emptySet() },
+                )
+            }
         }
-        ComposerBar(state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCancelComposer)
+        if (!selecting) {
+            ComposerBar(
+                state = state,
+                onDraft = onDraft,
+                onSend = onSend,
+                onAttach = { showAttach = true },
+                onVoiceStart = onVoiceStart,
+                onVoiceFinish = onVoiceFinish,
+                onCancelComposer = onCancelComposer,
+            )
+        }
+    }
+    if (showAttach) {
+        AttachSheet(
+            onGallery = {
+                showAttach = false
+                onAttachGallery()
+            },
+            onFile = {
+                showAttach = false
+                onAttachFile()
+            },
+            onUri = { uri ->
+                showAttach = false
+                onAttachUri(uri)
+            },
+            onDismiss = { showAttach = false },
+        )
     }
 }
 
@@ -564,16 +668,18 @@ private fun MessageBubble(
     clusterFirst: Boolean = true,
     clusterLast: Boolean = true,
     mentionNames: List<String> = emptyList(),
+    selected: Boolean = false,
+    selecting: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    onEnterSelect: () -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
     val dark = MaterialTheme.colorScheme.background == RopeDarkBg
     val outBg = if (dark) OutBubbleDark else OutBubbleLight
     val outFg = if (dark) Color(0xFFF4F4F5) else Color.White
-    var picker by remember(m.id) { mutableStateOf(false) }
-    BackHandler(enabled = picker) { picker = false }
     val me = state.profile?.deviceId.orEmpty()
-    val selected = picker || highlighted
+    val marked = selected || highlighted
     var appeared by remember(m.id) { mutableStateOf(false) }
     LaunchedEffect(m.id) { appeared = true }
     val appear by animateFloatAsState(
@@ -582,12 +688,16 @@ private fun MessageBubble(
         label = "bubbleIn",
     )
     val selectScale by animateFloatAsState(
-        targetValue = if (selected) 1.03f else 1f,
+        targetValue = if (marked) 1.03f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 420f),
         label = "bubbleSel",
     )
     val selectAlpha by animateFloatAsState(
-        targetValue = if (highlighted) 0.18f else 0f,
+        targetValue = when {
+            highlighted -> 0.18f
+            selected -> 0.12f
+            else -> 0f
+        },
         animationSpec = tween(180),
         label = "bubbleFlash",
     )
@@ -629,6 +739,50 @@ private fun MessageBubble(
                     }
                 }
             }
+            val bubbleClick = Modifier
+                .widthIn(max = 300.dp)
+                .combinedClickable(
+                    onClick = {
+                        when {
+                            selecting -> onToggleSelect()
+                            m.kind == MessageKind.IMAGE && !m.deleted -> onOpenImage(m)
+                        }
+                    },
+                    onLongClick = {
+                        if (m.deleted) return@combinedClickable
+                        if (selecting) onToggleSelect() else onEnterSelect()
+                    },
+                )
+            val photo = m.kind == MessageKind.IMAGE && !m.deleted
+            if (photo) {
+                Box(bubbleClick) {
+                    Column {
+                        if (showName) {
+                            Text(
+                                senderLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = senderColor,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                            )
+                        }
+                        if (!m.replyToId.isNullOrBlank()) {
+                            ReplyQuote(
+                                name = GroupChatUx.replyQuoteName(m.replyName, m.outgoing),
+                                preview = m.replyPreview.ifBlank { "Сообщение" },
+                                accent = senderColor,
+                                onClick = { onJump(m.replyToId) },
+                            )
+                        }
+                        ImageBubble(m, onEnsureMedia, onOpenImage, overlayMeta = true)
+                    }
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .clip(RoundedCornerShape(RopeShapes.media))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = selectAlpha)),
+                    )
+                }
+            } else {
         Surface(
             color = if (mine) outBg else if (dark) InBubbleDark else InBubbleLight,
             contentColor = if (mine) outFg else MaterialTheme.colorScheme.onSurface,
@@ -646,12 +800,7 @@ private fun MessageBubble(
                     else -> tight
                 },
             ),
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = { if (!m.deleted) picker = !picker },
-                ),
+            modifier = bubbleClick,
         ) {
             Box {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -682,7 +831,6 @@ private fun MessageBubble(
                                 playerDurationMs = if (state.voiceProgressId == m.id) state.voiceDurationMs else 0L,
                                 onPlay = onPlay,
                             )
-                            MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia, onOpenImage)
                             MessageKind.FILE -> FileBubble(m)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
@@ -710,22 +858,7 @@ private fun MessageBubble(
                 )
             }
         }
-        }
-        if (picker && !m.deleted) {
-            ReactionPicker { emoji ->
-                onReact(m, emoji)
-                picker = false
             }
-            MessageActionRow(
-                m,
-                pinned = state.pinnedMessageId == m.id,
-                onReply = { onReply(m); picker = false },
-                onForward = { onForward(m); picker = false },
-                onCopy = { onCopy(m); picker = false },
-                onPin = { onPinMessage(m); picker = false },
-                onEdit = { onEdit(m); picker = false },
-                onDelete = { onDelete(m); picker = false },
-            )
         }
         if (m.reactions.isNotEmpty() && !m.deleted) {
             ReactionRow(m, me, mine, onReact)
@@ -867,22 +1000,46 @@ private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boo
 }
 
 @Composable
-private fun ImageBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit, onOpen: (ChatMessage) -> Unit) {
+private fun ImageBubble(
+    m: ChatMessage,
+    onEnsure: (ChatMessage) -> Unit,
+    onOpen: (ChatMessage) -> Unit,
+    overlayMeta: Boolean = false,
+) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
     }
     val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
     if (bmp != null) {
-        Image(
-            bitmap = bmp.asImageBitmap(),
-            contentDescription = "Фото",
-            contentScale = ContentScale.Crop,
+        val box = PhotoLayout.box(bmp.width, bmp.height)
+        val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 220.dp)
+                .width(box.widthDp.dp)
+                .height(box.heightDp.dp)
                 .clip(RoundedCornerShape(RopeShapes.media))
                 .clickable { onOpen(m) },
-        )
+        ) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Фото",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (overlayMeta && meta.isNotBlank()) {
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+        }
     } else {
         Text(
             if (m.extra.isNotBlank()) "Фото · загружается…" else m.text,
@@ -913,6 +1070,28 @@ private fun ComposerBar(
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
     var showEmoji by remember { mutableStateOf(false) }
+    var localText by remember { mutableStateOf(state.draftText) }
+    var lastSeenDraft by remember { mutableStateOf(state.draftText) }
+    val scope = rememberCoroutineScope()
+    var debounce by remember { mutableStateOf<Job?>(null) }
+    val chatKey = state.group?.id ?: state.peer?.deviceId.orEmpty()
+    LaunchedEffect(chatKey) {
+        localText = state.draftText
+        lastSeenDraft = state.draftText
+    }
+    fun persistDraft(text: String) {
+        debounce?.cancel()
+        debounce = scope.launch {
+            delay(320)
+            onDraft(text)
+        }
+    }
+    LaunchedEffect(state.draftText) {
+        if (state.draftText != lastSeenDraft) {
+            lastSeenDraft = state.draftText
+            if (state.draftText != localText) localText = state.draftText
+        }
+    }
     BackHandler(enabled = showEmoji && !state.recording) { showEmoji = false }
     BackHandler(enabled = state.recording) { onVoiceFinish(false) }
     LaunchedEffect(state.recording) {
@@ -923,7 +1102,7 @@ private fun ComposerBar(
             showEmoji = false
         }
     }
-    val showSend = ComposerRules.showSendButton(state.draftText, state.recording, recordingLocked)
+    val showSend = ComposerRules.showSendButton(localText, state.recording, recordingLocked)
     val micScale by animateFloatAsState(
         targetValue = if (state.recording && !recordingLocked) 1.18f else 1f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
@@ -949,7 +1128,10 @@ private fun ComposerBar(
             }
             if (showEmoji && !state.recording) {
                 EmojiPickerPanel(
-                    onPick = { onDraft(state.draftText + it) },
+                    onPick = {
+                        localText += it
+                        persistDraft(localText)
+                    },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }
@@ -995,19 +1177,32 @@ private fun ComposerBar(
                                     tint = if (showEmoji) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            TextField(
-                                value = state.draftText,
-                                onValueChange = onDraft,
-                                modifier = Modifier.weight(1f),
-                                placeholder = { Text("Сообщение") },
-                                colors = TextFieldDefaults.colors(
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
+                            BasicTextField(
+                                value = localText,
+                                onValueChange = {
+                                    localText = it
+                                    persistDraft(it)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(vertical = 12.dp, horizontal = 4.dp),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 ),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                 maxLines = 5,
+                                decorationBox = { inner ->
+                                    Box {
+                                        if (localText.isEmpty()) {
+                                            Text(
+                                                "Сообщение",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        inner()
+                                    }
+                                },
                             )
                         }
                     }
@@ -1016,7 +1211,13 @@ private fun ComposerBar(
                     SendActionButton(
                         locked = recordingLocked,
                         onSend = {
-                            if (recordingLocked || state.recording) onVoiceFinish(true) else onSend()
+                            if (recordingLocked || state.recording) {
+                                onVoiceFinish(true)
+                            } else {
+                                debounce?.cancel()
+                                onDraft(localText)
+                                onSend()
+                            }
                         },
                     )
                 } else {
@@ -1184,6 +1385,178 @@ private fun ComposerHint(title: String, body: String, onCancel: () -> Unit) {
         }
         TextButton(onClick = onCancel) { Text("Отмена") }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelectionGlassBar(
+    messages: List<ChatMessage>,
+    pinnedId: String?,
+    modifier: Modifier = Modifier,
+    onReply: (ChatMessage) -> Unit,
+    onForward: (List<ChatMessage>) -> Unit,
+    onCopy: (List<ChatMessage>) -> Unit,
+    onDelete: (List<ChatMessage>) -> Unit,
+    onPin: (ChatMessage) -> Unit,
+    onEdit: (ChatMessage) -> Unit,
+    onReact: (ChatMessage, String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val single = messages.singleOrNull()
+    Surface(
+        modifier = modifier.border(
+            1.dp,
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+            RoundedCornerShape(RopeShapes.action),
+        ),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(RopeShapes.action),
+        tonalElevation = 8.dp,
+    ) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${messages.size}",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Снять выделение")
+                }
+            }
+            if (single != null && ChatActions.canReply(single)) {
+                ReactionPicker { onReact(single, it) }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (single != null && ChatActions.canReply(single)) {
+                    TextButton(onClick = { onReply(single) }) { Text("Ответить") }
+                }
+                if (messages.any { ChatActions.canForward(it) }) {
+                    TextButton(onClick = { onForward(messages) }) { Text("Переслать") }
+                }
+                if (messages.any { ChatActions.canCopy(it) }) {
+                    TextButton(onClick = { onCopy(messages) }) { Text("Копировать") }
+                }
+                if (single != null && ChatActions.canPin(single)) {
+                    TextButton(onClick = { onPin(single) }) {
+                        Text(if (pinnedId == single.id) "Открепить" else "Закрепить")
+                    }
+                }
+                if (single != null && ChatActions.canEdit(single)) {
+                    TextButton(onClick = { onEdit(single) }) { Text("Изменить") }
+                }
+                if (messages.any { ChatActions.canDelete(it) }) {
+                    TextButton(onClick = { onDelete(messages) }) { Text("Удалить") }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AttachSheet(
+    onGallery: () -> Unit,
+    onFile: () -> Unit,
+    onUri: (Uri) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val recents = remember { recentImages(context) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Вложение", style = MaterialTheme.typography.titleMedium)
+            if (recents.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(recents, key = { it.toString() }) { uri ->
+                        val bmp = remember(uri) { decodeRecentThumb(context, uri) }
+                        Box(
+                            Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(RopeShapes.media))
+                                .clickable { onUri(uri) }
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        ) {
+                            if (bmp != null) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.PhotoLibrary, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text("Галерея", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onFile, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text("Файл", modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+private fun recentImages(context: Context, limit: Int = 24): List<Uri> {
+    val permission = if (Build.VERSION.SDK_INT >= 33) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+        return emptyList()
+    }
+    val uris = mutableListOf<Uri>()
+    val projection = arrayOf(MediaStore.Images.Media._ID)
+    runCatching {
+        context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            null,
+            null,
+            "${MediaStore.Images.Media.DATE_ADDED} DESC",
+        )?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            while (cursor.moveToNext() && uris.size < limit) {
+                val id = cursor.getLong(idCol)
+                uris += ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+            }
+        }
+    }
+    return uris
+}
+
+private fun decodeRecentThumb(context: Context, uri: Uri, edge: Int = 144): android.graphics.Bitmap? {
+    val resolver = context.contentResolver
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    runCatching { resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) } }
+    val opts = android.graphics.BitmapFactory.Options().apply {
+        inSampleSize = ImageCodec.sampleSize(
+            bounds.outWidth.coerceAtLeast(1),
+            bounds.outHeight.coerceAtLeast(1),
+            edge,
+        )
+    }
+    return runCatching {
+        resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+    }.getOrNull()
 }
 
 @Composable

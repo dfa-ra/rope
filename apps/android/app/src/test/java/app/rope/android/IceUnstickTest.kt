@@ -4,6 +4,7 @@ import app.rope.android.data.CallEffect
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMachine
+import app.rope.android.data.CallMedia
 import app.rope.android.data.CallSignal
 import app.rope.android.data.IceUnstick
 import org.junit.Assert.assertEquals
@@ -120,14 +121,16 @@ class IceUnstickTest {
         assertTrue(again.isEmpty())
 
         val done = m.onConnectTick(IceUnstick.CONNECT_FAIL_MS)
-        assertEquals(CallLinkState.FAILED, m.state.link)
-        assertTrue(m.state.media.contains("25"))
-        assertTrue(done.any { it is CallEffect.Notice && it.message.contains("25") })
+        assertEquals(CallLinkState.CONNECTING, m.state.link)
+        assertTrue(m.state.wssMedia)
+        assertEquals(CallMedia.CHAT, m.state.media)
+        assertTrue(done.contains(CallEffect.StartWssMedia))
+        assertTrue(done.any { it is CallEffect.Send && it.event == CallSignal.RELAY })
         assertTrue(m.onConnectTimeout().isEmpty())
     }
 
     @Test
-    fun machineFailsSignalingWhenAnswerNeverArrives() {
+    fun machineFallsToWssWhenAnswerNeverArrives() {
         val m = CallMachine()
         m.localStart("c1", "bob", "alice")
         m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
@@ -140,10 +143,12 @@ class IceUnstickTest {
         assertTrue(mid.contains(CallEffect.FallbackDirect))
         assertTrue(m.state.live)
 
-        val failed = m.onConnectTick(IceUnstick.ANSWER_FAIL_MS)
-        assertEquals(CallLinkState.FAILED, m.state.link)
-        assertEquals(CallLink.noSdpDetail(), m.state.media)
-        assertTrue(failed.any { it is CallEffect.Notice && it.message.contains("сигналинг") })
+        val fallback = m.onConnectTick(IceUnstick.ANSWER_FAIL_MS)
+        assertTrue(m.state.wssMedia)
+        assertEquals(CallLinkState.CONNECTING, m.state.link)
+        assertEquals(CallMedia.CHAT, m.state.media)
+        assertTrue(fallback.contains(CallEffect.StartWssMedia))
+        assertTrue(fallback.any { it is CallEffect.Send && it.event == CallSignal.RELAY })
         assertFalse(m.state.media.contains("ищем путь"))
     }
 
