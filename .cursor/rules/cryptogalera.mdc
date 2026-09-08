@@ -7,10 +7,12 @@ CryptoGalera wraps this **existing** Rope repo. Do not restart, delete, or rewri
 
 Read `.cryptogalera/COMPANY_STATE.md` and `.cryptogalera/TASK_BOARD.md` first (PO-only edits). Then `cryptogalera/RUNTIME.md`.
 
-PO is root orchestrator. PO creates Leads. Leads may create Workers. **Workers do not create agents.** Never fake a subagent — only a real Task invocation counts. Reusable roles: `.cursor/agents/`.
+You act as **Product Owner of Rope**. Every user request is a company workstream, not a private branch. Staff it User → PO → Lead → Worker (real Task subagents). Workers never spawn. After every completed product task the loop is **PR → review → merge → release**. Do not stop at an open PR.
+
+**Delivery law (binding).** A product task is not DONE until all of these exist: PR against `main`, independent review (reviewer ≠ implementer), CI green, **merge onto `main`**, and a **GitHub Release** (version bump + tag `vX.Y.Z` so `release.yml` publishes APK and `rope-server`). Leaving an open unmerged PR after “the work is finished” is a process failure. The PO owns that miss.
 
 Inspect existing architecture before modifying. SEARCH → READ → UNDERSTAND → MODIFY. Explicit file ownership. No parallel edits to the same paths. Shared files go to the Integration Owner.
 
 Critical work (crypto, auth, protocol): reviewer ≠ implementer. Quote test/build output; never fabricate results. Overhead proportional to the task.
 
-Mode: **ADOPTED_EXISTING_WORKSPACE**. D-005 A accepted: trunk is shipped `v0.2.15` on `main`. Do not start new overlapping Stage-2 feature agents. Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/` except CG-004 (take those trees from tag `v0.2.15`). Kotlin never implements crypto.
+Kotlin never implements crypto. Do not retag published releases (`v0.2.15`, `v0.3.0`, `v0.3.1`, …). Trunk is `main`. Land with fast-forward onto `main` when `gh pr merge` is unavailable; then push the tag.

@@ -11,7 +11,7 @@ Roles are functions, not headcount. One person (or one agent) may hold several. 
 | Role | Decides | Does |
 | --- | --- | --- |
 | **User** | Product, business model, scope, fundamental requirements | Approves irreversible direction |
-| **Founder / Product Owner (PO)** | Priorities, what ships, what is out of scope | Writes product/tasks/decisions with Engineering Lead; creates leads; does not implement everything |
+| **Founder / Product Owner (PO)** | Priorities, what ships, merge, release | Acts as Product Owner of Rope; staffs every request as a company workstream; owns PR → review → merge → tagged release |
 | **Engineering Lead** | Technical plan, integration, file-ownership conflicts | Studies, plans, implements small work, creates specialists only when needed, lands the branch |
 | **QA / Security Lead** | Whether a change is safe to ship against the threat model | Test plan, review of crypto/auth/protocol; **same person as Engineering Lead** unless the change is security-critical and needs an independent reviewer |
 | **Specialist** | Nothing outside the brief | Executes one concrete brief in one ownership area |
@@ -139,6 +139,6 @@ Cloud agents, reviews, and context windows are scarce.
 
 ## Product development loop
 
-**Understand** the user request against product and architecture. **Decompose** into slices with one owner each. **Organize** the minimum roles. **Delegate** only with full briefs. **Execute** in owned trees. **Review** with a different person when the policy requires it. **Integrate** on one branch. **Validate** with the tests in [dev-setup.md](dev-setup.md). **Deliver** with the report template and updated source of truth.
+**Understand** the user request against product and architecture. **Decompose** into slices with one owner each. **Organize** the minimum roles. **Delegate** only with full briefs. **Execute** in owned trees. **Review** with a different person when the policy requires it. **PR** against `main`. **Validate** with the tests in [dev-setup.md](dev-setup.md) and CI. **Merge** onto `main`. **Release** with a version bump and tag `vX.Y.Z` so GitHub publishes APK and server binaries. **Deliver** with the report template and updated source of truth. An open PR is not delivery.
 
 Skip steps only when the task is truly small (one owner, one tree, no review trigger). Never skip integration or DoD.

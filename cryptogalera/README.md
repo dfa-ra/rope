@@ -6,7 +6,7 @@ Product code stays in `apps/`, `core/`, `server/`, `deployment/`, and `protocol/
 
 ## Mode
 
-**MIGRATION / trunk promotion.** D-005 A is accepted: hang shipped `v0.2.15` on `main` (CG-004). Do **not** start new overlapping feature work (calls/UI/landing agents). New product implementation stays frozen until CG-007.
+**STABILIZATION.** Trunk is `main`. Product work uses the delivery law: PR → review → merge → tagged release. Do not leave shippable work only on `cursor/*`.
 
 ## Map
 

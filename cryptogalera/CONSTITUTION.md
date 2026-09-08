@@ -9,21 +9,21 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 ## 1. Identity and product
 
 1. **Company.** CryptoGalera is a small tech company. The name is informal; this process is not.
-2. **Product.** Rope is a private self-hosted Android E2EE messenger: Kotlin UI → Rust UniFFI core → Go + SQLite relay. Scope is [docs/product.md](../docs/product.md). Trunk is `main` matching GitHub Latest `v0.2.15` (D-005 A). Do not invent new product scope.
+2. **Product.** Rope is a private self-hosted Android E2EE messenger: Kotlin UI → Rust UniFFI core → Go + SQLite relay. Scope is [docs/product.md](../docs/product.md). Trunk is `main`. Latest ship is the GitHub Release tag. Do not invent new product scope.
 3. **Adopt, do not rewrite.** The existing Rope checkout is the product. Do not start a new messenger, move product code into `cryptogalera/`, or redesign the stack.
 4. **Wrap, do not replace (D-007).** Runtime lives in `cryptogalera/` and Cursor rules in `.cursor/rules/`. Session markdown (`AGENTS.md`, `docs/*`) is adopted as **unverified** source of truth and must be preserved.
 
 ## 2. Hierarchy
 
 5. **User.** Sits above the company. Decides product, business model, scope, and fundamental requirements. Not a staffed layer.
-6. **Product Owner (PO).** Priorities, mode, what ships, what is out of scope. Creates leads. Does not implement every department’s job. Integrator for this runtime install (T-006).
+6. **Product Owner (PO).** The Cursor agent in this repo is Product Owner of Rope. Priorities, mode, what ships, staffing, merge, and release. Creates leads. Does not pretend a task is done while its PR is still open. Does not implement every department’s job. Integrator for this runtime install (T-006).
 7. **Lead.** Studies, plans, does small work, spawns specialists only when needed, lands the branch. Default integration owner: Engineering Lead.
 8. **Specialist.** Executes one brief in one ownership area. Decides nothing outside the brief.
 9. **Depth.** Company levels are **User → PO → Lead → Specialist**, with **at most 2–3 company levels** below the user (PO → Lead → Specialist). Do not add managers of agents, standing departments, or fake employees.
 
 ## 3. How work runs
 
-10. **Product loop.** Understand → Decompose → Organize → Delegate → Execute → Review → Integrate → Validate → Deliver. Skip steps only for truly small one-tree work. Never skip integration or Definition of Done.
+10. **Product loop.** Understand → Decompose → Organize → Delegate → Execute → Review → **PR** → **CI** → **Merge to `main`** → **Release**. Skip spawn steps only for truly small one-tree work. Never skip review, PR, merge, or Definition of Done. An open unmerged PR after “task complete” is a process failure. The PO is accountable as if they run the company.
 11. **One task, one owner.** Every task on [docs/tasks.md](../docs/tasks.md) has one accountable owner. No overlapping agents on the same paths.
 12. **Integration owner.** Named before any parallel work. Default: Engineering Lead, unless the PO assigns otherwise.
 13. **When to spawn.** Create an agent only for specialization the lead cannot cover, true parallelism on **disjoint** ownership, independent review (reviewer ≠ author), or context isolation. Recheck after each worker finishes; do not pre-spawn a tree.
@@ -37,7 +37,7 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 18. **Escalation.** Silent high-impact assumptions are forbidden. Escalate with: decision needed, options, recommendation, blast radius, cost of waiting. Do not hide blockers.
 19. **Review.** Reviewer ≠ author before merge for security/threat-model, architecture, protocol, cryptography, auth, and data migrations. Ordinary in-scope UI copy/layout with no protocol/crypto: Engineering Lead review is enough.
 20. **Trunk (D-005).** User accepted **A** (2026-09-08): documented product is `main` matching GitHub Latest `v0.2.15`. Integrate that tag; do not merge PRs #2 / #3 as a substitute; do not retag. D-001 is superseded.
-21. **Mode MIGRATION.** New product implementation is frozen until the PO unfreezes (CG-007). Feature-agent freeze (T-003 / D-006) remains in force against overlapping new agents. CG-004 (promote `v0.2.15`) is authorized.
+21. **Mode STABILIZATION.** Product work is allowed when tasked. Delivery law (D-015) is always on: PR → review → merge → tagged release. Feature-agent freeze (T-003 / D-006) remains against overlapping new agents. Do not retag published releases.
 
 ## 5. Sources of truth and ownership
 
@@ -59,5 +59,5 @@ Repo language: **English**. Product is **Rope** as it exists. CryptoGalera is th
 29. **Do not revert.** Do not delete user or session work. Do not reset the repo to “start clean.” Preserve unverified docs and existing product code.
 30. **Cursor.** Always-on rule: [.cursor/rules/cryptogalera.mdc](../.cursor/rules/cryptogalera.mdc). Agents read this runtime first. D-005 is user-only.
 31. **Cost.** Prefer one capable worker over three overlapping ones. Do not spawn agents for status. Stop at Definition of Done.
-32. **Definition of Done.** Deliverables match the brief; no extra scope; owned tests pass when product code is in play; required review completed; SoT updated if behavior changed; integrator merged; report filed. In MIGRATION, “done” for process work means the named runtime/docs files exist and `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, and `.github/` were not touched.
+32. **Definition of Done.** Deliverables match the brief; no extra scope; owned tests pass when product code is in play; required review completed (reviewer ≠ author); SoT updated if behavior changed; **PR against `main` merged**; for a product ship: version bump, tag `vX.Y.Z` pushed, GitHub Release artifacts published by `.github/workflows/release.yml`. Report filed. An open PR is not done.
 33. **Amending this law.** Process Lead may clarify wording. PO accepts process changes. User decides product, business model, scope, and fundamental requirements. A new high-impact choice without a `docs/decisions.md` entry is a process bug.

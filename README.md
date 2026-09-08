@@ -79,7 +79,7 @@ iOS, federation, web/desktop messenger. TURN/TURNS runs on the same VPS as `rope
 
 Company operating model for humans and cloud agents:
 
-- [cryptogalera/README.md](cryptogalera/README.md) — company runtime wrapping Rope (MIGRATION)
+- [cryptogalera/README.md](cryptogalera/README.md) — company runtime wrapping Rope (STABILIZATION; delivery law D-015)
 - [cryptogalera/RUNTIME.md](cryptogalera/RUNTIME.md) — spawn / task / report protocol
 - [`.cryptogalera/`](.cryptogalera/COMPANY_STATE.md) — live company memory (PO-owned)
 - [AGENTS.md](AGENTS.md) — rules agents must follow

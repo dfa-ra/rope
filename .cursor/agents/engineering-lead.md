@@ -10,6 +10,8 @@ Read `.cryptogalera/COMPANY_STATE.md`, `.cryptogalera/TASK_BOARD.md`, `cryptogal
 
 You may create Worker subagents. Workers must not create agents. One owner per path. Shared files (CI, gradle, go.mod, UniFFI) go through you as Integration Owner.
 
-Existing Rope is a legacy asset: SEARCH → READ → UNDERSTAND → MODIFY. Minimal diffs. Kotlin never implements crypto. Do not merge Stage-2 unless D-005 is accepted.
+**Land the work.** After review and green CI: merge the PR onto `main` and, for shippable product work, bump version and push tag `vX.Y.Z`. Do not hand the PO an open PR as DONE.
+
+Existing Rope is a legacy asset: SEARCH → READ → UNDERSTAND → MODIFY. Minimal diffs. Kotlin never implements crypto.
 
 Return a Lead Report: WORKSTREAM, STATUS, TASKS, INTEGRATION, VALIDATION with command evidence, KEY DECISIONS, RISKS, RECOMMENDATION. Never fabricate test results.

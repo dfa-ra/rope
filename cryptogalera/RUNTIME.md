@@ -4,13 +4,15 @@ How Cursor subagents are **spawned, tasked, and reported**. Binding. Compact.
 
 **Who is who:** [CONSTITUTION.md](CONSTITUTION.md). **Who may work:** [AGENTS.md](../AGENTS.md). **Live company memory:** `.cryptogalera/` (PO-owned; see below). This file is the spawn/report contract, not a product spec.
 
-Mode is **STABILIZATION / ship 0.3.2**. D-005 A is done. CG-007 is unfrozen **only** for CG-044 (tag `v0.3.2` from the notify + Telegram-menus workstream). Do not invent iOS/ratchet/landing. Do not spawn overlapping chrome/calls/landing agents. No VK/Yandex/WB tunnels. Do not retag v0.2.15 / v0.3.0 / v0.3.1.
+Mode is **STABILIZATION / ship 0.3.2**. D-005 A is done. Every completed product task ends with PR → review → merge to `main` → tagged release. CG-007 is unfrozen for CG-044 (land notify + Telegram-menus, tag `v0.3.2`). Do not invent iOS/ratchet/landing. No VK/Yandex/WB tunnels. Do not retag v0.2.15 / v0.3.0 / v0.3.1.
 
 ---
 
 ## Prime directive
 
 **Ship, do not simulate.** Real files, real diffs, real reports. Do not roleplay a company, invent workers, or claim work that was not done. A simulated team is a process failure.
+
+**The PO is Product Owner of Rope.** Every user request is staffed as a company workstream (research → implement → independent review → PR → CI → merge to `main` → tagged GitHub Release). Do not report a product task DONE while its PR is still open. Do not leave shippable work only on `cursor/*`.
 
 ---
 
@@ -173,8 +175,17 @@ Degraded mode is honest sequential work. It is not a license to skip the freeze 
 
 ## Freeze and Definition of Done
 
-Until T-007 / CG-007: do not implement **new** Rope features. CG-004 is the exception: merge tag `v0.2.15` into `main` and take Stage-2 `apps/`, `core/`, `server/`, `deployment/`, `protocol/` from that tag. Do not touch those trees for any other task unless it is listed and unfrozen.
+CG-007 unfreeze is **per user task**, recorded on the task board. Do not invent iOS/ratchet/landing or extra overlapping agents.
 
-In MIGRATION, process work is done when the named runtime/docs files exist, product trees were not touched, and this protocol was followed. Stop at Definition of Done. Extra polish is new scope.
+**Product Definition of Done (binding):**
+
+1. Work is on a `cursor/*` branch with a PR targeting `main`.
+2. Independent review completed (reviewer ≠ implementer) for the class of change.
+3. CI green on that PR.
+4. **Merged onto `main`** (fast-forward when `gh pr merge` is unavailable: `git checkout main && git merge --ff-only <branch> && git push origin main`).
+5. **Release:** bump Android `versionName`/`versionCode`, Go `ServerVersion`, crate version as needed; `git tag vX.Y.Z` and `git push origin vX.Y.Z` so Release publishes APK + `rope-server`. Do not retag existing published tags.
+6. PO confirms the GitHub Release exists. Then and only then is the task DONE.
+
+Leaving an open PR, or tagging without `main`, or calling the work finished in chat only, is a process failure. The PO owns it.
 
 Prefer one capable worker over three overlapping ones. Cost of a spawn is real.

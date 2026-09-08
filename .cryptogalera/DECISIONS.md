@@ -35,3 +35,5 @@ These were already true in Rope **before** CryptoGalera. Not invented here.
 **D-013 (2026-09-08):** Chat gestures match Telegram, Rope chrome: long-press → selection (check circles, «Выбрано N», bottom Ответить/Переслать). Single tap → reaction pill + vertical context menu (not a Material action sheet). Call overlay speaker control is **громкая связь** (speakerphone), not mute-sound. Stop ringback/ringtone when the call leaves RINGING or WSS/WebRTC media starts.
 
 **D-014 (2026-09-08):** Ship **0.3.2** from `cursor/notify-tg-menus-ae19` onto `main`. Android `versionName=0.3.2` / `versionCode=26`. Do not retag `v0.2.15`, `v0.3.0`, or `v0.3.1`. GitHub Release assets for those tags stay published.
+
+**D-015 (2026-09-08):** After every completed product task the PO lands PR → independent review → merge to `main` → tagged GitHub Release. An open unmerged PR is not done. The Cursor agent in this repo acts as Product Owner of Rope and is accountable for that loop. Every user request is staffed as if through the company (PO → Lead → Worker), then the delivery loop. This is law, not optional.
