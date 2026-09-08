@@ -366,6 +366,7 @@ func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request, a authed, _
 	oc, _ := s.Store.ObjectCount()
 	obytes, _ := s.Store.ObjectBytesSum()
 	gc, _ := s.Store.GroupCount()
+	turn := s.Cfg.ProbeTurn(400 * time.Millisecond)
 	writeJSON(w, 200, map[string]any{
 		"server_id":        s.Cfg.ServerID,
 		"version":          config.ServerVersion,
@@ -380,9 +381,15 @@ func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request, a authed, _
 		"max_object_bytes": s.objectLimit(),
 		"online_devices":   len(s.Hub.Online()),
 		"public_host":      s.Cfg.PublicHost,
-		"turn_port":        s.Cfg.EffectiveTurnPort(),
-		"turns_port":       s.Cfg.EffectiveTurnsPort(),
+		"turn_port":        turn.TurnPort,
+		"turns_port":       turn.TurnsPort,
 		"ice_enabled":      s.Cfg.IceEnabled(),
+		"turn_running":     turn.Running,
+		"turns_listening":  turn.TurnsListening,
+		"turn_listen":      turn.Listen,
+		"turn_external_ip": turn.ExternalIP,
+		"turn_error":       turn.Error,
+		"ice_urls":         turn.Advertised,
 	})
 }
 

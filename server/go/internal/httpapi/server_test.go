@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/dfa-ra/rope/server/go/internal/authz"
 	"github.com/dfa-ra/rope/server/go/internal/config"
 	"github.com/dfa-ra/rope/server/go/internal/db"
 	"github.com/dfa-ra/rope/server/go/internal/envelope"
-	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
 )
 
@@ -163,7 +163,7 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	var info struct {
-		ServerID   string `json:"server_id"`
+		ServerID   string             `json:"server_id"`
 		IceServers []config.IceServer `json:"ice_servers"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -188,6 +188,32 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	}
 	if !strings.Contains(joined, "turn:198.51.100.20:3478") {
 		t.Fatalf("missing turn: %s", joined)
+	}
+}
+
+func TestInfoAdvertises5349Not443(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "198.51.100.20"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 5349
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		IceServers []config.IceServer `json:"ice_servers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(info.IceServers[1].URLs, " ")
+	if strings.Contains(joined, ":443") {
+		t.Fatalf("443 advertised: %s", joined)
+	}
+	if !strings.Contains(joined, "turns:198.51.100.20:5349?transport=tcp") {
+		t.Fatalf("missing 5349: %s", joined)
 	}
 }
 
@@ -310,7 +336,9 @@ func TestMailboxDeliverAndDeleteWithoutPlaintext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var inv struct{ Token string `json:"token"` }
+	var inv struct {
+		Token string `json:"token"`
+	}
 	_ = json.NewDecoder(resp.Body).Decode(&inv)
 	resp.Body.Close()
 	bootstrap(t, hs, inv.Token, bob, "bob")
@@ -374,7 +402,9 @@ func TestOfflineMailboxThenFlush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var inv struct{ Token string `json:"token"` }
+	var inv struct {
+		Token string `json:"token"`
+	}
 	_ = json.NewDecoder(resp.Body).Decode(&inv)
 	resp.Body.Close()
 	bootstrap(t, hs, inv.Token, bob, "bob")

@@ -4,7 +4,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -23,11 +27,13 @@ func (c Config) EffectiveTurnPort() int {
 	return 3478
 }
 
+// EffectiveTurnsPort is the advertised TURNS TCP port.
+// 0 means do not advertise turns: (TLS listen failed; UDP/TCP 3478 still used).
 func (c Config) EffectiveTurnsPort() int {
 	if c.TurnsPort > 0 {
 		return c.TurnsPort
 	}
-	return 443
+	return 0
 }
 
 func (c Config) IceTTL() time.Duration {
@@ -60,27 +66,153 @@ func TurnCredential(secret, username string) string {
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
+func (c Config) IceURLs() []string {
+	ice := c.IceServers(time.Unix(0, 0))
+	if len(ice) == 0 {
+		return nil
+	}
+	out := append([]string{}, ice[0].URLs...)
+	if len(ice) > 1 {
+		out = append(out, ice[1].URLs...)
+	}
+	return out
+}
+
 func (c Config) IceServers(now time.Time) []IceServer {
 	if !c.IceEnabled() {
 		return nil
 	}
 	host := IceHost(c.PublicHost)
 	turnPort := c.EffectiveTurnPort()
-	turnsPort := c.EffectiveTurnsPort()
 	user := TurnUsername(now, c.IceTTL())
 	cred := TurnCredential(c.TurnSecret, user)
-	return []IceServer{
-		{URLs: []string{fmt.Sprintf("stun:%s:%d", host, turnPort)}},
-		{
-			URLs: []string{
-				fmt.Sprintf("turns:%s:%d?transport=tcp", host, turnsPort),
-				fmt.Sprintf("turns:%s:%d", host, turnsPort),
-				fmt.Sprintf("turn:%s:%d?transport=udp", host, turnPort),
-				fmt.Sprintf("turn:%s:%d", host, turnPort),
-				fmt.Sprintf("turn:%s:%d?transport=tcp", host, turnPort),
-			},
-			Username:   user,
-			Credential: cred,
-		},
+	stun := IceServer{URLs: []string{fmt.Sprintf("stun:%s:%d", host, turnPort)}}
+	turnURLs := []string{
+		fmt.Sprintf("turn:%s:%d?transport=udp", host, turnPort),
+		fmt.Sprintf("turn:%s:%d", host, turnPort),
+		fmt.Sprintf("turn:%s:%d?transport=tcp", host, turnPort),
 	}
+	if turns := c.EffectiveTurnsPort(); turns > 0 {
+		turnURLs = append([]string{
+			fmt.Sprintf("turns:%s:%d?transport=tcp", host, turns),
+			fmt.Sprintf("turns:%s:%d", host, turns),
+		}, turnURLs...)
+	}
+	return []IceServer{
+		stun,
+		{URLs: turnURLs, Username: user, Credential: cred},
+	}
+}
+
+// FileTurnStatus is written by install.sh so the owner sees the real bind result.
+type FileTurnStatus struct {
+	OK         bool   `json:"ok"`
+	Error      string `json:"error"`
+	TurnPort   int    `json:"turn_port"`
+	TurnsPort  int    `json:"turns_port"`
+	Listen     string `json:"listen"`
+	ExternalIP string `json:"external_ip"`
+}
+
+type TurnReport struct {
+	Configured     bool     `json:"configured"`
+	Running        bool     `json:"running"`
+	TurnsListening bool     `json:"turns_listening"`
+	Listen         string   `json:"listen"`
+	ExternalIP     string   `json:"external_ip,omitempty"`
+	Error          string   `json:"error,omitempty"`
+	TurnPort       int      `json:"turn_port"`
+	TurnsPort      int      `json:"turns_port"`
+	Advertised     []string `json:"advertised,omitempty"`
+}
+
+// DialTCP is replaced in tests.
+var DialTCP = func(addr string, timeout time.Duration) error {
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
+}
+
+func (c Config) TurnStatusFile() string {
+	if strings.HasPrefix(c.TLSCert, "/etc/rope/") {
+		return "/etc/rope/turn-status.json"
+	}
+	if c.TLSCert != "" {
+		dir := filepath.Dir(filepath.Dir(c.TLSCert))
+		if dir != "" && dir != "." {
+			return filepath.Join(dir, "turn-status.json")
+		}
+	}
+	return filepath.Join(c.DataDir, "turn-status.json")
+}
+
+func ReadFileTurnStatus(path string) (FileTurnStatus, bool) {
+	var st FileTurnStatus
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return st, false
+	}
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return st, false
+	}
+	return st, true
+}
+
+func (c Config) ProbeTurn(timeout time.Duration) TurnReport {
+	rep := TurnReport{
+		Configured: c.IceEnabled(),
+		TurnPort:   c.EffectiveTurnPort(),
+		TurnsPort:  c.EffectiveTurnsPort(),
+	}
+	if !c.IceEnabled() {
+		rep.Error = "нет public_host или turn_secret — обновите ядро"
+		return rep
+	}
+	if ice := c.IceServers(time.Now()); len(ice) > 1 {
+		rep.Advertised = ice[1].URLs
+	}
+	file, hasFile := ReadFileTurnStatus(c.TurnStatusFile())
+	if hasFile {
+		rep.Listen = file.Listen
+		rep.ExternalIP = file.ExternalIP
+		if file.Error != "" {
+			rep.Error = file.Error
+		}
+		if file.TurnsPort > 0 && rep.TurnsPort == 0 {
+			rep.TurnsPort = file.TurnsPort
+		}
+	}
+	if timeout <= 0 {
+		timeout = 400 * time.Millisecond
+	}
+	rep.Running = DialTCP(net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", rep.TurnPort)), timeout) == nil
+	if rep.TurnsPort > 0 {
+		rep.TurnsListening = DialTCP(net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", rep.TurnsPort)), timeout) == nil
+		// Port 443 up without 3478 is almost always Caddy/nginx, not coturn.
+		if !rep.Running && rep.TurnsListening && rep.TurnsPort == 443 {
+			rep.TurnsListening = false
+			if rep.Error == "" {
+				rep.Error = "порт 443 занят другим сервисом, TURNS должен быть на 5349"
+			}
+		}
+	}
+	if rep.Listen == "" && rep.Running {
+		rep.Listen = "0.0.0.0"
+	}
+	switch {
+	case rep.Running && (rep.TurnsPort == 0 || rep.TurnsListening):
+		rep.Error = ""
+	case rep.Running && !rep.TurnsListening && rep.TurnsPort > 0:
+		if rep.Error == "" {
+			rep.Error = fmt.Sprintf("TURN %d слушает, TURNS %d не открыт", rep.TurnPort, rep.TurnsPort)
+		}
+	case !rep.Running:
+		if rep.Error == "" {
+			rep.Error = fmt.Sprintf("coturn не слушает 127.0.0.1:%d", rep.TurnPort)
+		}
+	}
+	return rep
 }

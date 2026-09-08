@@ -90,3 +90,92 @@ func TestIceHostBracketsIPv6(t *testing.T) {
 		t.Fatal(IceHost("vps.example"))
 	}
 }
+
+func TestTurnUsernameCoturnRESTFormat(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	user := TurnUsername(now, time.Hour)
+	if user != "1700003600:rope" {
+		t.Fatalf("user %s", user)
+	}
+	if !strings.Contains(user, ":rope") {
+		t.Fatal(user)
+	}
+}
+
+func TestIceServersAdvertises5349When443Busy(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "203.0.113.9"
+	cfg.TurnSecret = "shared-hmac"
+	cfg.TurnsPort = 5349
+	ice := cfg.IceServers(time.Unix(1_700_000_000, 0))
+	joined := strings.Join(ice[1].URLs, " ")
+	if strings.Contains(joined, ":443") {
+		t.Fatalf("must not advertise 443 when TURNS is 5349: %s", joined)
+	}
+	if !strings.Contains(joined, "turns:203.0.113.9:5349?transport=tcp") {
+		t.Fatalf("missing turns 5349: %s", joined)
+	}
+}
+
+func TestIceServersOmitsTurnsWhenTLSFailed(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "203.0.113.9"
+	cfg.TurnSecret = "shared-hmac"
+	cfg.TurnsPort = 0
+	ice := cfg.IceServers(time.Now())
+	joined := strings.Join(ice[1].URLs, " ")
+	if strings.Contains(joined, "turns:") {
+		t.Fatalf("tls failed so no turns: %s", joined)
+	}
+	if !strings.Contains(joined, "turn:203.0.113.9:3478?transport=udp") {
+		t.Fatalf("still need udp turn: %s", joined)
+	}
+}
+
+func TestProbeTurnDistinguishes443ForeignVsListening(t *testing.T) {
+	orig := DialTCP
+	t.Cleanup(func() { DialTCP = orig })
+	cfg := Default()
+	cfg.PublicHost = "203.0.113.9"
+	cfg.TurnSecret = "s"
+	cfg.TurnsPort = 443
+	cfg.DataDir = t.TempDir()
+
+	DialTCP = func(addr string, _ time.Duration) error {
+		if strings.HasSuffix(addr, ":443") {
+			return nil
+		}
+		return errProbeDown
+	}
+	rep := cfg.ProbeTurn(10 * time.Millisecond)
+	if rep.Running {
+		t.Fatal("3478 down")
+	}
+	if rep.TurnsListening {
+		t.Fatal("443 without 3478 is not TURNS")
+	}
+	if !strings.Contains(rep.Error, "443") {
+		t.Fatalf("error %s", rep.Error)
+	}
+
+	DialTCP = func(addr string, _ time.Duration) error {
+		if strings.HasSuffix(addr, ":3478") || strings.HasSuffix(addr, ":5349") {
+			return nil
+		}
+		return errProbeDown
+	}
+	cfg.TurnsPort = 5349
+	rep = cfg.ProbeTurn(10 * time.Millisecond)
+	if !rep.Running || !rep.TurnsListening {
+		t.Fatalf("%+v", rep)
+	}
+	if rep.Error != "" {
+		t.Fatalf("error %s", rep.Error)
+	}
+}
+
+var errProbeDown = errString("down")
+
+type errString string
+
+func (e errString) Error() string { return string(e) }

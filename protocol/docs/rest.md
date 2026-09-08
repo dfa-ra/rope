@@ -27,7 +27,7 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 ### `GET /version`
 
 ```json
-{ "server": "0.2.7", "protocol": 1 }
+{ "server": "0.2.11", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -42,6 +42,8 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
     {
       "urls": [
         "turns:HOST:443?transport=tcp",
+        "turns:HOST:443",
+        "turn:HOST:3478?transport=udp",
         "turn:HOST:3478",
         "turn:HOST:3478?transport=tcp"
       ],
@@ -112,7 +114,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.2.7",
+  "version": "0.2.11",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,
@@ -125,8 +127,14 @@ Public identities of non-revoked devices so clients can encrypt.
   "online_devices": 1,
   "public_host": "203.0.113.9",
   "turn_port": 3478,
-  "turns_port": 443,
-  "ice_enabled": true
+  "turns_port": 5349,
+  "ice_enabled": true,
+  "turn_running": true,
+  "turns_listening": true,
+  "turn_listen": "0.0.0.0",
+  "turn_external_ip": "203.0.113.9",
+  "turn_error": "",
+  "ice_urls": ["turns:203.0.113.9:5349?transport=tcp", "turn:203.0.113.9:3478?transport=udp"]
 }
 ```
 
