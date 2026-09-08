@@ -231,4 +231,31 @@ class IceServersTest {
         assertFalse(stunOnly.forceRelay)
         assertFalse(stunOnly.allowDirect().forceRelay)
     }
+
+    @Test
+    fun expandHostsSkipsPrivateAndCgnat() {
+        val specs = IceServers.parse("""[{"urls":["turn:vps.example:3478"]}]""")
+        val expanded = IceServers.expandHosts(specs, "10.0.0.8", "192.168.1.1", "100.64.1.2", "vps.example")
+        val urls = expanded.flatMap { it.urls }
+        assertTrue(urls.none { it.contains("10.0.0.8") })
+        assertTrue(urls.none { it.contains("192.168.1.1") })
+        assertTrue(urls.none { it.contains("100.64.1.2") })
+        assertNull(IceServers.stunHint("10.8.0.1"))
+        assertTrue(IceServers.isUnusableIceHost("172.16.4.1"))
+        assertFalse(IceServers.isUnusableIceHost("203.0.113.9"))
+    }
+
+    @Test
+    fun infoJsonKeepsIceTtlAndShouldRefreshUsesIt() {
+        val info = JSONObject()
+            .put("ice_servers", JSONArray().put(JSONObject().put("urls", JSONArray().put("turn:vps:3478"))))
+            .put("ice_ttl_seconds", 10)
+        val cached = IceServers.infoJson(info)
+        assertNotNull(cached)
+        assertEquals(10L, IceServers.parseIceTtlSeconds(cached))
+        val t0 = 1_000_000L
+        // Half of 10s = 5s, which is below the 30s default cache age.
+        assertTrue(IceServers.shouldRefresh(t0, t0 + 5_000, cached))
+        assertFalse(IceServers.shouldRefresh(t0, t0 + 4_000, cached))
+    }
 }

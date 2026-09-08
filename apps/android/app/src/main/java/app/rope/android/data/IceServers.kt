@@ -67,7 +67,27 @@ object IceServers {
     ): Boolean {
         if (cachedAtMs <= 0L) return true
         if (parse(cachedJson).isEmpty()) return true
-        return nowMs - cachedAtMs >= ICE_CACHE_MAX_AGE_MS
+        val ttlMs = parseIceTtlSeconds(cachedJson)?.times(1000L)
+        val limit = when {
+            ttlMs == null -> ICE_CACHE_MAX_AGE_MS
+            ttlMs <= 0L -> 0L
+            else -> minOf(ICE_CACHE_MAX_AGE_MS, ttlMs / 2)
+        }
+        return nowMs - cachedAtMs >= limit
+    }
+
+    /** Seconds from `/v1/info` `ice_ttl_seconds` (HMAC lifetime). */
+    fun parseIceTtlSeconds(raw: String?): Long? {
+        val text = raw?.trim().orEmpty()
+        if (!text.startsWith("{")) return null
+        return try {
+            val obj = JSONObject(text)
+            if (!obj.has("ice_ttl_seconds")) return null
+            val v = obj.optLong("ice_ttl_seconds", -1L)
+            if (v < 0L) null else v
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun fromInfo(obj: JSONObject): List<IceServerSpec> = parseArray(iceArray(obj))
@@ -78,10 +98,12 @@ object IceServers {
         if (arr.length() == 0) return null
         val ip = jsonText(obj, "public_ip") ?: jsonText(obj, "publicIp")
         val host = jsonText(obj, "hostname") ?: jsonText(obj, "public_host") ?: jsonText(obj, "publicHost")
-        if (ip == null && host == null) return arr.toString()
+        val ttl = if (obj.has("ice_ttl_seconds")) obj.optLong("ice_ttl_seconds", -1L) else -1L
+        if (ip == null && host == null && ttl < 0L) return arr.toString()
         val out = JSONObject().put("ice_servers", arr)
         if (ip != null) out.put("public_ip", ip)
         if (host != null) out.put("hostname", host)
+        if (ttl >= 0L) out.put("ice_ttl_seconds", ttl)
         return out.toString()
     }
 
@@ -194,7 +216,7 @@ object IceServers {
         return specs.map { spec ->
             val hosts = (altHosts.toList() + spec.hostname)
                 .mapNotNull { JsonIds.optional(it) }
-                .filter { it != "localhost" && it != "127.0.0.1" && it != "::1" }
+                .filter { !isUnusableIceHost(it) }
                 .distinct()
             if (hosts.isEmpty()) return@map spec
             val extra = mutableListOf<String>()
@@ -247,9 +269,28 @@ object IceServers {
 
     fun missingTurn(resolved: List<IceServerSpec>): Boolean = resolved.none { it.hasTurn }
 
+    /** RFC1918 / loopback / link-local / CGNAT — same policy as server ice.go. */
+    fun isUnusableIceHost(host: String): Boolean {
+        val h = host.trim().removePrefix("[").removeSuffix("]")
+        if (h.isEmpty() || h.equals("localhost", ignoreCase = true) || h == "::1") return true
+        if (h == "127.0.0.1" || h.startsWith("127.")) return true
+        if (h.startsWith("169.254.")) return true
+        if (h.startsWith("10.")) return true
+        if (h.startsWith("192.168.")) return true
+        if (h.startsWith("172.")) {
+            val second = h.substringAfter('.').substringBefore('.').toIntOrNull() ?: return false
+            if (second in 16..31) return true
+        }
+        if (h.startsWith("100.")) {
+            val second = h.substringAfter('.').substringBefore('.').toIntOrNull() ?: return false
+            if (second in 64..127) return true
+        }
+        return false
+    }
+
     fun stunHint(host: String?): IceServerSpec? {
         val raw = JsonIds.optional(host) ?: return null
-        if (raw == "localhost" || raw == "127.0.0.1" || raw == "::1") return null
+        if (isUnusableIceHost(raw)) return null
         val h = if (raw.contains(":") && !raw.startsWith("[")) "[$raw]" else raw
         return IceServerSpec(listOf("stun:$h:3478"))
     }
