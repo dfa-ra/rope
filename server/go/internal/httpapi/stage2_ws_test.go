@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/dfa-ra/rope/server/go/internal/ratelimit"
 )
 
 func TestGroupSendRejectsNonMember(t *testing.T) {
@@ -198,5 +199,191 @@ func TestCallRelayResolvesMemberIdAndObjectPayload(t *testing.T) {
 	obj := readSkipPresence(t, ctx, bobWS)
 	if obj.Type != "call" || obj.Event != "offer" || !strings.Contains(obj.Payload, "v=0") {
 		t.Fatalf("object payload call %+v", obj)
+	}
+}
+
+func TestCallRelayAndAudioForward(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-rel", "to": bob.id, "event": "relay",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rel := readSkipPresence(t, ctx, bobWS)
+	if rel.Type != "call" || rel.Event != "relay" || rel.From != alice.id || rel.CallID != "c-rel" {
+		t.Fatalf("relay forward %+v", rel)
+	}
+
+	cipher := strings.Repeat("A", 64)
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-rel", "to": bob.id, "event": "audio", "payload": cipher,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	aud := readSkipPresence(t, ctx, bobWS)
+	if aud.Type != "call" || aud.Event != "audio" || aud.From != alice.id || aud.Payload != cipher {
+		t.Fatalf("audio forward %+v", aud)
+	}
+}
+
+func TestCallPayloadTooLarge(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	okPayload := strings.Repeat("x", maxCallPayloadBytes)
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-ok", "to": bob.id, "event": "audio", "payload": okPayload,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ok := readSkipPresence(t, ctx, bobWS)
+	if ok.Type != "call" || ok.Event != "audio" || len(ok.Payload) != maxCallPayloadBytes {
+		t.Fatalf("max payload should forward %+v", ok)
+	}
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-big", "to": bob.id, "event": "audio",
+		"payload": strings.Repeat("y", maxCallPayloadBytes+1),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := readSkipPresence(t, ctx, aliceWS)
+	if got.Type != "error" || got.Code != "too_large" {
+		t.Fatalf("oversized want too_large got %+v", got)
+	}
+}
+
+func TestCallAudioRateLimited(t *testing.T) {
+	s, hs, setup := testServer(t)
+	s.CallAudio = ratelimit.New(3, time.Minute)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	for i := 0; i < 3; i++ {
+		if err := wsjson.Write(ctx, aliceWS, map[string]any{
+			"type": "call", "call_id": "c-rl", "to": bob.id, "event": "audio", "payload": "AA==",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		got := readSkipPresence(t, ctx, bobWS)
+		if got.Type != "call" || got.Event != "audio" {
+			t.Fatalf("audio %d want forward got %+v", i, got)
+		}
+	}
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-rl", "to": bob.id, "event": "audio", "payload": "AA==",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lim := readSkipPresence(t, ctx, aliceWS)
+	if lim.Type != "error" || lim.Code != "rate_limited" {
+		t.Fatalf("want rate_limited got %+v", lim)
+	}
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-rl", "to": bob.id, "event": "relay",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rel := readSkipPresence(t, ctx, bobWS)
+	if rel.Type != "call" || rel.Event != "relay" {
+		t.Fatalf("signaling must stay unthrottled %+v", rel)
+	}
+}
+
+func TestCallAudioPeerOffline(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-off", "to": bob.id, "event": "audio", "payload": "AA==",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	off := readSkipPresence(t, ctx, aliceWS)
+	if off.Type != "error" || off.Code != "not_found" {
+		t.Fatalf("offline audio want not_found got %+v", off)
 	}
 }

@@ -18,12 +18,22 @@ On connect the server:
 { "type": "send", "envelope": "<standard base64>" }
 { "type": "ack", "message_id": "<uuid hex>" }
 { "type": "group_send", "group_id": "<uuid>", "envelopes": ["<base64>", "..."] }
-{ "type": "call", "call_id": "<uuid>", "to": "<device_hex>", "event": "ring|accept|reject|hangup|offer|answer|ice", "payload": "" }
+{ "type": "call", "call_id": "<uuid>", "to": "<device_hex>", "event": "ring|accept|reject|hangup|offer|answer|ice|relay|audio", "payload": "" }
 ```
 
 `group_send`: sender must be a current member; every envelope recipient must be a current member. Each envelope then follows the normal mailbox path.
 
-`call` is live-only. If `to` is offline the sender gets `not_found`. The server does not store SDP. ICE servers (STUN/TURN on the same host) are advertised on REST `GET /v1/info`, not as a new WSS type.
+`call` is live-only. If `to` is offline the sender gets `not_found`. The server does not store SDP or call media — never `PutMailbox`. Payload is opaque ciphertext (or opaque SDP/ICE JSON); the relay does not decrypt or inspect plaintext.
+
+Decoded `payload` is capped at 16384 bytes (`too_large` if larger). Empty payload is allowed for control events (`ring`, `accept`, `reject`, `hangup`, `relay`, …). `audio` is rate-limited per sender at ~40 frames/sec (`rate_limited`, key `ws-call-audio:<device_id>`). Signaling events (`ring`, `accept`, `reject`, `hangup`, `offer`, `answer`, `ice`, `relay`) are not throttled at that cap.
+
+Call events:
+
+- `ring|accept|reject|hangup|offer|answer|ice` — WebRTC signaling (SDP/ICE in `payload`)
+- `relay` — switch this live call to WSS media (ICE/WebRTC failed). Control event; payload may be empty
+- `audio` — base64 UniFFI ciphertext of a PCM frame (typically < 8KiB). Live WSS fallback only; do not send on mailbox `send`
+
+ICE servers (STUN/TURN on the same host) are advertised on REST `GET /v1/info`, not as a new WSS type.
 
 ## Server → client
 
@@ -34,7 +44,7 @@ On connect the server:
 { "type": "mailbox_done" }
 { "type": "presence", "devices": ["hex", "..."] }
 { "type": "error", "code": "protocol|auth|not_found|too_large|rate_limited", "message": "..." }
-{ "type": "call", "call_id": "...", "from": "<device_hex>", "event": "ring", "payload": "" }
+{ "type": "call", "call_id": "...", "from": "<device_hex>", "event": "ring|relay|audio", "payload": "" }
 ```
 
 ## Delivery rules

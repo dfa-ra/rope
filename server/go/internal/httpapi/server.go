@@ -30,13 +30,14 @@ import (
 )
 
 type Server struct {
-	Cfg   config.Config
-	Store *db.Store
-	Log   *log.Logger
-	Hub   *Hub
-	Limit *ratelimit.Limiter
-	FP    string
-	setup string
+	Cfg       config.Config
+	Store     *db.Store
+	Log       *log.Logger
+	Hub       *Hub
+	Limit     *ratelimit.Limiter
+	CallAudio *ratelimit.Limiter
+	FP        string
+	setup     string
 }
 
 func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
@@ -44,12 +45,13 @@ func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
 		logger = log.Default()
 	}
 	s := &Server{
-		Cfg:   cfg,
-		Store: store,
-		Log:   logger,
-		Hub:   NewHub(),
-		Limit: ratelimit.New(60, time.Minute),
-		setup: cfg.SetupToken,
+		Cfg:       cfg,
+		Store:     store,
+		Log:       logger,
+		Hub:       NewHub(),
+		Limit:     ratelimit.New(60, time.Minute),
+		CallAudio: ratelimit.New(callAudioPerSec, time.Second),
+		setup:     cfg.SetupToken,
 	}
 	if cfg.FingerprintOverride != "" {
 		s.FP = cfg.FingerprintOverride
@@ -643,9 +645,23 @@ func (s *Server) handleGroupSend(ctx context.Context, from *clientConn, groupID 
 	}
 }
 
+const (
+	maxCallPayloadBytes = 16384
+	callAudioPerSec     = 40
+)
+
 func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 	if in.CallID == "" || strings.TrimSpace(in.To) == "" {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
+		return
+	}
+	payload := decodeCallPayload(in.Payload)
+	if len(payload) > maxCallPayloadBytes {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "too_large", Message: "call payload too large"})
+		return
+	}
+	if in.Event == "audio" && !s.CallAudio.Allow("ws-call-audio:"+from.id) {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}
 	target := s.resolveCallTarget(in.To)
@@ -655,7 +671,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 			CallID:  in.CallID,
 			From:    from.id,
 			Event:   in.Event,
-			Payload: decodeCallPayload(in.Payload),
+			Payload: payload,
 		})
 		return
 	}
