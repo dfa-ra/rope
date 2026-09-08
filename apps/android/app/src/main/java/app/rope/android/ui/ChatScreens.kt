@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
@@ -37,10 +38,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -224,13 +227,15 @@ fun ChatsPane(
                 )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(rows, key = { it.id }) { c ->
-                        ConversationRow(
-                            c,
-                            onClick = { onOpen(c) },
-                            onPin = { onPinChat(c.id) },
-                            onMute = { onMuteChat(c.id) },
-                        )
+                    itemsIndexed(rows, key = { _, c -> c.id }) { index, c ->
+                        FadeIn(SplashTiming.staggerDelayMs(index)) {
+                            ConversationRow(
+                                c,
+                                onClick = { onOpen(c) },
+                                onPin = { onPinChat(c.id) },
+                                onMute = { onMuteChat(c.id) },
+                            )
+                        }
                     }
                 }
             }
@@ -273,6 +278,7 @@ internal fun ConversationRow(
     onMute: () -> Unit,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
+    BackHandler(enabled = menu) { menu = false }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val bg by animateColorAsState(
@@ -391,6 +397,7 @@ fun ChatPane(
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
     onGroupInfo: () -> Unit,
+    onBack: () -> Unit = {},
     onReply: (ChatMessage) -> Unit = {},
     onEdit: (ChatMessage) -> Unit = {},
     onDelete: (ChatMessage) -> Unit = {},
@@ -417,6 +424,10 @@ fun ChatPane(
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
+    BackHandler(enabled = showSearch) {
+        showSearch = false
+        onMessageQuery("")
+    }
     LaunchedEffect(visible.size, state.messageQuery) {
         if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
     }
@@ -439,6 +450,9 @@ fun ChatPane(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад")
+            }
             InitialsAvatar(title, state.group != null, online)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
@@ -549,6 +563,7 @@ private fun MessageBubble(
     val outBg = if (dark) OutBubbleDark else OutBubbleLight
     val outFg = if (dark) Color(0xFFF4F4F5) else Color.White
     var picker by remember(m.id) { mutableStateOf(false) }
+    BackHandler(enabled = picker) { picker = false }
     val me = state.profile?.deviceId.orEmpty()
     val selected = picker || highlighted
     var appeared by remember(m.id) { mutableStateOf(false) }
@@ -827,6 +842,8 @@ private fun ComposerBar(
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
     var showEmoji by remember { mutableStateOf(false) }
+    BackHandler(enabled = showEmoji && !state.recording) { showEmoji = false }
+    BackHandler(enabled = state.recording) { onVoiceFinish(false) }
     LaunchedEffect(state.recording) {
         if (!state.recording) {
             recordingLocked = false
@@ -912,17 +929,12 @@ private fun ComposerBar(
                     )
                 }
                 if (showSend) {
-                    IconButton(
-                        onClick = {
+                    SendActionButton(
+                        locked = recordingLocked,
+                        onSend = {
                             if (recordingLocked || state.recording) onVoiceFinish(true) else onSend()
                         },
-                    ) {
-                        Icon(
-                            if (recordingLocked) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Send,
-                            contentDescription = "Отправить",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                    )
                 } else {
                     Box(
                         Modifier
@@ -963,6 +975,48 @@ private fun ComposerBar(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SendActionButton(
+    locked: Boolean,
+    onSend: () -> Unit,
+) {
+    var tick by remember { mutableStateOf(0) }
+    val reduce = rememberReduceMotion()
+    val pop by animateFloatAsState(
+        targetValue = if (tick % 2 == 0) 1f else 1.14f,
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = 480f),
+        label = "sendPop",
+    )
+    IconButton(
+        onClick = {
+            tick += 1
+            onSend()
+        },
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+            if (!reduce && tick > 0) {
+                RopeLogoMark(
+                    size = 30.dp,
+                    animate = true,
+                    breathe = false,
+                    replayKey = tick,
+                    strokeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                )
+            }
+            Icon(
+                if (locked) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Send,
+                contentDescription = "Отправить",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.graphicsLayer {
+                    val s = if (reduce) 1f else pop
+                    scaleX = s
+                    scaleY = s
+                },
+            )
         }
     }
 }
@@ -1076,6 +1130,7 @@ fun InitialsAvatar(title: String, group: Boolean, online: Boolean) {
 
 @Composable
 fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
     Box(
         Modifier
             .fillMaxSize()
@@ -1095,6 +1150,14 @@ fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
             )
         } else {
             Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        }
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(8.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color.White)
         }
     }
 }

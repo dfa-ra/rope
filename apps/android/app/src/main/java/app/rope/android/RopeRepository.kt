@@ -85,6 +85,7 @@ import java.util.UUID
 
 data class UiState(
     val screen: Screen = Screen.Start,
+    val backStack: List<Screen> = listOf(Screen.Start),
     val profile: ServerProfile? = null,
     val devices: List<DirectoryDevice> = emptyList(),
     val groups: List<RopeGroup> = emptyList(),
@@ -127,6 +128,7 @@ data class UiState(
     val scrollToMessageId: String? = null,
     val notice: String? = null,
     val pinnedMessageId: String? = null,
+    val sessionReady: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo }
@@ -178,25 +180,86 @@ class RopeRepository(private val app: Application) {
                 }
             } catch (e: Exception) {
                 error(e)
+            } finally {
+                _state.value = _state.value.copy(sessionReady = true)
             }
         }
     }
 
     fun prepareJoin(url: String) {
-        _state.value = _state.value.copy(
-            screen = Screen.Join,
+        _state.value = applyNav(Screen.Join, NavMode.Push).copy(
             pendingInvite = url,
             error = null,
         )
     }
 
-    fun go(screen: Screen) {
+    fun go(screen: Screen, tab: Boolean = false) {
         if (screen != Screen.Chat) persistOpenDraft()
-        _state.value = _state.value.copy(screen = screen, error = null, viewingImage = null)
+        _state.value = applyNav(screen, if (tab) NavMode.SwitchTab else NavMode.Push).copy(error = null)
         if (NavRules.refreshesLists(screen)) refreshConversations()
         if (screen == Screen.NewGroup) {
             _state.value = _state.value.copy(groupNameDraft = "", pickedMembers = emptySet())
         }
+        if (screen == Screen.Status) loadStatusSnapshot()
+    }
+
+    /** @return true if the back event was consumed; false if the Activity should finish. */
+    fun goBack(): Boolean {
+        val s = _state.value
+        return when (BackStack.decide(s)) {
+            BackLayer.CloseImage -> {
+                closeImage()
+                true
+            }
+            BackLayer.DismissCall -> {
+                if (s.call?.phase == CallPhase.RINGING_IN) rejectCall() else hangup()
+                true
+            }
+            BackLayer.CancelRecording -> {
+                finishVoice(false)
+                true
+            }
+            BackLayer.ClearMessageQuery -> {
+                setMessageQuery("")
+                true
+            }
+            BackLayer.ClearChatQuery -> {
+                setChatQuery("")
+                true
+            }
+            BackLayer.CancelForward -> {
+                cancelForward()
+                true
+            }
+            BackLayer.CancelComposer -> {
+                cancelComposerExtra()
+                true
+            }
+            BackLayer.Pop -> {
+                persistOpenDraft()
+                val next = BackStack.pop(BackStack.currentStack(s.backStack, s.screen))
+                _state.value = s.copy(
+                    screen = next.last(),
+                    backStack = next,
+                    error = null,
+                    viewingImage = null,
+                    messageQuery = "",
+                )
+                if (NavRules.refreshesLists(next.last())) refreshConversations()
+                true
+            }
+            BackLayer.CloseEmoji,
+            BackLayer.CloseSearch,
+            BackLayer.CloseDialog,
+            BackLayer.Exit,
+            -> false
+        }
+    }
+
+    private fun applyNav(screen: Screen, mode: NavMode): UiState {
+        val base = _state.value
+        val stack = BackStack.apply(BackStack.currentStack(base.backStack, base.screen), screen, mode)
+        return base.copy(screen = stack.last(), backStack = stack, viewingImage = null)
     }
 
     fun setDraft(text: String) {
@@ -236,12 +299,11 @@ class RopeRepository(private val app: Application) {
                 val result = SshProvisioner(app).install(form)
                 if (form.upgrade) {
                     val st = runCatching { api?.status() }.getOrNull()
-                    _state.value = _state.value.copy(
+                    _state.value = applyNav(Screen.Status, NavMode.Push).copy(
                         statusText = st?.toString(2) ?: "ядро сервера обновлено",
                         admin = st?.let { AdminSnapshot.from(it) } ?: _state.value.admin,
                         updateText = "Ядро на VPS обновлено, чаты и owner на месте.",
                         busy = false,
-                        screen = Screen.Status,
                         error = null,
                     )
                     return@launch
@@ -464,11 +526,14 @@ class RopeRepository(private val app: Application) {
 
     fun startForward(msg: ChatMessage) {
         if (msg.deleted) return
+        val stack = BackStack.listForForward(BackStack.currentStack(_state.value.backStack, _state.value.screen))
         _state.value = _state.value.copy(
             forwarding = msg,
-            screen = Screen.Chats,
+            screen = stack.last(),
+            backStack = stack,
             replyTo = null,
             editTarget = null,
+            viewingImage = null,
         )
     }
 
@@ -812,7 +877,7 @@ class RopeRepository(private val app: Application) {
                         null,
                     ),
                 )
-                _state.value = _state.value.copy(inviteUrl = url, screen = Screen.Invite, busy = false)
+                _state.value = applyNav(Screen.Invite, NavMode.Push).copy(inviteUrl = url, busy = false)
             } catch (e: Exception) {
                 error(e)
             }
@@ -820,6 +885,13 @@ class RopeRepository(private val app: Application) {
     }
 
     fun refreshStatus() {
+        if (_state.value.screen != Screen.Status) {
+            _state.value = applyNav(Screen.Status, NavMode.Push).copy(error = null)
+        }
+        loadStatusSnapshot()
+    }
+
+    private fun loadStatusSnapshot() {
         scope.launch {
             val latest = runCatching { AppUpdater().latestApk(store.githubToken()) }.getOrNull()
             val newer = latest != null && AppRelease.isNewer(latest.version, BuildConfig.VERSION_NAME)
@@ -831,7 +903,6 @@ class RopeRepository(private val app: Application) {
             val st = runCatching { api?.status() }.getOrNull()
             val owner = RoleRules.isOwner(_state.value.profile?.role)
             _state.value = _state.value.copy(
-                screen = Screen.Status,
                 error = null,
                 statusText = when {
                     st != null -> st.toString(2)
@@ -894,9 +965,8 @@ class RopeRepository(private val app: Application) {
                 val latest = AppUpdater().latestApk(store.githubToken())
                 val local = BuildConfig.VERSION_NAME
                 if (!AppRelease.isNewer(latest.version, local)) {
-                    _state.value = _state.value.copy(
+                    _state.value = applyNav(Screen.Status, NavMode.Push).copy(
                         busy = false,
-                        screen = Screen.Status,
                         updateText = "Уже стоит $local",
                         appUpdateAvailable = false,
                     )
@@ -906,9 +976,8 @@ class RopeRepository(private val app: Application) {
                 dest.parentFile?.mkdirs()
                 AppUpdater().download(latest, dest, store.githubToken())
                 writeUpdateArtifacts(dest, latest.assetName)
-                _state.value = _state.value.copy(
+                _state.value = applyNav(Screen.Status, NavMode.Push).copy(
                     busy = false,
-                    screen = Screen.Status,
                     pendingApkPath = dest.absolutePath,
                     installTick = _state.value.installTick + 1,
                     error = null,
@@ -1181,9 +1250,8 @@ class RopeRepository(private val app: Application) {
         val withIce = refreshIceServers(profile)
         store.saveProfile(withIce)
         api = ServerApi(withIce, identity!!)
-        _state.value = _state.value.copy(
+        _state.value = applyNav(NavRules.signedInRoot, NavMode.Reset).copy(
             profile = withIce,
-            screen = Screen.Chats,
             busy = false,
             error = null,
             pendingInvite = null,
@@ -1212,7 +1280,8 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             val latest = runCatching { AppUpdater().latestApk(store.githubToken()) }.getOrNull() ?: return@launch
             val newer = AppRelease.isNewer(latest.version, BuildConfig.VERSION_NAME)
-            _state.value = _state.value.copy(
+            val nav = if (openStatus) applyNav(Screen.Status, NavMode.Push) else _state.value
+            _state.value = nav.copy(
                 appUpdateAvailable = newer,
                 latestAppVersion = latest.version,
                 updateText = if (newer) {
@@ -1220,7 +1289,6 @@ class RopeRepository(private val app: Application) {
                 } else {
                     _state.value.updateText
                 },
-                screen = if (openStatus) Screen.Status else _state.value.screen,
             )
         }
     }
@@ -1240,8 +1308,7 @@ class RopeRepository(private val app: Application) {
     private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?) {
         val prefs = store.chatPrefs(chatId)
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
-        _state.value = _state.value.copy(
-            screen = Screen.Chat,
+        _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
             group = group,
             messages = store.messages(chatId),
@@ -1250,7 +1317,6 @@ class RopeRepository(private val app: Application) {
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
-            viewingImage = null,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)

@@ -2,6 +2,7 @@ package app.rope.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -70,17 +72,28 @@ fun StatusPane(
         val owner = RoleRules.isOwner(state.profile?.role)
         val cards = if (owner) state.admin?.cards.orEmpty() else emptyList()
         if (cards.isEmpty()) {
-            SectionCard {
-                Text(
-                    state.statusText.ifBlank {
-                        if (owner) "Статус сервера ещё не загружен." else "Вы гость. Приложение обновляется здесь, без прав owner."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+            FadeIn(140) {
+                SectionCard {
+                    if (state.statusText.isBlank() && owner) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            RopeLogoMark(size = 56.dp, animate = true, loop = true)
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                    Text(
+                        state.statusText.ifBlank {
+                            if (owner) "Статус сервера ещё не загружен." else "Вы гость. Приложение обновляется здесь, без прав owner."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         } else {
             cards.forEachIndexed { index, card ->
-                FadeIn(140 + index * 50) {
+                FadeIn(140 + SplashTiming.staggerDelayMs(index, stepMs = 50, capMs = 360)) {
                     SectionCard {
                         Text(card.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(card.value, style = MaterialTheme.typography.titleLarge)

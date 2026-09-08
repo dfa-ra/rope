@@ -2,8 +2,12 @@ package app.rope.android
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -26,14 +30,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Groups
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -74,8 +80,10 @@ import app.rope.android.ui.HomePane
 import app.rope.android.ui.PeoplePane
 import app.rope.android.ui.QuietButton
 import app.rope.android.ui.RopeEmptyState
-import app.rope.android.ui.RopeKnot
+import app.rope.android.ui.RopeLogoMark
+import app.rope.android.ui.RopeSplash
 import app.rope.android.ui.SectionCard
+import app.rope.android.ui.rememberSplashOverlay
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
@@ -129,12 +137,27 @@ fun RopeScaffold(
     onCloseImage: () -> Unit,
     onConsumedScroll: () -> Unit,
     onDismissNotice: () -> Unit,
+    onBack: () -> Boolean = { false },
+    onTab: (Screen) -> Unit = onGo,
 ) {
     val signedIn = state.profile != null
+    val splash = rememberSplashOverlay(state)
+    val selectedTab = NavRules.selectedTab(state.screen)
+    BackHandler(enabled = BackStack.consumesSystemBack(state)) {
+        onBack()
+    }
     Box {
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    val showBack = BackStack.canPop(BackStack.currentStack(state.backStack, state.screen))
+                    if (showBack) {
+                        IconButton(onClick = { onBack() }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад")
+                        }
+                    }
+                },
                 title = {
                     val me = state.profile?.displayName.orEmpty()
                     val title = when {
@@ -146,17 +169,22 @@ fun RopeScaffold(
                     val opensHome = NavRules.titleOpensHome(state.screen, signedIn)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable(enabled = opensHome) { onGo(Screen.Home) },
+                        modifier = Modifier.clickable(enabled = opensHome) { onTab(Screen.Home) },
                     ) {
-                        RopeKnot(
+                        RopeLogoMark(
                             size = 28.dp,
-                            animate = state.screen == Screen.Home || state.screen == Screen.Start,
+                            animate = true,
+                            breathe = state.screen == Screen.Home || state.screen == Screen.Start,
+                            replayKey = selectedTab?.ordinal ?: state.screen.ordinal,
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(title)
                     }
                 },
                 actions = {
+                    if (NavRules.showsHomeAction(state.screen, signedIn)) {
+                        TextButton(onClick = { onTab(Screen.Home) }) { Text("На главную") }
+                    }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
                             if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
@@ -164,8 +192,10 @@ fun RopeScaffold(
                         )
                     }
                     if (signedIn) {
-                        IconButton(onClick = onInvite) {
-                            Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                        if (NavRules.showsInviteCta(state.profile?.role)) {
+                            IconButton(onClick = onInvite) {
+                                Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                            }
                         }
                         IconButton(onClick = onStatus) {
                             Icon(Icons.Outlined.Dns, contentDescription = "Сервер")
@@ -176,7 +206,7 @@ fun RopeScaffold(
         },
         bottomBar = {
             if (NavRules.showsBottomBar(state.screen, signedIn)) {
-                RopeBottomBar(state.screen, onGo, onStatus)
+                RopeBottomBar(state.screen, onTab)
             }
         },
     ) { padding ->
@@ -213,13 +243,13 @@ fun RopeScaffold(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 AnimatedContent(
                     targetState = state.screen,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    transitionSpec = { screenTransition(initialState, targetState) },
                     label = "screen",
                 ) { screen ->
                     when (screen) {
                         Screen.Start -> StartPane(onGo, onRestoreBackup)
-                        Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onGo(Screen.Start) }
-                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onGo(Screen.Start) }
+                        Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onBack() }
+                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onBack() }
                         Screen.Home -> HomePane(state, onGo, onStatus, onInvite)
                         Screen.Chats, Screen.Groups -> app.rope.android.ui.ChatsPane(
                             state,
@@ -238,6 +268,7 @@ fun RopeScaffold(
                             state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
                             onReact, onEnsureMedia,
                             onGroupInfo = { onGo(Screen.GroupInfo) },
+                            onBack = { onBack() },
                             onReply = onReply,
                             onEdit = onEdit,
                             onDelete = onDelete,
@@ -250,11 +281,11 @@ fun RopeScaffold(
                             onMessageQuery = onMessageQuery,
                             onConsumedScroll = onConsumedScroll,
                         )
-                        Screen.Invite -> InvitePane(state.inviteUrl.orEmpty()) { onGo(Screen.Home) }
-                        Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onGo(Screen.Home) }
-                        Screen.Settings -> SettingsPane(state, onToggleTheme) { onGo(Screen.Home) }
-                        Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onGo(Screen.Groups) }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onGo(Screen.Chat) }
+                        Screen.Invite -> InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                        Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onTab(Screen.Home) }
+                        Screen.Settings -> SettingsPane(state, onToggleTheme) { onTab(Screen.Home) }
+                        Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember) { onBack() }
                     }
                 }
             }
@@ -266,23 +297,23 @@ fun RopeScaffold(
     state.viewingImage?.let { img ->
         app.rope.android.ui.ImageViewer(img, onCloseImage)
     }
+    if (splash.visible) {
+        RopeSplash(caption = splash.caption, loop = splash.loop, compact = splash.compact)
+    }
     }
 }
 
 @Composable
 private fun RopeBottomBar(
     screen: Screen,
-    onGo: (Screen) -> Unit,
-    onStatus: () -> Unit,
+    onTab: (Screen) -> Unit,
 ) {
     val selected = NavRules.selectedTab(screen)
     NavigationBar {
         NavRules.tabs.forEach { tab ->
             NavigationBarItem(
                 selected = selected == tab.screen,
-                onClick = {
-                    if (tab.screen == Screen.Status) onStatus() else onGo(tab.screen)
-                },
+                onClick = { onTab(tab.screen) },
                 icon = { Icon(tabIcon(tab.screen), contentDescription = tab.label) },
                 label = { Text(tab.label) },
             )
@@ -290,11 +321,25 @@ private fun RopeBottomBar(
     }
 }
 
+private fun screenTransition(from: Screen, to: Screen): ContentTransform {
+    val enterMessenger = from == Screen.Home && NavRules.isMessengerShell(to)
+    val leaveMessenger = to == Screen.Home && NavRules.isMessengerShell(from)
+    return when {
+        enterMessenger ->
+            (slideInHorizontally(tween(340)) { it / 4 } + fadeIn(tween(280))) togetherWith
+                (slideOutHorizontally(tween(280)) { -it / 8 } + fadeOut(tween(200)))
+        leaveMessenger ->
+            (slideInHorizontally(tween(340)) { -it / 4 } + fadeIn(tween(280))) togetherWith
+                (slideOutHorizontally(tween(280)) { it / 8 } + fadeOut(tween(200)))
+        else -> fadeIn(tween(200)) togetherWith fadeOut(tween(160))
+    }
+}
+
 private fun tabIcon(screen: Screen): ImageVector = when (screen) {
-    Screen.Home -> Icons.Outlined.Home
     Screen.Chats -> Icons.AutoMirrored.Outlined.Chat
     Screen.Groups -> Icons.Outlined.Groups
     Screen.Calls -> Icons.Outlined.Call
+    Screen.People -> Icons.Outlined.People
     else -> Icons.Outlined.Dns
 }
 
@@ -312,7 +357,7 @@ private fun StartPane(onGo: (Screen) -> Unit, onRestore: () -> Unit) {
         ) {
             FadeIn(40) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    RopeKnot(size = 132.dp, animate = true)
+                    RopeLogoMark(size = 132.dp, animate = true)
                     Spacer(Modifier.height(10.dp))
                     Text("self-hosted · E2EE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Личный мессенджер на своём VPS", style = MaterialTheme.typography.headlineSmall)
@@ -686,7 +731,7 @@ private fun JoinPane(
 }
 
 @Composable
-private fun InvitePane(url: String, onHome: () -> Unit) {
+private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -697,7 +742,7 @@ private fun InvitePane(url: String, onHome: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            FadeIn(40) { RopeKnot(size = 72.dp, animate = true) }
+            FadeIn(40) { RopeLogoMark(size = 72.dp, animate = true) }
             FadeIn(120) { Text("Приглашение", style = MaterialTheme.typography.titleLarge) }
             FadeIn(180) {
                 Text(

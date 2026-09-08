@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -126,6 +127,7 @@ fun EmojiPickerPanel(
 @Composable
 fun ReactionPicker(onPick: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    BackHandler(enabled = expanded) { expanded = false }
     Surface(
         tonalElevation = 6.dp,
         shadowElevation = 4.dp,

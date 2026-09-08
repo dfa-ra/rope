@@ -16,11 +16,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import app.rope.android.BrandLinks
 import app.rope.android.BuildConfig
+import app.rope.android.HomeCtas
 import app.rope.android.NavRules
 import app.rope.android.Screen
 import app.rope.android.UiState
@@ -33,11 +32,12 @@ fun HomePane(
     onStatus: () -> Unit,
     onInvite: () -> Unit,
 ) {
-    val uri = LocalUriHandler.current
     val me = state.profile?.displayName.orEmpty()
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val groups = NavRules.groupsOf(state.conversations)
-    val owner = RoleRules.isOwner(state.profile?.role)
+    val role = state.profile?.role
+    val owner = RoleRules.isOwner(role)
+    val canInvite = NavRules.showsInviteCta(role)
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -49,7 +49,7 @@ fun HomePane(
         ) {
             FadeIn(40) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    RopeKnot(size = 148.dp, animate = true)
+                    RopeLogoMark(size = 148.dp, animate = true)
                     Spacer(Modifier.height(12.dp))
                     Text("self-hosted · E2EE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Rope", style = MaterialTheme.typography.headlineLarge)
@@ -72,75 +72,50 @@ fun HomePane(
                 }
             }
             Spacer(Modifier.height(22.dp))
-            FadeIn(160) {
-                GlowButton("К чатам", { onGo(Screen.Chats) }, Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(220) {
-                QuietButton("К статусу сервера", onStatus, Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(280) {
-                QuietButton(
-                    "Открыть веб-лендинг",
-                    { runCatching { uri.openUri(BrandLinks.GITHUB) } },
-                    Modifier.fillMaxWidth(),
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(340) {
-                QuietButton(
-                    "Скачать / о приложении",
-                    { runCatching { uri.openUri(BrandLinks.RELEASES) } },
-                    Modifier.fillMaxWidth(),
-                )
+            HomeCtas.shortcuts.forEachIndexed { index, shortcut ->
+                if (index > 0) Spacer(Modifier.height(10.dp))
+                FadeIn(160 + index * 60) {
+                    val onClick = {
+                        if (shortcut.destination == Screen.Status) onStatus()
+                        else onGo(shortcut.destination)
+                    }
+                    if (index == 0) {
+                        GlowButton(shortcut.label, onClick, Modifier.fillMaxWidth())
+                    } else {
+                        QuietButton(shortcut.label, onClick, Modifier.fillMaxWidth())
+                    }
+                }
             }
             Spacer(Modifier.height(22.dp))
-            FadeIn(400) {
+            FadeIn(320) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     MiniStat("Чаты", state.conversations.size.toString(), Modifier.weight(1f)) { onGo(Screen.Chats) }
                     MiniStat("Группы", groups.size.toString(), Modifier.weight(1f)) { onGo(Screen.Groups) }
                     MiniStat("Люди", people.size.toString(), Modifier.weight(1f)) { onGo(Screen.People) }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            FadeIn(460) {
-                SectionCard(onClick = { onGo(Screen.Calls) }) {
-                    Text("Звонки", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Входящие и исходящие — из личного чата. История на этой вкладке.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(520) {
-                SectionCard(onClick = onInvite) {
-                    Text("Пригласить по QR", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Одноразовая ссылка. Гость входит без прав owner.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(580) {
-                SectionCard(onClick = { onGo(Screen.People) }) {
-                    Text("Люди на сервере", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (people.isEmpty()) {
-                            "Пока никого. Покажите QR — человек появится здесь."
-                        } else {
-                            people.take(4).joinToString(" · ") { it.displayName.ifBlank { it.deviceId.take(6) } }
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            if (canInvite) {
+                Spacer(Modifier.height(12.dp))
+                FadeIn(400) {
+                    SectionCard(onClick = onInvite) {
+                        Text("Пригласить по QR", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Одноразовая ссылка. Гость входит без прав owner.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))
+            Text(
+                NavRules.homePeopleHint(role, people),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            Spacer(Modifier.height(12.dp))
             Text(
                 "Приложение ${BuildConfig.VERSION_NAME}" + if (owner) " · owner" else " · гость",
                 style = MaterialTheme.typography.labelSmall,

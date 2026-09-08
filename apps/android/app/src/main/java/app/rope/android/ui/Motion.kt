@@ -9,6 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -37,6 +38,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.rope.android.RopeBlack
 import app.rope.android.RopeGrayDark
 import app.rope.android.RopeGrayLight
 import app.rope.android.RopeShapes
@@ -65,12 +68,10 @@ import kotlinx.coroutines.delay
 fun rememberReduceMotion(): Boolean {
     val context = LocalContext.current
     return remember(context) {
-        val scale = Settings.Global.getFloat(
-            context.contentResolver,
-            Settings.Global.ANIMATOR_DURATION_SCALE,
-            1f,
-        )
-        scale == 0f
+        val resolver = context.contentResolver
+        val animator = Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        val transition = Settings.Global.getFloat(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f)
+        SplashTiming.isReduceMotion(animator, transition)
     }
 }
 
@@ -83,31 +84,36 @@ fun ropeKnotPath(): Path = Path().apply {
 }
 
 @Composable
-fun RopeKnot(
+fun RopeLogoMark(
     modifier: Modifier = Modifier,
     size: Dp = 128.dp,
     animate: Boolean = true,
+    loop: Boolean = false,
+    breathe: Boolean = true,
+    replayKey: Int = 0,
     underColor: Color = RopeGrayDark,
     strokeColor: Color = MaterialTheme.colorScheme.secondary,
 ) {
     val reduce = rememberReduceMotion()
-    var drawn by remember { mutableFloatStateOf(if (animate && !reduce) 0f else 1f) }
-    LaunchedEffect(animate, reduce) {
-        if (animate && !reduce) {
+    var drawn by remember(replayKey) { mutableFloatStateOf(if (animate && !reduce) 0f else 1f) }
+    LaunchedEffect(animate, reduce, loop, replayKey) {
+        if (!animate || reduce) {
+            drawn = 1f
+            return@LaunchedEffect
+        }
+        do {
             drawn = 0f
-            val start = android.os.SystemClock.uptimeMillis()
-            val duration = 1600f
+            val startNs = withFrameNanos { it }
             while (drawn < 1f) {
-                val t = ((android.os.SystemClock.uptimeMillis() - start) / duration).coerceIn(0f, 1f)
-                drawn = 1f - (1f - t) * (1f - t)
-                delay(16)
+                val now = withFrameNanos { it }
+                val elapsedMs = ((now - startNs) / 1_000_000L).coerceAtLeast(0L)
+                drawn = SplashTiming.paintProgress(elapsedMs)
             }
             drawn = 1f
-        } else {
-            drawn = 1f
-        }
+            if (loop) delay(420)
+        } while (loop)
     }
-    val live = animate && !reduce
+    val live = animate && !reduce && breathe
     val inf = rememberInfiniteTransition(label = "knot")
     val pulseRaw by inf.animateFloat(
         initialValue = 0.97f,
@@ -160,15 +166,73 @@ fun RopeKnot(
 }
 
 @Composable
-fun BrandBackdrop(modifier: Modifier = Modifier) {
+fun RopeKnot(
+    modifier: Modifier = Modifier,
+    size: Dp = 128.dp,
+    animate: Boolean = true,
+    underColor: Color = RopeGrayDark,
+    strokeColor: Color = MaterialTheme.colorScheme.secondary,
+) {
+    RopeLogoMark(
+        modifier = modifier,
+        size = size,
+        animate = animate,
+        underColor = underColor,
+        strokeColor = strokeColor,
+    )
+}
+
+@Composable
+fun RopeSplash(
+    modifier: Modifier = Modifier,
+    caption: String? = null,
+    loop: Boolean = true,
+    compact: Boolean = false,
+) {
+    val reduce = rememberReduceMotion()
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(RopeBlack),
+        contentAlignment = Alignment.Center,
+    ) {
+        BrandBackdrop(ink = true)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 28.dp),
+        ) {
+            RopeLogoMark(
+                size = if (compact) 92.dp else 148.dp,
+                animate = !reduce,
+                loop = loop && !reduce,
+                breathe = true,
+                underColor = RopeGrayDark,
+                strokeColor = RopeGrayLight,
+            )
+            if (!caption.isNullOrBlank()) {
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    caption,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = RopeGrayLight.copy(alpha = 0.72f),
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BrandBackdrop(modifier: Modifier = Modifier, ink: Boolean = false) {
     val reduce = rememberReduceMotion()
     val inf = rememberInfiniteTransition(label = "orbs")
     val a by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(16_000), RepeatMode.Reverse), "oa")
     val b by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(20_000), RepeatMode.Reverse), "ob")
     val c by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(24_000), RepeatMode.Reverse), "oc")
-    val secondary = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
-    val variant = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+    val secondary = if (ink) RopeGrayLight.copy(alpha = 0.16f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+    val variant = if (ink) RopeGrayDark.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val outline = if (ink) RopeGrayDark.copy(alpha = 0.28f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
     Canvas(modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
@@ -326,7 +390,12 @@ fun RopeEmptyState(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(Modifier.graphicsLayer { translationY = if (reduce) 0f else yRaw }) {
-                RopeKnot(size = 76.dp, animate = !reduce, strokeColor = RopeGrayLight)
+                RopeLogoMark(
+                    size = 76.dp,
+                    animate = !reduce,
+                    loop = !reduce,
+                    strokeColor = RopeGrayLight,
+                )
             }
             Spacer(Modifier.height(16.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
