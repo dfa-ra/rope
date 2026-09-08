@@ -1,6 +1,6 @@
 # Organization — Rope repository
 
-This is the org for **this repo as it is**: default branch `main` is the original MVP. Remote feature branches and GitHub tags `v0.2.x` (Telegram-style UI, calls, landing, extra releases) are a parallel line — not the staffing baseline. Do not treat them as in-scope without the user decision in [D-005](decisions.md#d-005-stage-2-parallel-line-escalated).
+This is the org for **this repo as it is**: default branch `main` matches GitHub Latest `v0.2.15` (D-005 A) plus the CryptoGalera wrap. Do not spawn overlapping chrome/calls/landing agents. Unique unshipped work on `cursor/telegram-chrome-872f` is not the staffing baseline.
 
 Operating model: [company.md](company.md). Agent rules: [AGENTS.md](../AGENTS.md).
 

@@ -2,7 +2,7 @@
 
 This is how CryptoGalera runs Rope. [AGENTS.md](../AGENTS.md) is the short form agents must follow. This file is the readable full model. Current seating and file owners: [organization.md](organization.md).
 
-The company name is informal. The operating model is not. The failure mode this document exists to prevent is **agent sprawl**: many overlapping cloud agents, no integration owner, and `main` still the original MVP.
+The company name is informal. The operating model is not. The failure mode this document exists to prevent is **agent sprawl**: many overlapping cloud agents, no integration owner, and a dual product line (`main` vs GitHub Releases). D-005 A closed that split: `main` matches `v0.2.15`.
 
 ## Roles
 
