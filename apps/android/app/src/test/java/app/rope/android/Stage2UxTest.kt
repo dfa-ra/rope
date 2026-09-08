@@ -336,7 +336,7 @@ class Stage2UxTest {
         assertEquals(listOf("1"), ChatListRules.pinnedBlock(idle, "").map { it.id })
         assertEquals(0 until 3, QueryHighlight.firstRange("Анна", "анн"))
         assertNull(QueryHighlight.firstRange("Анна", "   "))
-        assertEquals("анна", ChatListRules.normalize("  Анн  "))
+        assertEquals("анн", ChatListRules.normalize("  Анн  "))
         assertTrue(ChatListRules.searching("ан"))
         assertFalse(ChatListRules.searching(" \t "))
     }
