@@ -52,9 +52,8 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.FloatingActionButton
@@ -97,7 +96,6 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionCodec
-import app.rope.android.data.ReactionPayload
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import kotlinx.coroutines.delay
@@ -576,7 +574,13 @@ private fun MessageBubble(
                         )
                     } else {
                         when (m.kind) {
-                            MessageKind.VOICE -> VoiceBubble(m, state.playingVoiceId == m.id, onPlay)
+                            MessageKind.VOICE -> VoiceMessageBubble(
+                                message = m,
+                                playing = state.playingVoiceId == m.id,
+                                positionMs = if (state.voiceProgressId == m.id) state.voicePositionMs else 0L,
+                                playerDurationMs = if (state.voiceProgressId == m.id) state.voiceDurationMs else 0L,
+                                onPlay = onPlay,
+                            )
                             MessageKind.IMAGE -> ImageBubble(m, onEnsureMedia, onOpenImage)
                             MessageKind.FILE -> FileBubble(m)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
@@ -687,49 +691,6 @@ private fun MessageActionRow(
 }
 
 @Composable
-private fun ReactionPicker(onPick: (String) -> Unit) {
-    Surface(
-        tonalElevation = 6.dp,
-        shadowElevation = 4.dp,
-        shape = RoundedCornerShape(RopeShapes.picker),
-        modifier = Modifier.padding(top = 4.dp),
-    ) {
-        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-            ReactionPayload.EMOJIS.forEach { emoji ->
-                ReactionPickEmoji(emoji, onPick)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReactionPickEmoji(emoji: String, onPick: (String) -> Unit) {
-    var pop by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pop) 1.38f else 1f,
-        animationSpec = spring(dampingRatio = 0.42f, stiffness = 520f),
-        label = "reactPick",
-    )
-    Text(
-        emoji,
-        modifier = Modifier
-            .scale(scale)
-            .clickable {
-                pop = true
-                onPick(emoji)
-            }
-            .padding(8.dp),
-        style = MaterialTheme.typography.headlineSmall,
-    )
-    LaunchedEffect(pop) {
-        if (pop) {
-            delay(180)
-            pop = false
-        }
-    }
-}
-
-@Composable
 private fun ReactionRow(
     m: ChatMessage,
     myId: String,
@@ -773,34 +734,6 @@ private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boo
             style = MaterialTheme.typography.labelMedium,
             color = if (mine) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface,
         )
-    }
-}
-
-@Composable
-private fun VoiceBubble(m: ChatMessage, playing: Boolean, onPlay: (ChatMessage) -> Unit) {
-    val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
-    val wave by animateFloatAsState(if (playing) 1f else 0.35f, tween(180), label = "wave")
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        IconButton(onClick = { onPlay(m) }, modifier = Modifier.size(36.dp)) {
-            Icon(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, contentDescription = "Голос")
-        }
-        Column {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(18.dp)
-                    .clip(RoundedCornerShape(RopeShapes.media))
-                    .background(Color.White.copy(alpha = 0.18f + 0.18f * wave)),
-            )
-            Text(
-                when {
-                    extra != null && m.localPath == null -> "скачивается…"
-                    extra != null -> MediaPayload.formatDuration(extra.durationMs)
-                    else -> m.text
-                },
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
     }
 }
 
@@ -850,10 +783,13 @@ private fun ComposerBar(
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
+    var showEmoji by remember { mutableStateOf(false) }
     LaunchedEffect(state.recording) {
         if (!state.recording) {
             recordingLocked = false
             slideHint = VoiceGesture.HOLD
+        } else {
+            showEmoji = false
         }
     }
     val showSend = ComposerRules.showSendButton(state.draftText, state.recording, recordingLocked)
@@ -880,6 +816,12 @@ private fun ComposerBar(
                     onCancel = onCancelComposer,
                 )
             }
+            if (showEmoji && !state.recording) {
+                EmojiPickerPanel(
+                    onPick = { onDraft(state.draftText + it) },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -890,6 +832,13 @@ private fun ComposerBar(
                 if (!state.recording) {
                     IconButton(onClick = onAttach) {
                         Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
+                    }
+                    IconButton(onClick = { showEmoji = !showEmoji }) {
+                        Icon(
+                            Icons.Outlined.Mood,
+                            contentDescription = "Смайлики",
+                            tint = if (showEmoji) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 } else if (recordingLocked) {
                     IconButton(onClick = { onVoiceFinish(false) }) {
