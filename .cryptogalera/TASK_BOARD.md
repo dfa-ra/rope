@@ -21,6 +21,8 @@ Statuses: BACKLOG · READY · IN_PROGRESS · BLOCKED · REVIEW · INTEGRATING ·
 | CG-014 | Fix architecture.md Room vs SQLite | — | BACKLOG | doc drift | — |
 | CG-015 | Install reusable Cursor agents | PO | DONE | Phase 9 | CG-008 |
 | CG-016 | Adopt-workspace state reconstruction | PO | DONE | this directive | CG-010 |
+| CG-017 | Maintenance: review PRs, merge safe, cleanup | PO | DONE | this cycle | — |
+| CG-017-A | Independent review of PR #4 | REV-01 | DONE | CG-017 | CG-017 |
 
 **DONE requires evidence.** CG-011 evidence: `cargo test` 11 passed; `go test ./...` ok; Android tests **not run** (no SDK in this environment) — not claimed green.
 

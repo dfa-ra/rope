@@ -24,4 +24,6 @@ These were already true in Rope **before** CryptoGalera. Not invented here.
 | D-008 | accepted | `cryptogalera/RUNTIME.md` + `.cryptogalera/` PO memory; Workers never spawn |
 | D-009 | accepted | ADOPTED_EXISTING_WORKSPACE; continue from this checkout; `.cursor/agents/` reusable roles only |
 
-D-009 does **not** unfreeze product coding and does **not** choose D-005.
+D-009 does **not** unfreeze Stage-2 and does **not** choose D-005.
+
+**CG-017 (2026-09-08):** PR #4 merged to `main` (fast-forward `b6915c6` → `99956d8`). PRs #2 and #3 not merged (D-005 + #2 Android CI failure). Stage-2 branches preserved.
