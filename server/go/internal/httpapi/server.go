@@ -660,7 +660,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "too_large", Message: "call payload too large"})
 		return
 	}
-	if in.Event == "audio" && !s.CallAudio.Allow("ws-call-audio:"+from.id) {
+	if strings.EqualFold(in.Event, "audio") && !s.CallAudio.Allow("ws-call-audio:"+from.id) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}

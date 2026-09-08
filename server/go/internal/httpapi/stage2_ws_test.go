@@ -335,7 +335,7 @@ func TestCallAudioRateLimited(t *testing.T) {
 		}
 	}
 	if err := wsjson.Write(ctx, aliceWS, map[string]any{
-		"type": "call", "call_id": "c-rl", "to": bob.id, "event": "audio", "payload": "AA==",
+		"type": "call", "call_id": "c-rl", "to": bob.id, "event": "AUDIO", "payload": "AA==",
 	}); err != nil {
 		t.Fatal(err)
 	}

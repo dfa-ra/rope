@@ -206,6 +206,7 @@ class CallSignalingTest {
         assertTrue(first.any { it is CallEffect.Send && it.event == CallSignal.RELAY })
         assertFalse(first.contains(CallEffect.RestartIce))
         assertTrue(m.state.live)
+        assertEquals("", m.state.lastIce)
 
         val again = m.onConnectTimeout()
         assertTrue(again.isEmpty())

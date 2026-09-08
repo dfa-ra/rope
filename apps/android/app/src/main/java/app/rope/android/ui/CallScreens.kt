@@ -50,6 +50,7 @@ import app.rope.android.data.RoleRules
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
+import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.Conversation
 import kotlinx.coroutines.delay
@@ -163,7 +164,7 @@ fun CallOverlay(
     val subtitle = CallLink.subtitle(call, iceServersJson)
     val heading = CallLink.heading(call.phase, call.link, subtitle)
     val clock = CallLink.clock(now - startAt, call.phase, call.link)
-    val ice = CallLink.iceCompact(call.lastIce)
+    val ice = if (call.media == CallMedia.CHAT) "" else CallLink.iceCompact(call.lastIce)
     val failed = call.link == CallLinkState.FAILED
     FadeIn(0) {
         Column(

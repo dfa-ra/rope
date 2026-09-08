@@ -2019,7 +2019,9 @@ class RopeRepository(private val app: Application) {
             }
             if (bytes.isEmpty()) continue
             val pcm = try {
-                id.decryptTyped(publicIdentityFromBlob(peer.publicIdentity), bytes).body
+                val typed = id.decryptTyped(publicIdentityFromBlob(peer.publicIdentity), bytes)
+                if (typed.msgType != EnvelopeTypes.CALL) continue
+                typed.body
             } catch (_: Exception) {
                 continue
             }

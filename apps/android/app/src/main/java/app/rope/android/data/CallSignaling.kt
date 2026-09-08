@@ -403,6 +403,7 @@ class CallMachine {
             wssMedia = true,
             rtcWanted = false,
             phase = CallPhase.ACTIVE,
+            lastIce = "",
             link = if (already && state.link == CallLinkState.CONNECTED) {
                 CallLinkState.CONNECTED
             } else {
