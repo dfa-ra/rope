@@ -62,6 +62,37 @@ object NavRules {
 
     fun showsInviteCta(role: String?): Boolean = RoleRules.canShowInviteQr(role)
 
+    /** Shared AppBar never repeats the brand wordmark or the username. */
+    fun chromeShowsWordmark(): Boolean = false
+
+    fun chromeShowsUsername(): Boolean = false
+
+    fun chromeShowsUserChip(signedIn: Boolean): Boolean = signedIn
+
+    /**
+     * Section title in the bar — «Чаты», «Статус», «офлайн».
+     * Empty on Home: the hero already has the Rope wordmark.
+     */
+    fun chromeTitle(screen: Screen, offline: Boolean = false): String {
+        if (offline) return "офлайн"
+        return when (screen) {
+            Screen.Chats -> "Чаты"
+            Screen.Groups -> "Группы"
+            Screen.NewGroup -> "Новая группа"
+            Screen.GroupInfo -> "Группа"
+            Screen.Calls -> "Звонки"
+            Screen.People -> "Люди"
+            Screen.Status -> "Статус"
+            Screen.Settings -> "Настройки"
+            Screen.Invite -> "Приглашение"
+            Screen.Home, Screen.Start, Screen.Provision, Screen.Join, Screen.Chat -> ""
+        }
+    }
+
+    /** Own display name belongs on Home, People, and Settings — not in every AppBar. */
+    fun contentShowsOwnName(screen: Screen): Boolean =
+        screen == Screen.Home || screen == Screen.People || screen == Screen.Settings
+
     fun selectedTab(screen: Screen): Screen? = when (screen) {
         Screen.Chats, Screen.Chat -> Screen.Chats
         Screen.Groups, Screen.NewGroup, Screen.GroupInfo -> Screen.Groups
