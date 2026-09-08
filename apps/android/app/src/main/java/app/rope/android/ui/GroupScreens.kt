@@ -18,11 +18,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.GroupChatUx
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -104,6 +110,7 @@ fun GroupInfoPane(
     state: UiState,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onLeave: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -118,6 +125,11 @@ fun GroupInfoPane(
     }
     val names = state.devices.associate { it.deviceId to it.displayName }
     val me = state.profile?.deviceId
+    val organizer = GroupChatUx.organizerId(g)
+    val isMember = me != null && me in g.members
+    val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
+    val canLeave = RoleRules.canLeaveGroup(isMember)
+    var confirmLeave by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -130,46 +142,79 @@ fun GroupInfoPane(
                     SectionCard {
                         Text(g.name, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "эпоха ${g.epoch} · ${g.members.size} участников",
+                            "${g.members.size} участников",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             }
+            item { Text("Участники", style = MaterialTheme.typography.titleSmall) }
             items(g.members, key = { it }) { id ->
+                val label = GroupChatUx.memberDisplayName(id, me, names)
+                val role = GroupChatUx.memberRoleLabel(id, g)
+                val tint = Color(GroupChatUx.senderColorArgb(id, label))
+                val online = id in state.onlineIds || (id == me && !state.offline)
                 SectionCard {
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (id == me) "Вы" else names[id] ?: id.take(8))
-                        if (id != me) {
+                        InitialsAvatar(
+                            title = label,
+                            group = false,
+                            online = online,
+                            size = 40.dp,
+                            tint = tint,
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(label, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                role,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (canManage && id != me) {
                             TextButton(onClick = { onRemove(id) }) { Text("Убрать") }
                         }
                     }
                 }
             }
-            item { Text("Добавить", style = MaterialTheme.typography.titleSmall) }
-            val extras = state.devices.filter { it.deviceId !in g.members }
-            if (extras.isEmpty()) {
-                item {
-                    Text(
-                        "Все знакомые уже в группе.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                items(extras, key = { it.deviceId }) { d ->
-                    SectionCard(onClick = { onAdd(d.deviceId) }) {
-                        Text("+ ${d.displayName}", style = MaterialTheme.typography.titleMedium)
-                        Text(if (d.online) "в сети" else "не в сети", style = MaterialTheme.typography.bodySmall)
+            if (canManage) {
+                item { Text("Добавить", style = MaterialTheme.typography.titleSmall) }
+                val extras = state.devices.filter { it.deviceId !in g.members }
+                if (extras.isEmpty()) {
+                    item {
+                        Text(
+                            "Все знакомые уже в группе.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    items(extras, key = { it.deviceId }) { d ->
+                        SectionCard(onClick = { onAdd(d.deviceId) }) {
+                            Text("+ ${d.displayName}", style = MaterialTheme.typography.titleMedium)
+                            Text(if (d.online) "в сети" else "не в сети", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
         }
-        QuietButton("Назад в чат", onBack, Modifier.padding(16.dp).fillMaxWidth())
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (canLeave) {
+                if (confirmLeave) {
+                    GlowButton("Точно выйти из группы", onLeave, Modifier.fillMaxWidth())
+                    TextButton(onClick = { confirmLeave = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Отмена")
+                    }
+                } else {
+                    QuietButton("Выйти из группы", { confirmLeave = true }, Modifier.fillMaxWidth())
+                }
+            }
+            QuietButton("Назад в чат", onBack, Modifier.fillMaxWidth())
+        }
     }
 }

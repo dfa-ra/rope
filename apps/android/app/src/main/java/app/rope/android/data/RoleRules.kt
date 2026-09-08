@@ -51,4 +51,21 @@ object RoleRules {
         } else {
             "Пока некого добавить. Попросите организатора пригласить человека."
         }
+
+    /**
+     * Add/remove others: organizer or server owner.
+     * REST still accepts any member; the UI follows Telegram/WhatsApp.
+     */
+    fun canManageGroupMembers(
+        isMember: Boolean,
+        myId: String?,
+        organizerId: String,
+        serverRole: String?,
+    ): Boolean {
+        if (!isMember) return false
+        if (isOwner(serverRole)) return true
+        return !myId.isNullOrBlank() && myId == organizerId
+    }
+
+    fun canLeaveGroup(isMember: Boolean): Boolean = isMember
 }

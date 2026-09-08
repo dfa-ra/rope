@@ -174,6 +174,7 @@ class ServerApi(
             name = obj.getString("name"),
             epoch = obj.optInt("epoch"),
             members = ids,
+            createdBy = obj.optString("created_by").ifBlank { obj.optString("createdBy") },
         )
     }
 
