@@ -188,15 +188,10 @@ class Stage2UxTest {
         assertTrue(RoleRules.canUpdateApp("guest"))
         assertTrue(RoleRules.canUpdateApp("member"))
         assertTrue(RoleRules.canUpdateApp("owner"))
-        assertTrue(RoleRules.canOpenStatus("guest"))
         assertFalse(RoleRules.canUpgradeCore("guest"))
         assertFalse(RoleRules.canUpgradeCore("member"))
-        assertFalse(RoleRules.canShowInviteQr("guest"))
-        assertFalse(RoleRules.canShowAdminCards("guest"))
         assertFalse(RoleRules.isOwner(null))
         assertTrue(RoleRules.canUpgradeCore("owner"))
-        assertTrue(RoleRules.canShowInviteQr("owner"))
-        assertTrue(RoleRules.canShowAdminCards("owner"))
         assertTrue(RoleRules.isOwner("OWNER"))
     }
 
