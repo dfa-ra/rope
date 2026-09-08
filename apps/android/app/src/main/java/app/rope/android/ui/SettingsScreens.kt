@@ -34,7 +34,6 @@ fun SettingsPane(
     onSetTheme: (ThemeMode) -> Unit,
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
-    onHome: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -45,7 +44,6 @@ fun SettingsPane(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        FadeIn(40) { Text("Настройки", style = MaterialTheme.typography.titleLarge) }
         FadeIn(80) {
             SectionCard {
                 Row(

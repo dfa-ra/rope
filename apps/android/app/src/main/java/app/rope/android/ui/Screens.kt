@@ -311,7 +311,7 @@ fun RopeScaffold(
                             onSetTheme,
                             onToggleNotifications,
                             onCopyText,
-                        ) { onTab(Screen.Home) }
+                        )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
                     }
