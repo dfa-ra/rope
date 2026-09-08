@@ -31,3 +31,4 @@ Workers never spawn. Disjoint paths. Shared docs go through ENG-LEAD/PO.
 - Default: **`main`**
 - Working branch: `cursor/notify-tg-menus-ae19`
 - Base: `origin/main` @ eb78a31 (v0.3.1)
+- REV-01: PASS_WITH_CONCERNS (no SDK/device; FGS type fallback added)
