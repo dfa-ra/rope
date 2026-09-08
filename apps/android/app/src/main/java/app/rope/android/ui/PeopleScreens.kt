@@ -27,12 +27,17 @@ fun PeoplePane(
     onInvite: () -> Unit,
 ) {
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
+    val me = state.profile?.displayName.orEmpty()
     Column(Modifier.fillMaxSize()) {
         FadeIn(40) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("Люди", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Контакты с вашего сервера. Тап — открыть личный чат.",
+                    if (me.isNotBlank()) {
+                        "Вы · $me. Контакты с вашего сервера. Тап — открыть личный чат."
+                    } else {
+                        "Контакты с вашего сервера. Тап — открыть личный чат."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -64,6 +64,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -78,6 +80,7 @@ import app.rope.android.ui.CallsPane
 import app.rope.android.ui.FadeIn
 import app.rope.android.ui.GlowButton
 import app.rope.android.ui.HomePane
+import app.rope.android.ui.InitialsAvatar
 import app.rope.android.ui.PeoplePane
 import app.rope.android.ui.QuietButton
 import app.rope.android.ui.RopeEmptyState
@@ -160,13 +163,7 @@ fun RopeScaffold(
                     }
                 },
                 title = {
-                    val me = state.profile?.displayName.orEmpty()
-                    val title = when {
-                        state.offline -> "Rope · офлайн"
-                        state.screen == Screen.Home -> "Rope"
-                        me.isNotBlank() -> "Rope · $me"
-                        else -> "Rope"
-                    }
+                    val title = NavRules.chromeTitle(state.screen, offline = state.offline)
                     val opensHome = NavRules.titleOpensHome(state.screen, signedIn)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -178,8 +175,10 @@ fun RopeScaffold(
                             breathe = state.screen == Screen.Home || state.screen == Screen.Start,
                             replayKey = selectedTab?.ordinal ?: state.screen.ordinal,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(title)
+                        if (title.isNotBlank()) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(title)
+                        }
                     }
                 },
                 actions = {
@@ -200,6 +199,22 @@ fun RopeScaffold(
                         }
                         IconButton(onClick = onStatus) {
                             Icon(Icons.Outlined.Dns, contentDescription = "Сервер")
+                        }
+                        if (NavRules.chromeShowsUserChip(true)) {
+                            val me = state.profile?.displayName.orEmpty()
+                            IconButton(
+                                onClick = { onTab(Screen.Home) },
+                                modifier = Modifier.semantics {
+                                    contentDescription = me.ifBlank { "Профиль" }
+                                },
+                            ) {
+                                InitialsAvatar(
+                                    title = me.ifBlank { "?" },
+                                    group = false,
+                                    online = !state.offline,
+                                    size = 32.dp,
+                                )
+                            }
                         }
                     }
                 },
@@ -405,8 +420,12 @@ private fun SettingsPane(state: UiState, onToggleTheme: () -> Unit, onHome: () -
     ) {
         FadeIn(40) { Text("О приложении", style = MaterialTheme.typography.titleLarge) }
         FadeIn(120) {
+            val me = state.profile?.displayName.orEmpty()
             SectionCard {
                 Text("Rope ${app.rope.android.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+                if (me.isNotBlank()) {
+                    Text("Вы · $me", style = MaterialTheme.typography.titleSmall)
+                }
                 Text(
                     "Приватный self-hosted мессенджер. Тема: ${if (state.theme == ThemeMode.DARK) "тёмная" else "светлая"}.",
                     style = MaterialTheme.typography.bodySmall,

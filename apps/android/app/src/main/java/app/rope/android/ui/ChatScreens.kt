@@ -85,6 +85,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
@@ -1108,25 +1109,36 @@ private fun ComposerHint(title: String, body: String, onCancel: () -> Unit) {
 }
 
 @Composable
-fun InitialsAvatar(title: String, group: Boolean, online: Boolean) {
+fun InitialsAvatar(
+    title: String,
+    group: Boolean,
+    online: Boolean,
+    size: Dp = 46.dp,
+) {
     val letter = title.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    val iconSize = if (size < 40.dp) 16.dp else 22.dp
+    val dot = if (size < 40.dp) 8.dp else 12.dp
     Box(contentAlignment = Alignment.BottomEnd) {
         Box(
             Modifier
-                .size(46.dp)
+                .size(size)
                 .clip(CircleShape)
                 .background(if (group) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
             if (group) {
-                Icon(Icons.Outlined.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp))
+                Icon(Icons.Outlined.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(iconSize))
             } else {
-                Text(letter, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    letter,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = if (size < 40.dp) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
+                )
             }
         }
         Box(
             Modifier
-                .size(12.dp)
+                .size(dot)
                 .clip(CircleShape)
                 .background(if (online) Color(0xFF43A047) else Color(0xFF9E9E9E)),
         )

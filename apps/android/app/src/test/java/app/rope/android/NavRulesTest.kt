@@ -127,6 +127,35 @@ class NavRulesTest {
     }
 
     @Test
+    fun chromeBarDropsWordmarkAndUsername() {
+        assertFalse(NavRules.chromeShowsWordmark())
+        assertFalse(NavRules.chromeShowsUsername())
+        assertTrue(NavRules.chromeShowsUserChip(true))
+        assertFalse(NavRules.chromeShowsUserChip(false))
+        assertTrue(NavRules.contentShowsOwnName(Screen.Home))
+        assertTrue(NavRules.contentShowsOwnName(Screen.People))
+        assertTrue(NavRules.contentShowsOwnName(Screen.Settings))
+        assertFalse(NavRules.contentShowsOwnName(Screen.Chats))
+        assertFalse(NavRules.contentShowsOwnName(Screen.Calls))
+        assertFalse(NavRules.contentShowsOwnName(Screen.Status))
+        assertEquals("", NavRules.chromeTitle(Screen.Home))
+        assertEquals("Чаты", NavRules.chromeTitle(Screen.Chats))
+        assertEquals("Группы", NavRules.chromeTitle(Screen.Groups))
+        assertEquals("Звонки", NavRules.chromeTitle(Screen.Calls))
+        assertEquals("Люди", NavRules.chromeTitle(Screen.People))
+        assertEquals("Статус", NavRules.chromeTitle(Screen.Status))
+        assertEquals("офлайн", NavRules.chromeTitle(Screen.Home, offline = true))
+        Screen.entries.forEach { screen ->
+            val title = NavRules.chromeTitle(screen)
+            assertFalse(screen.name, title.contains("Rope"))
+            assertFalse(screen.name, title.contains("·"))
+            val offline = NavRules.chromeTitle(screen, offline = true)
+            assertEquals("офлайн", offline)
+            assertFalse(screen.name, offline.contains("Rope"))
+        }
+    }
+
+    @Test
     fun messengerTabsExcludeHomeAndRefreshLists() {
         assertEquals(5, NavRules.tabs.size)
         assertEquals(
