@@ -29,6 +29,7 @@ class CallSignalingTest {
         val m = CallMachine()
         val start = m.localStart("c1", "bob", "alice")
         assertTrue(start.any { it is CallEffect.Send && it.event == CallSignal.RING })
+        assertTrue(start.contains(CallEffect.RingOut))
         assertEquals(CallPhase.RINGING_OUT, m.state.phase)
 
         val accept = m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
@@ -58,6 +59,7 @@ class CallSignalingTest {
         val m = CallMachine()
         val ring = m.onWire("alice", CallSignal.RING, "c1", "", "bob")
         assertTrue(ring.any { it is CallEffect.NotifyIncoming })
+        assertTrue(ring.contains(CallEffect.RingIn))
         assertEquals(CallPhase.RINGING_IN, m.state.phase)
 
         val accept = m.localAccept()

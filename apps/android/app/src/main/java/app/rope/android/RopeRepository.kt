@@ -19,6 +19,7 @@ import app.rope.android.data.CallPhase
 import app.rope.android.data.CallEffect
 import app.rope.android.data.CallMachine
 import app.rope.android.data.CallSignal
+import app.rope.android.data.CallToneRules
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
@@ -1912,11 +1913,16 @@ class RopeRepository(private val app: Application) {
                 CallEffect.FallbackDirect -> if (!callMachine.state.wssMedia) rtc?.allowDirect()
                 CallEffect.TearDown -> teardownCall()
                 CallEffect.RingOut -> {
-                    startTone(true)
+                    if (CallToneRules.shouldRingOutgoing(_state.value.notificationsMuted)) {
+                        startTone(true)
+                    }
                     audioMode(true)
                 }
                 CallEffect.RingIn -> {
-                    startTone(false)
+                    val chatMuted = store.chatPrefs(callMachine.state.peerDeviceId).muted
+                    if (CallToneRules.shouldRingIncoming(_state.value.notificationsMuted, chatMuted)) {
+                        startTone(false)
+                    }
                     audioMode(true)
                 }
                 CallEffect.StopTone -> stopTone()
@@ -1926,7 +1932,11 @@ class RopeRepository(private val app: Application) {
                     if (effect.outgoing) "Исходящий звонок" else "Входящий звонок",
                     effect.outgoing,
                 )
-                CallEffect.NotifyIncoming -> notifier.incomingCall(callPeerName)
+                CallEffect.NotifyIncoming -> {
+                    if (CallToneRules.shouldNotifyIncoming(_state.value.notificationsMuted)) {
+                        notifier.incomingCall(callPeerName)
+                    }
+                }
                 CallEffect.PrefetchIce -> prefetchIce()
                 CallEffect.WatchConnect -> watchConnecting()
                 CallEffect.WatchRing -> watchRing()

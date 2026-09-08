@@ -38,6 +38,7 @@ class SettingsRulesTest {
         val hint = SettingsRules.notificationsHint().lowercase()
         assertTrue(hint.contains("fcm"))
         assertTrue(hint.contains("нет") || hint.contains("google"))
+        assertTrue(hint.contains("звонок"))
         assertFalse(SettingsRules.aboutBody().contains("FCM"))
         assertTrue(SettingsRules.appearanceHint().contains("логотип"))
         assertTrue(SettingsRules.serverPinHint(true).contains("не видит"))
