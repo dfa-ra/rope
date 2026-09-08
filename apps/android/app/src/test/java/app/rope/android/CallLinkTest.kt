@@ -63,6 +63,23 @@ class CallLinkTest {
         assertTrue(CallLink.weCreateOffer("aaa", "bbb"))
         assertFalse(CallLink.weCreateOffer("bbb", "aaa"))
         assertFalse(CallLink.weCreateOffer("", "bbb"))
+        assertEquals("aaa-1", CallLink.canonicalCallId("aaa-1", "zzz-2"))
+        assertEquals("aaa-1", CallLink.canonicalCallId("zzz-2", "aaa-1"))
+        assertTrue(CallLink.matchesCall("theirs", "bob", "mine", "theirs", "bob"))
+        assertFalse(CallLink.matchesCall("other", "eve", "mine", "theirs", "bob"))
+    }
+
+    @Test
+    fun queuesAnswerAndIceUntilDescriptionsReady() {
+        assertTrue(CallLink.shouldQueueSignal(CallSignal.ANSWER, sessionReady = false, localOfferReady = false, remoteDescriptionReady = false))
+        assertTrue(CallLink.shouldQueueSignal(CallSignal.ANSWER, sessionReady = true, localOfferReady = false, remoteDescriptionReady = false))
+        assertFalse(CallLink.shouldQueueSignal(CallSignal.ANSWER, sessionReady = true, localOfferReady = true, remoteDescriptionReady = false))
+        assertTrue(CallLink.shouldQueueSignal(CallSignal.ICE, sessionReady = true, localOfferReady = true, remoteDescriptionReady = false))
+        assertFalse(CallLink.shouldQueueSignal(CallSignal.ICE, sessionReady = true, localOfferReady = true, remoteDescriptionReady = true))
+        assertFalse(CallLink.shouldQueueSignal(CallSignal.OFFER, sessionReady = true, localOfferReady = false, remoteDescriptionReady = false))
+        assertTrue(CallLink.ringTimedOut(45_000, CallPhase.RINGING_OUT))
+        assertFalse(CallLink.ringTimedOut(44_999, CallPhase.RINGING_IN))
+        assertEquals("нет ответа", CallLink.ringTimeoutDetail(true))
     }
 
     @Test
