@@ -43,7 +43,9 @@ import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
+import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
+import app.rope.android.data.CallLinkState
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VoicePlayer
@@ -841,8 +843,11 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startCall() {
-        val peer = _state.value.peer ?: return
-        callPeerName = peer.displayName
+        if (_state.value.group != null) return
+        val hint = _state.value.peer ?: return
+        if (ChatIds.isGroup(hint.deviceId)) return
+        val peer = resolveCallPeer(hint.deviceId, hint, fetch = true) ?: return
+        callPeerName = peer.displayName.ifBlank { hint.displayName }
         applyCallEffects(
             callMachine.localStart(
                 UUID.randomUUID().toString(),
@@ -1617,9 +1622,12 @@ class RopeRepository(private val app: Application) {
                 val code = obj.optString("code")
                 val msg = obj.optString("message")
                 val call = _state.value.call
-                if (call != null && (code == "not_found" || msg.contains("offline", ignoreCase = true))) {
+                val ringingOut = call != null &&
+                    call.phase == CallPhase.RINGING_OUT &&
+                    call.link != CallLinkState.FAILED
+                if (ringingOut && (code == "not_found" || msg.contains("offline", ignoreCase = true))) {
                     applyCallEffects(callMachine.onRingSendFailed())
-                } else {
+                } else if (call == null || call.phase != CallPhase.ACTIVE) {
                     _state.value = _state.value.copy(error = msg)
                 }
             }
@@ -1792,11 +1800,14 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun handleCallEvent(obj: JSONObject) {
-        val from = JsonIds.optional(obj.optString("from")).orEmpty()
+        val from = PeerIds.normalize(obj.optString("from"))
         val event = CallSignal.parseEvent(obj.optString("event")).orEmpty()
         val callId = JsonIds.optional(obj.optString("call_id")).orEmpty()
         if (from.isBlank() || callId.isBlank() || event.isBlank()) return
-        val name = _state.value.devices.find { it.deviceId == from }?.displayName ?: from.take(8)
+        val resolved = resolveCallPeer(from, _state.value.peer)
+        val name = resolved?.displayName
+            ?: _state.value.devices.find { PeerIds.same(it.deviceId, from) }?.displayName
+            ?: from.take(8)
         if (name.isNotBlank()) callPeerName = name
         applyCallEffects(
             callMachine.onWire(from, event, callId, obj.opt("payload"), identity?.deviceId().orEmpty()),
@@ -1865,10 +1876,12 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun dispatchCall(callId: String, peerId: String, event: String, payload: String): Boolean {
-        val sent = sendCall(callId, peerId, event, payload)
-        val peer = _state.value.devices.find { it.deviceId == peerId }
-            ?: _state.value.peer?.takeIf { it.deviceId == peerId }
-        if (peer != null) sendCallEnvelope(peer, callId, event, payload)
+        val peer = resolveCallPeer(peerId, _state.value.peer)
+        val to = PeerIds.wireId(peer, peerId)
+        val sent = to.isNotBlank() && sendCall(callId, to, event, payload)
+        if (peer != null && peer.publicIdentity.isNotEmpty()) {
+            sendCallEnvelope(peer, callId, event, payload)
+        }
         return sent
     }
 
@@ -1924,11 +1937,13 @@ class RopeRepository(private val app: Application) {
                         val callId = callMachine.state.callId
                         val peerId = callMachine.state.peerDeviceId
                         if (callId.isBlank() || peerId.isBlank()) return@WebRtcSession
-                        val peer = _state.value.devices.find { it.deviceId == peerId }
-                            ?: _state.value.peer
-                            ?: return@WebRtcSession
-                        sendCall(callId, peer.deviceId, sig.kind, sig.toJson())
-                        sendCallEnvelope(peer, callId, sig.kind, sig.toJson())
+                        val peer = resolveCallPeer(peerId, _state.value.peer)
+                        val to = PeerIds.wireId(peer, peerId)
+                        if (to.isBlank()) return@WebRtcSession
+                        sendCall(callId, to, sig.kind, sig.toJson())
+                        if (peer != null && peer.publicIdentity.isNotEmpty()) {
+                            sendCallEnvelope(peer, callId, sig.kind, sig.toJson())
+                        }
                         if (sig.kind == CallSignal.OFFER) {
                             applyCallEffects(callMachine.onLocalOfferSent())
                         }
@@ -1998,15 +2013,37 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun sendCall(callId: String, to: String, event: String, payload: String): Boolean {
+        val dest = PeerIds.normalize(to)
+        if (dest.isBlank() || ChatIds.isGroup(to)) return false
         return socket?.send(
             JSONObject()
                 .put("type", "call")
                 .put("call_id", callId)
-                .put("to", to)
+                .put("to", dest)
                 .put("event", event)
                 .put("payload", payload)
                 .toString(),
         ) == true
+    }
+
+    private fun resolveCallPeer(
+        rawId: String,
+        hint: DirectoryDevice? = null,
+        fetch: Boolean = false,
+    ): DirectoryDevice? {
+        val found = PeerIds.resolve(_state.value.devices, hint, rawId, _state.value.onlineIds)
+        if (found != null || !fetch) return found
+        return runCatching {
+            val devices = api?.directory().orEmpty()
+            val online = _state.value.onlineIds
+            val mapped = devices
+                .filter { !PeerIds.same(it.deviceId, identity?.deviceId()) }
+                .map { it.copy(online = it.online || PeerIds.normalize(it.deviceId) in online) }
+            if (mapped.isNotEmpty()) {
+                _state.value = _state.value.copy(devices = mapped)
+            }
+            PeerIds.resolve(mapped, hint, rawId, online)
+        }.getOrNull()
     }
 
     private fun teardownCall() {
@@ -2064,15 +2101,20 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun findSender(senderId: String): DirectoryDevice? {
-        _state.value.devices.find { it.deviceId == senderId }?.let { return it }
+        PeerIds.findDevice(_state.value.devices, senderId)?.let { return it }
+        PeerIds.preferReachable(PeerIds.devicesForMember(_state.value.devices, senderId), _state.value.onlineIds)
+            ?.let { return it }
         return try {
             val devices = api?.directory().orEmpty()
             val online = _state.value.onlineIds
-            val mapped = devices.map { it.copy(online = it.online || it.deviceId in online) }
+            val mapped = devices.map {
+                it.copy(online = it.online || PeerIds.normalize(it.deviceId) in online)
+            }
             _state.value = _state.value.copy(
-                devices = mapped.filter { it.deviceId != identity?.deviceId() },
+                devices = mapped.filter { !PeerIds.same(it.deviceId, identity?.deviceId()) },
             )
-            mapped.find { it.deviceId == senderId }
+            PeerIds.findDevice(mapped, senderId)
+                ?: PeerIds.preferReachable(PeerIds.devicesForMember(mapped, senderId), online)
         } catch (_: Exception) {
             null
         }

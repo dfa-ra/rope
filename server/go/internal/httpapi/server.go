@@ -459,15 +459,15 @@ func (s *Server) revokeDevice(w http.ResponseWriter, _ *http.Request, a authed, 
 }
 
 type wsIn struct {
-	Type      string   `json:"type"`
-	Envelope  []byte   `json:"envelope"`
-	Envelopes [][]byte `json:"envelopes"`
-	MessageID string   `json:"message_id"`
-	GroupID   string   `json:"group_id"`
-	CallID    string   `json:"call_id"`
-	To        string   `json:"to"`
-	Event     string   `json:"event"`
-	Payload   string   `json:"payload"`
+	Type      string          `json:"type"`
+	Envelope  []byte          `json:"envelope"`
+	Envelopes [][]byte        `json:"envelopes"`
+	MessageID string          `json:"message_id"`
+	GroupID   string          `json:"group_id"`
+	CallID    string          `json:"call_id"`
+	To        string          `json:"to"`
+	Event     string          `json:"event"`
+	Payload   json.RawMessage `json:"payload"`
 }
 
 type wsOut struct {
@@ -628,21 +628,62 @@ func (s *Server) handleGroupSend(ctx context.Context, from *clientConn, groupID 
 }
 
 func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
-	if in.CallID == "" || in.To == "" {
+	if in.CallID == "" || strings.TrimSpace(in.To) == "" {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
 		return
 	}
-	if dest, ok := s.Hub.Get(strings.ToLower(in.To)); ok {
+	target := s.resolveCallTarget(in.To)
+	if dest, ok := s.Hub.Get(target); ok {
 		_ = dest.write(ctx, wsOut{
 			Type:    "call",
 			CallID:  in.CallID,
 			From:    from.id,
 			Event:   in.Event,
-			Payload: in.Payload,
+			Payload: decodeCallPayload(in.Payload),
 		})
 		return
 	}
 	_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "peer offline"})
+}
+
+// resolveCallTarget maps a WSS call `to` field to a live hub device.
+// Chat routes by envelope recipient (device hex). Calls used to miss when the
+// client sent a member_id or a stale device of a member who is online elsewhere.
+func (s *Server) resolveCallTarget(to string) string {
+	id := strings.ToLower(strings.TrimSpace(to))
+	if id == "" {
+		return ""
+	}
+	if _, ok := s.Hub.Get(id); ok {
+		return id
+	}
+	devs, err := s.Store.ListDevices()
+	if err != nil {
+		return id
+	}
+	for _, d := range devs {
+		if d.Revoked {
+			continue
+		}
+		if strings.ToLower(d.MemberID) != id {
+			continue
+		}
+		if _, ok := s.Hub.Get(d.ID); ok {
+			return d.ID
+		}
+	}
+	return id
+}
+
+func decodeCallPayload(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
 }
 
 func (s *Server) handleAck(ctx context.Context, from *clientConn, messageID string) {

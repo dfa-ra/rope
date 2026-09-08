@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,5 +137,66 @@ func TestCallRelayLiveAndOffline(t *testing.T) {
 	off := readSkipPresence(t, ctx, aliceWS)
 	if off.Type != "error" || off.Code != "not_found" {
 		t.Fatalf("offline call want not_found got %+v", off)
+	}
+}
+
+func TestCallRelayResolvesMemberIdAndObjectPayload(t *testing.T) {
+	s, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	devs, err := s.Store.ListDevices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bobMember string
+	for _, d := range devs {
+		if d.ID == bob.id {
+			bobMember = d.MemberID
+		}
+	}
+	if bobMember == "" {
+		t.Fatal("bob member_id missing")
+	}
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-mem", "to": bobMember, "event": "ring",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := readSkipPresence(t, ctx, bobWS)
+	if got.Type != "call" || got.Event != "ring" || got.From != alice.id || got.CallID != "c-mem" {
+		t.Fatalf("member_id call relay %+v", got)
+	}
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-obj", "to": bob.id, "event": "offer",
+		"payload": map[string]any{"kind": "offer", "sdp": "v=0"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	obj := readSkipPresence(t, ctx, bobWS)
+	if obj.Type != "call" || obj.Event != "offer" || !strings.Contains(obj.Payload, "v=0") {
+		t.Fatalf("object payload call %+v", obj)
 	}
 }
