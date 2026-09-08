@@ -1,7 +1,7 @@
 # Live company identity and mode.
 # Human + machine readable. Owned by State Lead; PO owns live-state content.
 # Prose operating model: AGENTS.md, docs/company.md (unverified session SoT, preserved).
-# As of: 2026-09-08. Mode MIGRATION — do not implement Rope from this file.
+# As of: 2026-09-08. Mode ADOPTED_EXISTING_WORKSPACE — product coding frozen until D-005 / CG-007.
 
 schema_version: 1
 as_of: "2026-09-08"
@@ -11,7 +11,7 @@ name: CryptoGalera
 product: Rope
 adopted_existing: true
 
-mode: MIGRATION
+mode: ADOPTED_EXISTING_WORKSPACE
 product_implementation: frozen
 canonical_documented_line: "main MVP 0.1.0"
 runtime_root: cryptogalera/

@@ -116,3 +116,15 @@ Decision:
 - Does **not** unfreeze Rope implementation.
 Consequences: New orchestration uses Context Packages and the task board. Fake “I sent this to Backend Lead” is a protocol violation.
 Alternatives considered: Replace `cryptogalera/` with only `.cryptogalera/` (rejected — preserve existing runtime). Start product coding because the protocol says “begin” (rejected — D-007 / MIGRATION still holds).
+
+---
+
+### D-009: Adopt existing workspace (do not restart)
+
+Date: 2026-09-08
+Status: accepted
+Decider: Product Owner (user: CRYPTOGALERA — ADOPT EXISTING WORKSPACE)
+Context: User ordered observe → inventory → reconstruct → install control layer → continue from current standing. Forbade delete/rewrite/reset. D-005 remains a user trunk choice.
+Decision: Treat this checkout as ADOPTED_EXISTING_WORKSPACE. Refresh `.cryptogalera/` from code evidence. Install a small `.cursor/agents/` set. Record baseline tests. Convert in-tree unfinished work (Settings stub, revoke UI) to BACKLOG tasks, not new products. Do not merge Stage-2. Do not unfreeze coding.
+Consequences: Company memory must list CONFIRMED vs INFERRED vs UNKNOWN. Reconstructed stack decisions stay labeled reconstructed. Next product implementation still needs D-005 or explicit CG-007.
+Alternatives considered: Rebuild Rope under CryptoGalera (rejected). Promote v0.2.15 as part of adoption (rejected — D-005).

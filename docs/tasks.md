@@ -1,6 +1,6 @@
 # Tasks
 
-Current work queue. One task → one accountable owner. Do not start work that is not on this list unless the Product Owner adds it.
+Current work queue. Canonical live board: [`.cryptogalera/TASK_BOARD.md`](../.cryptogalera/TASK_BOARD.md). One task → one accountable owner.
 
 Status: `doing` · `blocked` · `queued` · `done`
 

@@ -9,3 +9,6 @@ PO-owned. Only current risks.
 | R-003 | Agent sprawl (~38 overlapping product agents historically) | medium | RUNTIME.md spawn rules; Workers never spawn; CG-003 freeze |
 | R-004 | Session SoT vs runtime drift (`docs/product.md` vs MIGRATION freeze) | medium | Cursor rule + `.cryptogalera/COMPANY_STATE.md` win for mode |
 | R-005 | Unverified session docs treated as installed law | low | Labeled unverified; preserved; constitution + RUNTIME are runtime law |
+| R-006 | Architecture.md says Room; code is SQLiteOpenHelper | low | CG-014 docs fix; do not rewrite store |
+| R-007 | Android unit tests not run in this cloud env (no SDK) | medium | CI android job is the baseline; do not claim local gradle green |
+| R-008 | jniLibs not in tree; debug APK needs native build | medium | `scripts/build-android-native.sh`; release.yml |

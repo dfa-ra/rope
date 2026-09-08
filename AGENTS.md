@@ -7,7 +7,8 @@ Cursor cloud agents and humans working this repository must follow this file. Th
 Company process is the **runtime** at [cryptogalera/README.md](cryptogalera/README.md) and [cryptogalera/CONSTITUTION.md](cryptogalera/CONSTITUTION.md). Live state: `cryptogalera/state/` (State Lead). Cursor enforcement: `.cursor/rules/cryptogalera.mdc`.
 
 - Spawn / task / report protocol: [cryptogalera/RUNTIME.md](cryptogalera/RUNTIME.md).
-- Company memory: `.cryptogalera/` (PO-only edits: `COMPANY_STATE`, `TASK_BOARD`, `DECISIONS`; optional `RISKS`).
+- Company memory: `.cryptogalera/` (PO-only edits: `COMPANY_STATE`, `TASK_BOARD`, `DECISIONS`; optional `RISKS`, `ARCHITECTURE`).
+- Reusable Cursor roles: `.cursor/agents/` (engineering-lead, researcher, implementation-worker, verification-engineer, security-reviewer). Not a department per microtask.
 - Task IDs: `CG-XXX`.
 
 Mode is **MIGRATION**: product implementation is frozen (D-007). Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` until the PO unfreezes. D-005 remains user-only. The documents below are unverified session SoT — preserve them; do not revert.
