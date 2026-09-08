@@ -6,10 +6,58 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestLiveCoturnAllocateIfConfigured(t *testing.T) {
+	addr := os.Getenv("ROPE_LIVE_TURN")
+	secret := os.Getenv("ROPE_LIVE_TURN_SECRET")
+	if addr == "" || secret == "" {
+		t.Skip("set ROPE_LIVE_TURN and ROPE_LIVE_TURN_SECRET to hit a real coturn")
+	}
+	user := TurnUsername(time.Now(), time.Hour)
+	pass := TurnCredential(secret, user)
+	res, err := turnAllocate("udp", addr, user, pass, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK {
+		t.Fatalf("allocate: %+v", res)
+	}
+	if e := relayedAddressError(res.RelayedIP); e != "" {
+		t.Fatal(e)
+	}
+	bad, err := turnAllocate("udp", addr, user, "not-the-secret", 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.OK || !strings.Contains(bad.Error, "HMAC 401") {
+		t.Fatalf("wrong HMAC should 401: %+v", bad)
+	}
+}
+
+func TestLiveCoturnPrivateRelayRejected(t *testing.T) {
+	addr := os.Getenv("ROPE_LIVE_TURN")
+	secret := os.Getenv("ROPE_LIVE_TURN_SECRET")
+	if addr == "" || secret == "" || os.Getenv("ROPE_LIVE_TURN_EXPECT_PRIVATE") != "1" {
+		t.Skip("set ROPE_LIVE_TURN_EXPECT_PRIVATE=1 for a coturn without external-ip")
+	}
+	user := TurnUsername(time.Now(), time.Hour)
+	pass := TurnCredential(secret, user)
+	res, err := turnAllocate("udp", addr, user, pass, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK {
+		t.Fatalf("HMAC/allocate should succeed, address check is separate: %+v", res)
+	}
+	if e := relayedAddressError(res.RelayedIP); e == "" {
+		t.Fatalf("expected private relayed address, got %s", res.RelayedIP)
+	}
+}
 
 func TestStunRoundTripBindingAndAllocate(t *testing.T) {
 	ln, err := net.ListenPacket("udp", "127.0.0.1:0")

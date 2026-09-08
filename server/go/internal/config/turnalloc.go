@@ -149,67 +149,62 @@ func relayedAddressError(ip string) string {
 }
 
 func turnAllocate(network, addr, username, password string, timeout time.Duration) (AllocResult, error) {
-	var tid [12]byte
-	if _, err := rand.Read(tid[:]); err != nil {
+	d := net.Dialer{Timeout: timeout}
+	conn, err := d.Dial(network, addr)
+	if err != nil {
 		return AllocResult{}, err
 	}
-	first := encodeStun(turnAllocReq, tid, []stunAttr{
-		{Type: attrReqTransport, Val: []byte{17, 0, 0, 0}},
-		{Type: attrLifetime, Val: uint32Bytes(30)},
-		{Type: attrSoftware, Val: []byte("rope-turn-check")},
-	}, nil, true)
+	defer conn.Close()
 
-	raw, err := stunRoundTrip(network, addr, first, timeout)
-	if err != nil {
-		return AllocResult{}, err
+	realm, nonce := "", ""
+	var lastCode int
+	var lastPhrase string
+	for attempt := 0; attempt < 4; attempt++ {
+		var tid [12]byte
+		if _, err := rand.Read(tid[:]); err != nil {
+			return AllocResult{}, err
+		}
+		attrs := []stunAttr{
+			{Type: attrReqTransport, Val: []byte{17, 0, 0, 0}},
+			{Type: attrLifetime, Val: uint32Bytes(30)},
+		}
+		var key []byte
+		if nonce != "" {
+			if realm == "" {
+				realm = "rope"
+			}
+			attrs = append(attrs,
+				stunAttr{Type: attrUsername, Val: []byte(username)},
+				stunAttr{Type: attrRealm, Val: []byte(realm)},
+				stunAttr{Type: attrNonce, Val: []byte(nonce)},
+			)
+			key = longTermKey(username, realm, password)
+		}
+		req := encodeStun(turnAllocReq, tid, attrs, key, true)
+		raw, err := stunRoundTripConn(conn, network, req, timeout)
+		if err != nil {
+			return AllocResult{}, err
+		}
+		msg, err := parseStun(raw)
+		if err != nil {
+			return AllocResult{}, err
+		}
+		if msg.Type == turnAllocOK {
+			return allocFromSuccess(msg, network), nil
+		}
+		code, phrase, nextRealm, nextNonce := stunError(msg)
+		lastCode, lastPhrase = code, phrase
+		if (code == errUnauthorized || code == errStaleNonce) && nextNonce != "" {
+			realm, nonce = nextRealm, nextNonce
+			continue
+		}
+		break
 	}
-	msg, err := parseStun(raw)
-	if err != nil {
-		return AllocResult{}, err
-	}
-	if msg.Type == turnAllocOK {
-		return allocFromSuccess(msg, network), nil
-	}
-	code, _, realm, nonce := stunError(msg)
-	if code != errUnauthorized && code != errStaleNonce {
-		return AllocResult{Error: fmt.Sprintf("ALLOCATE %d", code)}, nil
-	}
-	if realm == "" {
-		realm = "rope"
-	}
-	if nonce == "" {
-		return AllocResult{Error: "ALLOCATE 401 без nonce — coturn не в режиме use-auth-secret"}, nil
-	}
-
-	if _, err := rand.Read(tid[:]); err != nil {
-		return AllocResult{}, err
-	}
-	key := longTermKey(username, realm, password)
-	authed := encodeStun(turnAllocReq, tid, []stunAttr{
-		{Type: attrReqTransport, Val: []byte{17, 0, 0, 0}},
-		{Type: attrLifetime, Val: uint32Bytes(30)},
-		{Type: attrUsername, Val: []byte(username)},
-		{Type: attrRealm, Val: []byte(realm)},
-		{Type: attrNonce, Val: []byte(nonce)},
-		{Type: attrSoftware, Val: []byte("rope-turn-check")},
-	}, key, true)
-
-	raw, err = stunRoundTrip(network, addr, authed, timeout)
-	if err != nil {
-		return AllocResult{}, err
-	}
-	msg, err = parseStun(raw)
-	if err != nil {
-		return AllocResult{}, err
-	}
-	if msg.Type == turnAllocOK {
-		return allocFromSuccess(msg, network), nil
-	}
-	code, phrase, _, _ := stunError(msg)
+	phrase := lastPhrase
 	if phrase == "" {
-		phrase = fmt.Sprintf("ALLOCATE %d", code)
+		phrase = fmt.Sprintf("ALLOCATE %d", lastCode)
 	}
-	switch code {
+	switch lastCode {
 	case 401:
 		phrase = "HMAC 401 — turn_secret не совпадает с static-auth-secret"
 	case 438:
@@ -218,6 +213,9 @@ func turnAllocate(network, addr, username, password string, timeout time.Duratio
 		phrase = "ALLOCATE 403 — coturn отказал в выделении (relay-ip/квота)"
 	case 508:
 		phrase = "ALLOCATE 508 — нет свободного relay-порта (49152–49311)"
+	}
+	if lastCode == 0 {
+		phrase = "ALLOCATE без ответа coturn"
 	}
 	return AllocResult{Error: phrase}, nil
 }
@@ -386,6 +384,10 @@ func stunRoundTrip(network, addr string, req []byte, timeout time.Duration) ([]b
 		return nil, err
 	}
 	defer conn.Close()
+	return stunRoundTripConn(conn, network, req, timeout)
+}
+
+func stunRoundTripConn(conn net.Conn, network string, req []byte, timeout time.Duration) ([]byte, error) {
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	if _, err := conn.Write(req); err != nil {
 		return nil, err
