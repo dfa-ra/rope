@@ -67,7 +67,8 @@ fun StatusPane(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val owner = RoleRules.isOwner(state.profile?.role)
+        val role = state.profile?.role
+        val owner = RoleRules.canShowAdminCards(role)
         val cards = if (owner) state.admin?.cards.orEmpty() else emptyList()
         if (cards.isEmpty()) {
             SectionCard {
@@ -77,6 +78,17 @@ fun StatusPane(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (!owner) {
+                    val host = state.profile?.host.orEmpty()
+                    val port = state.profile?.port ?: 0
+                    if (host.isNotBlank()) {
+                        Text(
+                            "Подключение: $host:$port",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         } else {
             cards.forEachIndexed { index, card ->
@@ -115,7 +127,7 @@ fun StatusPane(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        if (owner) {
+        if (RoleRules.canUpgradeCore(role)) {
             Text("Обновить ядро на VPS", style = MaterialTheme.typography.titleMedium)
             Text(
                 if (host.isNotBlank()) {

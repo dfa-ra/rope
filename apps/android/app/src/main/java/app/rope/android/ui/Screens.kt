@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
 import app.rope.android.provision.ProvisionForm
@@ -164,8 +165,10 @@ fun RopeScaffold(
                         )
                     }
                     if (signedIn) {
-                        IconButton(onClick = onInvite) {
-                            Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                        if (RoleRules.canShowInviteQr(state.profile?.role)) {
+                            IconButton(onClick = onInvite) {
+                                Icon(Icons.Outlined.QrCode, contentDescription = "Пригласить")
+                            }
                         }
                         IconButton(onClick = onStatus) {
                             Icon(Icons.Outlined.Dns, contentDescription = "Сервер")
@@ -250,7 +253,11 @@ fun RopeScaffold(
                             onMessageQuery = onMessageQuery,
                             onConsumedScroll = onConsumedScroll,
                         )
-                        Screen.Invite -> InvitePane(state.inviteUrl.orEmpty()) { onGo(Screen.Home) }
+                        Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
+                            InvitePane(state.inviteUrl.orEmpty()) { onGo(Screen.Home) }
+                        } else {
+                            HomePane(state, onGo, onStatus, onInvite)
+                        }
                         Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onGo(Screen.Home) }
                         Screen.Settings -> SettingsPane(state, onToggleTheme) { onGo(Screen.Home) }
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onGo(Screen.Groups) }

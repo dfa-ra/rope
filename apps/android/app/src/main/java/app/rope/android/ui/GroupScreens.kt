@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.RoleRules
 
 @Composable
 fun NewGroupPane(
@@ -60,7 +61,7 @@ fun NewGroupPane(
             if (state.devices.isEmpty()) {
                 SectionCard {
                     Text(
-                        "Пока некого добавить. Пригласите человека QR-кодом.",
+                        RoleRules.groupNoMembersHint(state.profile?.role),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

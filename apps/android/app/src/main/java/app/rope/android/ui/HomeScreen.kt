@@ -35,7 +35,9 @@ fun HomePane(
     val me = state.profile?.displayName.orEmpty()
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val groups = NavRules.groupsOf(state.conversations)
-    val owner = RoleRules.isOwner(state.profile?.role)
+    val role = state.profile?.role
+    val owner = RoleRules.isOwner(role)
+    val canInvite = RoleRules.canShowInviteQr(role)
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -103,15 +105,17 @@ fun HomePane(
                     )
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            FadeIn(520) {
-                SectionCard(onClick = onInvite) {
-                    Text("Пригласить по QR", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Одноразовая ссылка. Гость входит без прав owner.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            if (canInvite) {
+                Spacer(Modifier.height(10.dp))
+                FadeIn(520) {
+                    SectionCard(onClick = onInvite) {
+                        Text("Пригласить по QR", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Одноразовая ссылка. Гость входит без прав owner.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -120,7 +124,7 @@ fun HomePane(
                     Text("Люди на сервере", style = MaterialTheme.typography.titleMedium)
                     Text(
                         if (people.isEmpty()) {
-                            "Пока никого. Покажите QR — человек появится здесь."
+                            RoleRules.peopleEmptyHint(role)
                         } else {
                             people.take(4).joinToString(" · ") { it.displayName.ifBlank { it.deviceId.take(6) } }
                         },

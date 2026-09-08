@@ -191,6 +191,9 @@ class RopeRepository(private val app: Application) {
     }
 
     fun go(screen: Screen) {
+        if (screen == Screen.Invite && !RoleRules.canInvite(_state.value.profile?.role)) {
+            return
+        }
         if (screen != Screen.Chat) persistOpenDraft()
         _state.value = _state.value.copy(screen = screen, error = null, viewingImage = null)
         if (NavRules.refreshesLists(screen)) refreshConversations()
@@ -796,6 +799,9 @@ class RopeRepository(private val app: Application) {
     }
 
     fun createInvite() {
+        if (!RoleRules.canInvite(_state.value.profile?.role)) {
+            return
+        }
         scope.launch {
             busy(true)
             try {
@@ -829,16 +835,16 @@ class RopeRepository(private val app: Application) {
                 else -> "Доступно приложение ${latest.version}. Поставится поверх, без удаления."
             }
             val st = runCatching { api?.status() }.getOrNull()
-            val owner = RoleRules.isOwner(_state.value.profile?.role)
+            val owner = RoleRules.canShowAdminCards(_state.value.profile?.role)
             _state.value = _state.value.copy(
                 screen = Screen.Status,
                 error = null,
                 statusText = when {
-                    st != null -> st.toString(2)
+                    st != null && owner -> st.toString(2)
                     owner -> "ядро сейчас недоступно"
                     else -> "Вы гость. Приложение обновляется здесь, без прав owner."
                 },
-                admin = st?.let { AdminSnapshot.from(it) },
+                admin = if (owner) st?.let { AdminSnapshot.from(it) } else null,
                 updateText = updateHint,
                 appUpdateAvailable = newer,
                 latestAppVersion = latest?.version.orEmpty(),

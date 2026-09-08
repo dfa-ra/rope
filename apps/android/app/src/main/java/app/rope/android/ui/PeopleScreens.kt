@@ -18,6 +18,7 @@ import app.rope.android.NavRules
 import app.rope.android.UiState
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
+import app.rope.android.data.RoleRules
 
 @Composable
 fun PeoplePane(
@@ -38,11 +39,12 @@ fun PeoplePane(
             }
         }
         if (people.isEmpty()) {
+            val role = state.profile?.role
             RopeEmptyState(
                 title = "Пока никого нет",
-                body = "Пригласите человека QR-кодом. Он появится в этом списке.",
-                actionLabel = "Пригласить",
-                onAction = onInvite,
+                body = RoleRules.peopleEmptyHint(role),
+                actionLabel = RoleRules.peopleInviteAction(role),
+                onAction = if (RoleRules.canInvite(role)) onInvite else null,
             )
         } else {
             LazyColumn(

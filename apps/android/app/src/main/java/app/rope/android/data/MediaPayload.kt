@@ -214,15 +214,6 @@ object TextBody {
     }
 }
 
-object RoleRules {
-    fun isOwner(role: String?): Boolean = role.equals("owner", ignoreCase = true)
-
-    fun canUpgradeCore(role: String?): Boolean = isOwner(role)
-
-    @Suppress("UNUSED_PARAMETER")
-    fun canUpdateApp(role: String?): Boolean = true
-}
-
 object ChatActions {
     fun canReply(msg: ChatMessage): Boolean = !msg.deleted
 
