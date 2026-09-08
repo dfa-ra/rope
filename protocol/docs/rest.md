@@ -20,24 +20,26 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 
 ### `GET /health`
 
-`ok` is the Go process. `turn_running` is a live TCP probe of coturn on `turn_port` (listening), not “`turn_secret` exists”.
+`ok` is the Go process. `turn_running` is a live TCP probe of coturn on `turn_port` (listening), not “`turn_secret` exists”. `turn_allocate_ok` is a local TURN Allocate (HMAC + XOR-RELAYED-ADDRESS). Listening without a successful Allocate still yields `turn_running: true` and a `turn_error` (typical: wrong `relay-ip` / `external-ip`, HMAC mismatch). `/health` `ok` stays true so the installer can finish.
 
 ```json
 {
   "ok": true,
   "turn_running": true,
+  "turn_allocate_ok": true,
+  "turn_relayed_ip": "203.0.113.9",
   "turns_listening": true,
   "turn_port": 3478,
   "turns_port": 443
 }
 ```
 
-Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running": false }`. A down coturn does **not** make `/health` fail — installer still greps `"ok"`.
+Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running": false, "turn_allocate_ok": false }`. A down coturn does **not** make `/health` fail — installer still greps `"ok"`.
 
 ### `GET /version`
 
 ```json
-{ "server": "0.2.13", "protocol": 1 }
+{ "server": "0.2.15", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -54,9 +56,9 @@ Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running":
       "urls": [
         "turns:vps.example:443?transport=tcp",
         "turns:vps.example:443",
+        "turn:vps.example:3478?transport=tcp",
         "turn:vps.example:3478?transport=udp",
-        "turn:vps.example:3478",
-        "turn:vps.example:3478?transport=tcp"
+        "turn:vps.example:3478"
       ],
       "username": "<unix_expiry>:rope",
       "credential": "base64(HMAC-SHA1(turn_secret, username))",
@@ -128,7 +130,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.2.13",
+  "version": "0.2.15",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,
@@ -144,11 +146,13 @@ Public identities of non-revoked devices so clients can encrypt.
   "turns_port": 5349,
   "ice_enabled": true,
   "turn_running": true,
+  "turn_allocate_ok": true,
   "turns_listening": true,
   "turn_listen": "0.0.0.0",
   "turn_external_ip": "203.0.113.9",
+  "turn_relayed_ip": "203.0.113.9",
   "turn_error": "",
-  "ice_urls": ["turns:203.0.113.9:5349?transport=tcp", "turn:203.0.113.9:3478?transport=udp"]
+  "ice_urls": ["turns:203.0.113.9:5349?transport=tcp", "turn:203.0.113.9:3478?transport=tcp"]
 }
 ```
 

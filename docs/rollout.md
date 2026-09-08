@@ -55,7 +55,7 @@ SSH-пароль/ключ остаются только на телефоне о
 ## Обновление ядра на уже живом VPS
 
 На том же экране **Сервер**: SSH-пароль или ключ и кнопка **Обновить ядро**. Не открывает «Создать сервер».  
-Installer заменяет `/opt/rope/bin/rope-server`, ставит/обновляет coturn на том же IP, **всегда** пишет `public_host` / `turn_secret` / порты в config (секрет создаётся, если его не было — даже если coturn не поднялся), слушает `0.0.0.0`, ставит `external-ip` (публичный IPv4) и `relay-ip` (локальный IPv4), по умолчанию `no-ipv6`, **перезапускает и rope, и coturn**, **не** трогает `data.db` и TLS. Если 443 занят (Caddy/nginx) или не биндится — TURNS на 5349, иначе только UDP/TCP 3478; в `GET /v1/info` попадают только реально выбранные порты. HMAC TTL по умолчанию 7 суток (`expiry:rope`). Повторный запуск на уже установленном Rope — то же самое (не пишет «на сервере уже есть Rope»). После обновления ядра звонки берут ICE с `GET /v1/info`. `GET /health` поле `turn_running` и карточка TURN в приложении показывают, **слушает** ли coturn, а не только «секрет прописан».
+Installer заменяет `/opt/rope/bin/rope-server`, ставит/обновляет coturn на том же IP, **всегда** пишет `public_host` / `turn_secret` / порты в config (секрет создаётся, если его не было — даже если coturn не поднялся), слушает `0.0.0.0`, ставит `external-ip` (публичный IPv4, в том числе определённый с VPS, если `--host` частный или DNS не резолвится) и `relay-ip` **только** на локальный адрес интерфейса (не на 1:1 NAT), по умолчанию `no-ipv6`, открывает 3478/tcp+udp, 443/5349/tcp и 49152–49311/udp в ufw **и** iptables/firewalld, **перезапускает и rope, и coturn**, **не** трогает `data.db` и TLS. Если 443 занят (Caddy/nginx) или не биндится — TURNS на 5349, иначе только UDP/TCP 3478; в `GET /v1/info` попадают только реально выбранные порты плюс `public_ip` (дубликаты URL). HMAC TTL по умолчанию 7 суток (`expiry:rope`). Повторный запуск на уже установленном Rope — то же самое (не пишет «на сервере уже есть Rope»). После обновления ядра звонки берут ICE с `GET /v1/info`. `GET /health` поля `turn_running` / `turn_allocate_ok` и карточка TURN показывают, **слушает** ли coturn и проходит ли ALLOCATE, а не только «секрет прописан».
 
 Проверка на VPS после обновления ядра:
 
@@ -63,10 +63,11 @@ Installer заменяет `/opt/rope/bin/rope-server`, ставит/обнов�
 ss -lntup | grep -E '3478|443|5349'
 curl -k https://127.0.0.1:8443/health
 curl -k https://127.0.0.1:8443/v1/info
+sudo /opt/rope/bin/rope-server --config /etc/rope/config.json --turn-check
 journalctl -u coturn -u rope --no-pager -n 80
 ```
 
-`/health` должен содержать `"ok":true` и `"turn_running":true`. `/v1/info` — `ice_servers` с `turn:…3478?transport=udp`, `turn:…3478?transport=tcp` и `turns:…` только на том порту, который слушает coturn (443 или 5349). `username` вида `<unix_expiry>:rope`.
+`/health` должен содержать `"ok":true`, `"turn_running":true` и `"turn_allocate_ok":true` (не только listen). `/v1/info` — `ice_servers` с `turn:…3478?transport=tcp`, `turn:…3478?transport=udp` и `turns:…` только на том порту, который слушает coturn (443 или 5349). `username` вида `<unix_expiry>:rope`. `turn_relayed_ip` не должен быть 10.x / 127.0.0.1.
 
 Если телефон-owner потерян или приложение поставили заново: **Создать сервер → Дополнительно → Стереть старое и стать владельцем** (`--reinstall`). Стирает `data.db` и `config.json`, ставит новое ядро, выдаёт новый `SETUP_TOKEN`. TLS остаётся.
 

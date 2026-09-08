@@ -34,7 +34,10 @@ data class AdminSnapshot(
             val running = obj.optBoolean("turn_running")
             val configured = obj.optBoolean("ice_enabled")
             val err = obj.optString("turn_error").trim()
+            val allocKnown = obj.has("turn_allocate_ok")
+            val alloc = obj.optBoolean("turn_allocate_ok")
             return when {
+                running && allocKnown && !alloc -> "allocate нет"
                 running -> "работает"
                 configured && err.isNotEmpty() -> "не слушает"
                 configured -> "настроен"
@@ -48,6 +51,7 @@ data class AdminSnapshot(
             val turns = obj.opt("turns_port")?.toString().orEmpty()
             val listen = obj.optString("turn_listen").trim()
             val ext = obj.optString("turn_external_ip").trim()
+            val relayed = obj.optString("turn_relayed_ip").trim()
             if (err.isNotEmpty() && !obj.optBoolean("turn_running")) {
                 return err
             }
@@ -55,6 +59,7 @@ data class AdminSnapshot(
             if (turns.isNotEmpty() && turns != "0") bits += "turns $turns"
             if (listen.isNotEmpty()) bits += "listen $listen"
             if (ext.isNotEmpty()) bits += ext.removePrefix("external-ip=")
+            if (relayed.isNotEmpty()) bits += "relay $relayed"
             if (err.isNotEmpty()) bits += err
             return if (bits.isEmpty()) {
                 "обновите ядро, чтобы звонки шли через сервер"
