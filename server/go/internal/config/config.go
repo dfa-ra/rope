@@ -30,6 +30,8 @@ type Config struct {
 	AllowHTTP           bool   `json:"allow_http"`
 	FingerprintOverride string `json:"fingerprint,omitempty"`
 	PublicHost          string `json:"public_host,omitempty"`
+	PublicIP            string `json:"public_ip,omitempty"`
+	TLSHostname         string `json:"tls_hostname,omitempty"`
 	TurnSecret          string `json:"turn_secret,omitempty"`
 	TurnPort            int    `json:"turn_port,omitempty"`
 	TurnsPort           int    `json:"turns_port,omitempty"`

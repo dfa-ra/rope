@@ -173,6 +173,9 @@ func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
 	if ice := s.Cfg.IceServers(time.Now()); len(ice) > 0 {
 		out["ice_servers"] = ice
 	}
+	if ip := s.Cfg.PublicIPv4(); ip != "" {
+		out["public_ip"] = ip
+	}
 	writeJSON(w, 200, out)
 }
 

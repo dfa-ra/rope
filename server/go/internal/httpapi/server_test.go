@@ -174,6 +174,7 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	defer resp.Body.Close()
 	var info struct {
 		ServerID   string             `json:"server_id"`
+		PublicIP   string             `json:"public_ip"`
 		IceServers []config.IceServer `json:"ice_servers"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -201,6 +202,12 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	}
 	if !strings.HasSuffix(turn.Username, ":rope") {
 		t.Fatalf("HMAC user %s", turn.Username)
+	}
+	if turn.Hostname != "" {
+		t.Fatalf("IP-only host must omit hostname: %q", turn.Hostname)
+	}
+	if info.PublicIP != "198.51.100.20" {
+		t.Fatalf("public_ip %q", info.PublicIP)
 	}
 	resp, err = http.Get(hs.URL + "/health")
 	if err != nil {
@@ -242,6 +249,63 @@ func TestInfoAdvertises5349Not443(t *testing.T) {
 	}
 	if !strings.Contains(joined, "turns:198.51.100.20:5349?transport=tcp") {
 		t.Fatalf("missing 5349: %s", joined)
+	}
+}
+
+func TestInfoHostnameAndPublicIP(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "vps.example"
+		cfg.PublicIP = "203.0.113.9"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err := http.Get(hs.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		PublicIP   string             `json:"public_ip"`
+		IceServers []config.IceServer `json:"ice_servers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if info.PublicIP != "203.0.113.9" {
+		t.Fatalf("public_ip %q", info.PublicIP)
+	}
+	if len(info.IceServers) != 2 {
+		t.Fatalf("%+v", info.IceServers)
+	}
+	if info.IceServers[0].Hostname != "vps.example" || info.IceServers[1].Hostname != "vps.example" {
+		t.Fatalf("hostname %+v", info.IceServers)
+	}
+	if !strings.Contains(strings.Join(info.IceServers[1].URLs, " "), "turns:vps.example:443") {
+		t.Fatalf("urls %+v", info.IceServers[1].URLs)
+	}
+
+	_, hsIP, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "203.0.113.9"
+		cfg.TLSHostname = "rope.example"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	resp, err = http.Get(hsIP.URL + "/v1/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	if info.PublicIP != "203.0.113.9" {
+		t.Fatalf("ip-host public_ip %q", info.PublicIP)
+	}
+	if info.IceServers[1].Hostname != "rope.example" {
+		t.Fatalf("SNI when urls are IP: %+v", info.IceServers[1])
+	}
+	if !strings.Contains(info.IceServers[1].URLs[0], "203.0.113.9") {
+		t.Fatalf("urls stay on IP: %v", info.IceServers[1].URLs)
 	}
 }
 

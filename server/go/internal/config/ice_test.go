@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,65 @@ func TestIceServersShapeAndHMAC(t *testing.T) {
 	}
 	if !strings.HasSuffix(turn.Username, ":rope") {
 		t.Fatalf("use-auth-secret user must be expiry:rope, got %s", turn.Username)
+	}
+	if turn.Hostname != "" || ice[0].Hostname != "" {
+		t.Fatalf("raw IP public_host has no SNI hostname: %+v", ice)
+	}
+	if cfg.PublicIPv4() != "203.0.113.9" {
+		t.Fatalf("public_ip %s", cfg.PublicIPv4())
+	}
+}
+
+func TestIceHostnameAndPublicIPForClientSNI(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "vps.example"
+	cfg.PublicIP = "203.0.113.9"
+	cfg.TurnSecret = "shared-hmac"
+	cfg.TurnsPort = 443
+	if cfg.IceHostname() != "vps.example" {
+		t.Fatalf("sni %s", cfg.IceHostname())
+	}
+	if cfg.PublicIPv4() != "203.0.113.9" {
+		t.Fatalf("ip %s", cfg.PublicIPv4())
+	}
+	ice := cfg.IceServers(time.Unix(1_700_000_000, 0))
+	if ice[0].Hostname != "vps.example" || ice[1].Hostname != "vps.example" {
+		t.Fatalf("hostname on both ICE entries: %+v", ice)
+	}
+	joined := strings.Join(ice[1].URLs, " ")
+	if !strings.Contains(joined, "turns:vps.example:443?transport=tcp") {
+		t.Fatalf("urls still use DNS host: %s", joined)
+	}
+
+	cfg.PublicHost = "198.51.100.20"
+	cfg.TLSHostname = "rope.example"
+	cfg.PublicIP = ""
+	if cfg.IceHostname() != "rope.example" {
+		t.Fatalf("tls_hostname %s", cfg.IceHostname())
+	}
+	ice = cfg.IceServers(time.Now())
+	if ice[1].Hostname != "rope.example" {
+		t.Fatalf("SNI when URL is raw IP: %+v", ice[1])
+	}
+	if !strings.Contains(ice[1].URLs[0], "198.51.100.20") {
+		t.Fatalf("urls stay on IP: %v", ice[1].URLs)
+	}
+	if cfg.PublicIPv4() != "198.51.100.20" {
+		t.Fatalf("ip from public_host %s", cfg.PublicIPv4())
+	}
+}
+
+func TestPublicIPv4FromTurnStatusFile(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Default()
+	cfg.PublicHost = "vps.example"
+	cfg.TurnSecret = "s"
+	cfg.TLSCert = dir + "/tls/cert.pem"
+	if err := os.WriteFile(dir+"/turn-status.json", []byte(`{"ok":true,"external_ip":"203.0.113.9/10.0.0.4"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.PublicIPv4(); got != "203.0.113.9" {
+		t.Fatalf("got %s", got)
 	}
 }
 

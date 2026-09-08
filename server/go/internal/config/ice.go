@@ -18,6 +18,8 @@ type IceServer struct {
 	URLs       []string `json:"urls"`
 	Username   string   `json:"username,omitempty"`
 	Credential string   `json:"credential,omitempty"`
+	// Hostname is the DNS/SNI name for self-signed TURNS when urls use a raw IP.
+	Hostname string `json:"hostname,omitempty"`
 }
 
 func (c Config) EffectiveTurnPort() int {
@@ -58,6 +60,48 @@ func IceHost(host string) string {
 	return h
 }
 
+func IsIPv4(s string) bool {
+	ip := net.ParseIP(strings.TrimSpace(s))
+	return ip != nil && ip.To4() != nil
+}
+
+func isIPLiteral(s string) bool {
+	h := strings.TrimSpace(s)
+	h = strings.TrimPrefix(h, "[")
+	h = strings.TrimSuffix(h, "]")
+	return net.ParseIP(h) != nil
+}
+
+// IceHostname is the DNS/SNI name for TURNS when ICE URLs use a raw IP.
+// Empty when public_host is itself an IP and tls_hostname is unset.
+func (c Config) IceHostname() string {
+	if h := strings.TrimSpace(c.TLSHostname); h != "" && !isIPLiteral(h) {
+		return h
+	}
+	if h := strings.TrimSpace(c.PublicHost); h != "" && !isIPLiteral(h) {
+		return h
+	}
+	return ""
+}
+
+// PublicIPv4 is advertised as top-level public_ip so the client can
+// duplicate turn/turns URLs when public_host DNS does not resolve.
+func (c Config) PublicIPv4() string {
+	if IsIPv4(c.PublicIP) {
+		return strings.TrimSpace(c.PublicIP)
+	}
+	if IsIPv4(c.PublicHost) {
+		return strings.TrimSpace(c.PublicHost)
+	}
+	if file, ok := ReadFileTurnStatus(c.TurnStatusFile()); ok {
+		ext := strings.TrimSpace(strings.Split(file.ExternalIP, "/")[0])
+		if IsIPv4(ext) {
+			return ext
+		}
+	}
+	return ""
+}
+
 func TurnUsername(now time.Time, ttl time.Duration) string {
 	return fmt.Sprintf("%d:rope", now.Add(ttl).Unix())
 }
@@ -86,10 +130,11 @@ func (c Config) IceServers(now time.Time) []IceServer {
 		return nil
 	}
 	host := IceHost(c.PublicHost)
+	sni := c.IceHostname()
 	turnPort := c.EffectiveTurnPort()
 	user := TurnUsername(now, c.IceTTL())
 	cred := TurnCredential(c.TurnSecret, user)
-	stun := IceServer{URLs: []string{fmt.Sprintf("stun:%s:%d", host, turnPort)}}
+	stun := IceServer{URLs: []string{fmt.Sprintf("stun:%s:%d", host, turnPort)}, Hostname: sni}
 	turnURLs := []string{
 		fmt.Sprintf("turn:%s:%d?transport=udp", host, turnPort),
 		fmt.Sprintf("turn:%s:%d", host, turnPort),
@@ -103,7 +148,7 @@ func (c Config) IceServers(now time.Time) []IceServer {
 	}
 	return []IceServer{
 		stun,
-		{URLs: turnURLs, Username: user, Credential: cred},
+		{URLs: turnURLs, Username: user, Credential: cred, Hostname: sni},
 	}
 }
 

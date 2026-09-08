@@ -191,9 +191,11 @@ json_get() {
 
 write_ice_config() {
   local path="$1" host="$2" secret="$3" turn_port="$4" turns_port="$5"
-  python3 - "$path" "$host" "$secret" "$turn_port" "$turns_port" "$TURN_TTL" <<'PY'
+  local pub
+  pub="$(resolve_ipv4 "$host")"
+  python3 - "$path" "$host" "$secret" "$turn_port" "$turns_port" "$TURN_TTL" "$pub" <<'PY'
 import json, sys
-path, host, secret, turn_port, turns_port, ttl = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
+path, host, secret, turn_port, turns_port, ttl, pub = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]), sys.argv[7]
 with open(path) as f:
     cfg = json.load(f)
 cfg["public_host"] = host
@@ -202,6 +204,8 @@ if not cfg.get("turn_secret"):
 cfg["turn_port"] = turn_port
 cfg["turns_port"] = turns_port
 cfg["turn_ttl_seconds"] = ttl
+if pub:
+    cfg["public_ip"] = pub
 with open(path, "w") as f:
     json.dump(cfg, f, indent=2)
     f.write("\n")
@@ -298,6 +302,7 @@ if [[ ! -f "$ETC_DIR/config.json" ]]; then
   "allow_http": false,
   "fingerprint": "${FINGERPRINT}",
   "public_host": "${HOST}",
+  "public_ip": "$(resolve_ipv4 "$HOST")",
   "turn_secret": "${TURN_SECRET}",
   "turn_port": ${TURN_PORT},
   "turns_port": ${TURNS_PORT},
