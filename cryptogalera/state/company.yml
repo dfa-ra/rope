@@ -1,0 +1,49 @@
+# Live company identity and mode.
+# Human + machine readable. Owned by State Lead; PO owns live-state content.
+# Prose operating model: AGENTS.md, docs/company.md (unverified session SoT, preserved).
+# As of: 2026-09-08. Mode MIGRATION — do not implement Rope from this file.
+
+schema_version: 1
+as_of: "2026-09-08"
+updated_by: state_lead
+
+name: CryptoGalera
+product: Rope
+adopted_existing: true
+
+mode: MIGRATION
+product_implementation: frozen
+canonical_documented_line: "main MVP 0.1.0"
+runtime_root: cryptogalera/
+
+# Why product trees stay frozen.
+freeze_reason: >-
+  User ordered migration not implementation; D-005 unanswered.
+
+# Session markdown adopted as unverified source of truth. Do not revert.
+sot_docs:
+  - AGENTS.md
+  - docs/company.md
+  - docs/organization.md
+  - docs/product.md
+  - docs/architecture.md
+  - docs/threat-model.md
+  - docs/decisions.md
+  - docs/tasks.md
+  - docs/api.md
+  - docs/dev-setup.md
+  - README.md  # includes "Working here (CryptoGalera)" pointer
+
+# Runtime law (Process Lead). Not session SoT; wrapping the existing project.
+runtime_docs:
+  - cryptogalera/CONSTITUTION.md
+  - cryptogalera/README.md
+  - cryptogalera/rules/persistent.md
+  - cryptogalera/rules/file-ownership.md
+  - .cursor/rules/cryptogalera.mdc
+
+notes:
+  - CryptoGalera is the company process; Rope is the product already in this repo.
+  - Workspace checkout is MVP Rope 0.1.0 (Kotlin → Rust UniFFI → Go+SQLite).
+  - Stage-2 (tags v0.1.0–v0.2.15, PRs #2/#3, ~30 cursor/* branches) exists off this working tree; preserve, do not merge.
+  - D-007: runtime wraps Rope; product remains frozen until PO unfreezes (T-007) and D-005 if trunk would change.

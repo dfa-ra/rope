@@ -1,0 +1,16 @@
+---
+description: CryptoGalera runtime wrapping Rope — migration mode, no product implementation
+alwaysApply: true
+---
+
+Read `cryptogalera/README.md` and `AGENTS.md` before any other work. Then `cryptogalera/CONSTITUTION.md`.
+
+Mode is **MIGRATION**. Do not implement, merge, or redesign Rope. Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` unless the Product Owner unfreezes and the task is on `docs/tasks.md`.
+
+Do not revert, delete, or reset user/session work. Session docs are unverified SoT — preserve them.
+
+Spawn agents only per `AGENTS.md` (specialization, disjoint parallelism, independent review, context isolation). One task, one owner. No overlapping paths.
+
+**D-005 is user-only.** Do not merge Stage-2 (PRs #2/#3, tags v0.2.x) or treat it as scope until the user accepts D-005.
+
+Crypto stays in Rust. Kotlin never implements crypto.

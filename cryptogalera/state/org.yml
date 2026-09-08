@@ -1,0 +1,95 @@
+# Org seating NOW (mode MIGRATION). Roles are functions, not headcount.
+# Hierarchy: User → PO → Lead → Specialist (2–3 company levels). No extra departments.
+# Chart prose: docs/organization.md (unverified session SoT, preserved).
+# As of: 2026-09-08.
+
+schema_version: 1
+as_of: "2026-09-08"
+updated_by: state_lead
+mode: MIGRATION
+
+seated:
+  - id: user
+    title: User
+    kind: human
+    reports_to: null
+    decides: product, business model, scope, fundamental requirements
+    seated: true
+    notes: Not a staffed layer. D-005 (trunk A/B/C) is user-only.
+
+  - id: founder_po
+    title: Founder / Product Owner
+    kind: executive_agent
+    reports_to: user
+    seated: true
+    this_run: true
+    agent_ref: po
+    decides: priorities, mode, what ships, what is out of scope
+    does: creates leads; integrator for T-006 runtime install; does not implement every department
+    notes: Current cloud run installing CryptoGalera around existing Rope.
+
+  - id: process_lead
+    title: Process Lead
+    kind: task_scoped_lead
+    reports_to: founder_po
+    seated: true
+    scope: T-006
+    agent_ref: process_lead
+    owns:
+      - cryptogalera/CONSTITUTION.md
+      - cryptogalera/README.md
+      - cryptogalera/rules/**
+      - .cursor/rules/**
+    does_not_own:
+      - cryptogalera/state/**
+    notes: Constitution and persistent rules. Released when T-006 completes unless PO extends.
+
+  - id: state_lead
+    title: State Lead
+    kind: task_scoped_lead
+    reports_to: founder_po
+    seated: true
+    scope: T-006
+    agent_ref: state_lead
+    owns:
+      - cryptogalera/state/**
+    does: persist live org/task/agent/inventory/decision facts in YAML
+    notes: This role. Does not implement Rope. Does not edit docs/ or product trees.
+
+roles_exist_not_seated:
+  - id: engineering_lead
+    title: Engineering Lead
+    kind: standing_role
+    seated: false
+    reason: ROLE EXISTS, NOT SEATED for product work while frozen
+    default_integration_owner: true
+    would_own: apps/, core/, server/, deployment/, protocol/, scripts/, CI
+    notes: Do not staff for product implementation until T-007 unfreeze (and D-005 if trunk would change).
+
+  - id: qa_security
+    title: QA / Security
+    kind: standing_role
+    seated: false
+    reason: not seated unless independent review of runtime docs
+    same_person_as_engineering_lead_when_ordinary: true
+    independent_reviewer:
+      required_for: [crypto, auth, protocol, architecture, threat_model, data_migrations]
+      status: queued
+      agent_ref: independent_reviewer
+    notes: May be seated only for independent review of runtime docs; reviewer ≠ author.
+
+not_departments:
+  - Design  # only for a UI-shaped task; none in MIGRATION
+  - Research Lead  # only when unknowns dominate; none seated
+  - marketing
+  - growth
+  - platform
+  - data
+  - AI ops
+  - Engineering specialists (Android / Rust / Go)  # per-task; not standing while frozen
+
+rules:
+  - Org size matches the task, not a real-world org chart.
+  - One task has one accountable owner.
+  - Do not invent departments, fake employees, or parallel product workstreams.
+  - Do not restaff historical Stage-2 product agents.

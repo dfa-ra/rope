@@ -2,6 +2,12 @@
 
 Cursor cloud agents and humans working this repository must follow this file. The full operating model is [docs/company.md](docs/company.md). Org, ownership, and staffing: [docs/organization.md](docs/organization.md).
 
+## Runtime
+
+Company process is the **runtime** at [cryptogalera/README.md](cryptogalera/README.md) and [cryptogalera/CONSTITUTION.md](cryptogalera/CONSTITUTION.md). Live state: `cryptogalera/state/` (State Lead). Cursor enforcement: `.cursor/rules/cryptogalera.mdc`.
+
+Mode is **MIGRATION**: product implementation is frozen (D-007). Do not touch `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/` until the PO unfreezes. D-005 remains user-only. The documents below are unverified session SoT — preserve them; do not revert.
+
 ## Company
 
 CryptoGalera is a small tech company. Rope is the product. The company name is informal; the process is not.
@@ -80,11 +86,13 @@ RECOMMENDED NEXT ACTION:
 | [docs/architecture.md](docs/architecture.md) | System design |
 | [docs/decisions.md](docs/decisions.md) | Durable decisions (PO + Engineering Lead) |
 | [docs/tasks.md](docs/tasks.md) | Current work and owners (PO) |
+| [docs/api.md](docs/api.md) | Pointer to current-trunk `protocol/docs` |
 | [docs/threat-model.md](docs/threat-model.md) | Security claims and non-guarantees |
 | [docs/company.md](docs/company.md) | Operating model |
 | [docs/organization.md](docs/organization.md) | Org, ownership, staffing |
 | [docs/dev-setup.md](docs/dev-setup.md) | How to build and test |
 | [protocol/docs/](protocol/docs/) | Wire format, REST, WSS, invites |
+| [cryptogalera/README.md](cryptogalera/README.md) | Company runtime (mode, map) |
 
 Do not duplicate these in prompts. Do not invent a roadmap. If a prompt conflicts with `docs/product.md`, stop and escalate.
 
@@ -100,6 +108,9 @@ Do not duplicate these in prompts. Do not invent a roadmap. If a prompt conflict
 | Shared docs | `docs/**` | PO + Engineering Lead |
 | Bindings scripts | `scripts/**` | Engineering Lead (Android + Rust) |
 | CI | `.github/**`, `Makefile` | Engineering Lead |
+| Runtime law | `cryptogalera/CONSTITUTION.md`, `cryptogalera/README.md`, `cryptogalera/rules/**` | Process Lead |
+| Live state | `cryptogalera/state/**` | PO (content); State Lead (files) |
+| Cursor rules | `.cursor/rules/**` | Process Lead |
 
 Shared and protocol changes must be coordinated before coding. Do not edit another owner’s tree without the integration owner’s OK. Do not change `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, or CI unless that is the assigned task.
 

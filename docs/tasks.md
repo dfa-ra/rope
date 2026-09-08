@@ -8,11 +8,12 @@ Status: `doing` · `blocked` · `queued` · `done`
 
 ### T-001: Encode CryptoGalera operating model
 
-Status: doing
-Owner: Product Owner (this change)
+Status: done
+Owner: Product Owner
 Goal: Company OS in-repo so future agents follow one product, one trunk, and one owner per task.
 Deliverables: `AGENTS.md`, [company.md](company.md), [organization.md](organization.md), this file, [product.md](product.md), [decisions.md](decisions.md), README pointer.
-Definition of Done: Docs match repo reality (including the `main` vs `v0.2.x` split); no application-code changes; independent review of the docs.
+Definition of Done: Docs exist and match repo reality (including the `main` vs `v0.2.x` split); no application-code changes.
+Notes: Session docs exist, are **unverified**, and are **preserved** (D-007). Independent verification remains available as later review; do not revert them.
 Depends on: —
 
 ### T-002: User chooses the product trunk (D-005)
@@ -47,6 +48,24 @@ Status: queued
 Owner: Engineering Lead. Required reviewer: independent QA/Security (reports to PO; reviewer ≠ author).
 Goal: [threat-model.md](threat-model.md) and [protocol/docs](../protocol/docs) match the chosen trunk (TURN, objects, groups, call signaling — or explicitly remain out).
 Depends on: T-004
+
+### T-006: Install CryptoGalera runtime around Rope
+
+Status: done
+Owner: Product Owner (integrator). Workers: Process Lead (constitution, rules, Cursor rule, pointers); State Lead (`cryptogalera/state/*.yml`).
+Goal: Persist company operating law as a runtime layer wrapping existing Rope. Migration, not product implementation.
+Deliverables: `cryptogalera/README.md`, `cryptogalera/CONSTITUTION.md`, `cryptogalera/rules/*`, `.cursor/rules/cryptogalera.mdc`, `cryptogalera/state/*.yml`, surgical pointers in `AGENTS.md` / README / this file, [api.md](api.md).
+Definition of Done: Runtime exists; product trees untouched; no session docs deleted; mode MIGRATION documented; D-005 still user-only.
+Depends on: T-001, D-007
+Forbidden: implementing or redesigning Rope; creating a second API; merging Stage-2.
+
+### T-007: Unfreeze product implementation
+
+Status: queued
+Owner: Product Owner
+Goal: Resume product work only when the user says so, and only after D-005 if that work would change the trunk.
+Depends on: T-006
+Forbidden until then: seating Engineering Lead for product coding; merging Stage-2; implementing calls/groups/UI.
 
 ---
 

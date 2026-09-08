@@ -83,3 +83,20 @@ Context: ~30 `cursor/*` branches and dozens of cloud agents overlapped on calls,
 Decision: One task → one accountable owner → one branch. Nested supersets (PR #2 vs #3) are not two merge targets. New feature agents are frozen until D-005. Integration owner defaults to Engineering Lead. Reviewer ≠ author for crypto, auth, protocol, architecture.
 Consequences: Overlapping agents on the same paths are a process bug. Release bumps are not a substitute for merging to `main`.
 Alternatives considered: Continue slice-agents per screen (rejected — proven to fork the product).
+
+---
+
+### D-007: CryptoGalera runtime wraps Rope; product is frozen
+
+Date: 2026-09-08
+Status: accepted
+Decider: Product Owner (user: adopt existing project; migration not implementation)
+Context: The user sent the CryptoGalera constitution, then ordered a stop on autonomous product work, an inventory, and installation of runtime / persistent rules / company state / agent structure **around** the existing project. Session docs (`AGENTS.md`, `docs/company.md`, …) are unverified and must be preserved, not reverted.
+Decision:
+- Install a CryptoGalera **runtime** at `cryptogalera/` plus Cursor enforcement at `.cursor/rules/cryptogalera.mdc`.
+- Do **not** implement, merge, or redesign Rope product code in this phase.
+- Do **not** delete or reset existing work (including Stage-2 branches/PRs/tags and the unverified session docs).
+- Previous session markdown is **adopted as unverified SoT**, not treated as the runtime.
+- Product trunk remains D-001 / D-005 (user still must choose A/B/C before product implementation resumes).
+Consequences: Agents in this repo first read `cryptogalera/` state. Mode is `MIGRATION` until the PO sets it otherwise. Feature freeze (T-003) still holds.
+Alternatives considered: Replace Rope with a new CryptoGalera product (rejected). Delete session docs and start over (rejected — user forbade revert). Treat constitution prompt as a new product build (rejected).

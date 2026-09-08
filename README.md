@@ -60,12 +60,15 @@ iOS, calls, voice notes, files, groups, federation, web/desktop, polished Telegr
 
 Company operating model for humans and cloud agents:
 
+- [cryptogalera/README.md](cryptogalera/README.md) — company runtime wrapping Rope (MIGRATION)
+- [cryptogalera/CONSTITUTION.md](cryptogalera/CONSTITUTION.md) — operational constitution
 - [AGENTS.md](AGENTS.md) — rules agents must follow
 - [docs/company.md](docs/company.md) — roles, briefs, reviews, escalation
 - [docs/organization.md](docs/organization.md) — org chart, file ownership, how work is staffed
 - [docs/product.md](docs/product.md) — product goal, in/out of scope, canonical line
 - [docs/decisions.md](docs/decisions.md) — durable decisions
 - [docs/tasks.md](docs/tasks.md) — current work queue
+- [docs/api.md](docs/api.md) — API pointer (current-trunk protocol docs)
 
 ## License
 

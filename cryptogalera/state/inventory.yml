@@ -1,0 +1,179 @@
+# Frozen snapshot of migration-prep inventory (State Lead, 2026-09-08).
+# Facts about THIS workspace checkout. Stage-2 is recorded as off-tree, not as scope.
+# Do not treat this file as a license to implement product work.
+
+schema_version: 1
+as_of: "2026-09-08"
+updated_by: state_lead
+kind: migration_prep_inventory
+product: Rope
+android_version_name: "0.1.0"
+android_version_code: 1
+rust_crate: rope_core
+rust_version: "0.1.0"
+protocol_version: 1
+envelope: text_only  # ENVELOPE_TYPE_TEXT = 1 on this tree
+
+existed_before:
+  summary: MVP on main, no CryptoGalera runtime
+  main_sha: b6915c6efce328414d75f47be2f5d63ac47a3487
+  main_subject: "Merge pull request #1 from dfa-ra/cursor/rope-mvp-872f"
+  runtime: absent
+
+currently_in_workspace:
+  summary: MVP product layers plus unverified session docs; runtime wrapping in cryptogalera/ (Process Lead) and this state/ (State Lead).
+  layers:
+    - path: apps/android
+      role: Kotlin UI (Compose). Kotlin must not implement cryptography.
+    - path: core/rust
+      role: UniFFI security core (identity, envelope, auth, invite).
+    - path: server/go
+      role: Go + SQLite relay (REST, WSS, mailbox, invites, admin revoke).
+    - path: deployment
+      role: install.sh + systemd unit.
+    - path: protocol/docs
+      role: Wire format (envelope, REST, WSS, invite). Protocol v1.
+    - path: scripts
+      role: UniFFI Kotlin bindings and Android native .so builds.
+    - path: docs
+      role: Product, architecture, threat model, company, org, decisions, tasks, dev-setup.
+    - path: .github
+      role: CI and release workflows.
+  android_screens:
+    - Start
+    - Provision
+    - Join
+    - Chats
+    - Chat
+    - Invite
+    - Status
+    - Settings  # stub
+  go_routes:
+    - GET /health
+    - GET /version
+    - GET /v1/info
+    - POST /v1/bootstrap
+    - GET /v1/directory
+    - POST /v1/invites
+    - GET /v1/admin/status
+    - POST /v1/admin/revoke-member
+    - POST /v1/admin/revoke-device
+    - GET /v1/ws
+  rust_modules:
+    - auth
+    - envelope
+    - error
+    - identity
+    - invite
+    - util
+  session_docs:
+    - AGENTS.md
+    - docs/company.md
+    - docs/organization.md
+    - docs/product.md
+    - docs/decisions.md
+    - docs/tasks.md
+    - README.md  # Working here (CryptoGalera) section
+
+completed:
+  summary: MVP capabilities on this tree (canonical documented line = main 0.1.0).
+  items:
+    - Android app: provision VPS via SSH, join via QR / rope://join, 1-to-1 E2EE text chat, invite, server status.
+    - Owner bootstrap with one-time setup_token.
+    - Invite URL binds server_id + TLS fingerprint.
+    - Device identity and envelope crypto in Rust (Ed25519 + X25519, HKDF-SHA256, XChaCha20-Poly1305).
+    - Go relay: REST + WSS mailbox, members/devices, single-use invites, owner revoke APIs.
+    - Self-signed TLS + client fingerprint pin; debug --allow-http for local/emulator.
+    - Local message history on device; opaque mailbox blobs on server.
+    - Idempotent VPS installer + systemd unit.
+    - GitHub Actions CI and tagged-release plumbing from the chosen trunk (not used to promote Stage-2).
+
+partial:
+  summary: Present on this tree but incomplete relative to a full product surface.
+  items:
+    - Settings screen is a stub (Text "Settings" only).
+    - Owner revoke APIs exist; no revoke UI on Android.
+    - No Signal/X3DH ratchet / forward secrecy (D-003).
+    - No groups, calls, media, iOS, web, or landing in this working tree.
+
+unverified:
+  - Session docs (AGENTS.md, docs/company.md, organization.md, product.md, decisions.md, tasks.md, README Working here). Adopted, not independently re-verified in this inventory.
+  - Stage-2 off this working tree: tags v0.1.0–v0.2.15, PRs #2 and #3, ~30 cursor/* branches. Latest published tag v0.2.15 tip 9694e80. Preserve; do not merge.
+
+session_changes:
+  commit: 0b6e632305d4386a9749176d169d6c4fc1da017d
+  subject: Add CryptoGalera operating model and product source of truth.
+  kind: docs_only
+  files:
+    - AGENTS.md
+    - README.md
+    - docs/company.md
+    - docs/decisions.md
+    - docs/organization.md
+    - docs/product.md
+    - docs/tasks.md
+
+architecture:
+  paragraph: >-
+    Rope is a private self-hosted 1-to-1 E2EE messenger. The Android app
+    provisions a personal VPS (or joins an existing one), then devices on that
+    server exchange encrypted text. Kotlin owns UI, Room history, HTTPS/WSS,
+    QR, and SSH provision UI; it calls UniFFI and never implements crypto or
+    touches raw private keys. The Rust core (rope_core) holds device identity,
+    keys, envelope encrypt/sign/verify, and invite + TLS-fingerprint checks.
+    The Go relay authenticates devices, stores public identities and invite
+    token hashes, and routes opaque mailbox blobs over REST and WSS; it never
+    sees plaintext. Deployment is an idempotent installer plus systemd and
+    self-signed TLS. Application protocol version is 1; this tree carries text
+    envelopes only.
+  components:
+    - layer: Android UI
+      location: apps/android
+      responsibility: Screens, lifecycle, HTTPS/WSS, QR, SSH provisioning, local history
+    - layer: Rust core
+      location: core/rust
+      responsibility: Device identity, keys, envelope, encrypt/sign/verify, invite + fingerprint checks, UniFFI
+    - layer: Go relay
+      location: server/go
+      responsibility: REST + WSS, members/devices, invites, encrypted mailbox, health
+    - layer: Deployment
+      location: deployment/
+      responsibility: Idempotent VPS install, systemd, TLS material
+    - layer: Protocol
+      location: protocol/docs
+      responsibility: Wire format (envelope, REST, WSS, invite); version 1
+    - layer: CryptoGalera runtime
+      location: cryptogalera/
+      responsibility: Company process wrapping Rope (not product code)
+
+git:
+  branch: cursor/cryptogalera-ops-ae19
+  head: 0b6e632305d4386a9749176d169d6c4fc1da017d
+  main: b6915c6efce328414d75f47be2f5d63ac47a3487
+  open_prs:
+    - number: 2
+      title: WebRTC audio calls over existing Rope signaling
+      head: cursor/rope-mvp-872f
+      state: OPEN
+    - number: 3
+      title: Telegram-like chrome and instant tabs
+      head: cursor/telegram-ergonomics-872f
+      state: OPEN
+    - number: 4
+      title: CryptoGalera operating model and product source of truth
+      head: cursor/cryptogalera-ops-ae19
+      state: OPEN
+  dirty: false  # last inventory of committed product/docs tree at HEAD 0b6e632
+  dirty_note: >-
+    D-007 prose may be uncommitted in docs/decisions.md (PO is editing that
+    file; State Lead does not edit docs/). Product trees were not dirty at
+    this inventory.
+  stage2:
+    in_this_working_tree: false
+    tags: v0.1.0–v0.2.15
+    v0_2_15_tip: 9694e80
+    forked_from: 30ebaa757d5889936f5cac87ff7b20a7a38b16b8
+    main_is_strict_ancestor_of_v0_2_15: false
+    preserve: true
+    merge: forbidden_until_D-005
+    cursor_branches_approx: 30

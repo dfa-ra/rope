@@ -1,0 +1,133 @@
+# Machine-readable durable decisions D-001..D-007.
+# Prose (context, alternatives, full consequences): docs/decisions.md
+# Status: accepted | proposed | superseded
+# State Lead does not edit docs/. PO may still be adding D-007 prose there.
+# As of: 2026-09-08.
+
+schema_version: 1
+as_of: "2026-09-08"
+updated_by: state_lead
+prose: docs/decisions.md
+
+decisions:
+  - id: D-001
+    title: Documented product is main MVP
+    date: "2026-09-08"
+    status: accepted
+    decider: founder_po
+    pointer: docs/decisions.md#d-001-documented-product-is-main-mvp
+    summary: >-
+      Until the user picks a trunk in D-005, the product contract is main +
+      docs/product.md + README. Off-main features are not in scope. A Release
+      tag does not change scope.
+    operational: true
+    user_may_override_via: D-005
+    consequences:
+      - New work branches from main.
+      - No catch-up-to-0.2.15 agents.
+      - Existing Stage-2 PRs stay open but are not the staffing baseline.
+
+  - id: D-002
+    title: Client / core / relay stack
+    date: "2026-09-08"
+    status: accepted
+    decider: engineering_confirmed_by_po
+    pointer: docs/decisions.md#d-002-client--core--relay-stack
+    summary: >-
+      Android Kotlin UI; cryptography only in Rust via UniFFI (rope_core);
+      Go relay with SQLite; no FCM — the personal VPS is the transport.
+    already_shipped_on: main
+    consequences:
+      - iOS/web/desktop are new products, not ports of the Kotlin layer.
+      - Kotlin must not touch raw private keys.
+
+  - id: D-003
+    title: Crypto primitives and no ratchet in v1
+    date: "2026-09-08"
+    status: accepted
+    decider: engineering_and_po
+    pointer: docs/decisions.md#d-003-crypto-primitives-and-no-ratchet-in-v1
+    summary: >-
+      Device keys Ed25519 (sign) + X25519 (ECDH). Envelope HKDF-SHA256,
+      XChaCha20-Poly1305. No X3DH / Double Ratchet / MLS. Compromise of a
+      device ECDH key exposes future messages to that device until keys are
+      rotated (out of scope).
+    matches: docs/threat-model.md
+    consequences:
+      - Do not add a ratchet because it is industry-standard; that is a user-visible threat-model change.
+
+  - id: D-004
+    title: Trust boundaries and transport
+    date: "2026-09-08"
+    status: accepted
+    decider: engineering_and_po
+    pointer: docs/decisions.md#d-004-trust-boundaries-and-transport
+    summary: >-
+      Server stores public identities, invite token hashes, and opaque mailbox
+      blobs. Self-signed TLS plus client fingerprint pinning; invite URL binds
+      server_id + fingerprint. Auth header Rope <device_id>.<unix_seconds>.<sig>.
+      One organizer VPS; owner bootstrap via one-time setup_token.
+    consequences:
+      - Ignoring a fingerprint mismatch is a user action the product must not paper over.
+      - Public CA is not required for MVP.
+      - SSH credentials exist only for provisioning.
+
+  - id: D-005
+    title: Stage-2 parallel line (escalated)
+    date: "2026-09-08"
+    status: proposed
+    decider: user
+    pointer: docs/decisions.md#d-005-stage-2-parallel-line-escalated
+    summary: >-
+      User must pick one trunk. Nested PRs: PR #2 ⊂ PR #3 ⊂ tag v0.2.15.
+      Tag v0.2.15 (9694e80) is ahead of PR #3. main is not a strict ancestor
+      of v0.2.15 (forked from pre-merge 30ebaa7).
+    options:
+      A:
+        meaning: Promote Stage-2; fast-forward main to a named tip (likely v0.2.15); rewrite product/protocol/threat model; close nested PRs
+      B:
+        meaning: Keep MVP 1-to-1 text; treat v0.2.x as experimental; stop side-branch tags; close or freeze Stage-2 PRs
+      C:
+        meaning: User names which Stage-2 pieces may merge, with a new threat model and protocol bump
+    recommendation: Do not spawn more Stage-2 agents until answered. Until then D-001 holds.
+    task: T-002
+
+  - id: D-006
+    title: Merge policy and agent freeze
+    date: "2026-09-08"
+    status: accepted
+    decider: founder_po
+    pointer: docs/decisions.md#d-006-merge-policy-and-agent-freeze
+    summary: >-
+      One task → one accountable owner → one branch. Nested supersets
+      (PR #2 vs #3) are not two merge targets. New feature agents are frozen
+      until D-005. Integration owner defaults to Engineering Lead. Reviewer ≠
+      author for crypto, auth, protocol, architecture.
+    task: T-003
+    consequences:
+      - Overlapping agents on the same paths are a process bug.
+      - Release bumps are not a substitute for merging to main.
+
+  - id: D-007
+    title: CryptoGalera runtime wraps Rope; product is frozen
+    date: "2026-09-08"
+    status: accepted
+    decider: founder_po
+    pointer: docs/decisions.md#d-007-cryptogalera-runtime-wraps-rope-product-is-frozen
+    prose_note: >-
+      PO is editing D-007 in docs/decisions.md (may be uncommitted). State Lead
+      does not edit docs/. Machine-readable decision is accepted as stated by PO.
+    summary: >-
+      Install CryptoGalera runtime at cryptogalera/ plus Cursor enforcement at
+      .cursor/rules/cryptogalera.mdc. Do not implement, merge, or redesign Rope
+      product code in this phase. Do not delete or reset existing work (including
+      Stage-2 branches/PRs/tags and unverified session docs). Previous session
+      markdown is adopted as unverified SoT, not treated as the runtime. Product
+      trunk remains D-001 / D-005.
+    mode: MIGRATION
+    task: T-006
+    consequences:
+      - Agents in this repo first read cryptogalera/ state.
+      - Mode is MIGRATION until the PO sets it otherwise.
+      - Feature freeze (T-003) still holds.
+      - Unfreeze is T-007 (user must say so; D-005 if implementation would change trunk).

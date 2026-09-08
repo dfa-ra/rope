@@ -1,0 +1,92 @@
+# Agent registry for THIS adoption (CryptoGalera wrapping existing Rope).
+# Do NOT list historical Rope product agents as active. Do not restaff them.
+# As of: 2026-09-08.
+
+schema_version: 1
+as_of: "2026-09-08"
+updated_by: state_lead
+registry: cryptogalera_adoption
+repo: github.com/dfa-ra/rope
+branch: cursor/cryptogalera-ops-ae19
+
+active:
+  - id: po
+    role: Founder / Product Owner
+    name: Cryptogalera операционная модель
+    bc_id: bc-c39be4e9-52bd-4646-8845-a708a2b9ae19
+    url: https://cursor.com/agents/bc-c39be4e9-52bd-4646-8845-a708a2b9ae19
+    status: running
+    this_run: true  # parent / current executive run
+    task: T-006
+    reports_to: user
+    notes: Integrator. Runtime wrap landed. Product remains frozen until T-007.
+
+  - id: process_lead
+    role: Process Lead
+    name: Install constitution and rules
+    bc_id: bc-261abc9a-3f5d-5474-987b-c824f8bdaf4d
+    url: https://cursor.com/agents/bc-261abc9a-3f5d-5474-987b-c824f8bdaf4d
+    status: idle
+    spawned_for: T-006
+    reports_to: po
+    owns:
+      - cryptogalera/CONSTITUTION.md
+      - cryptogalera/rules/
+      - .cursor/rules/cryptogalera.mdc
+    notes: Task-scoped. T-006 files landed. Released after independent review.
+
+  - id: state_lead
+    role: State Lead
+    name: Write company state files
+    bc_id: bc-070cc6a2-2269-595d-ae84-52865a1927aa
+    url: https://cursor.com/agents/bc-070cc6a2-2269-595d-ae84-52865a1927aa
+    status: idle
+    spawned_for: T-006
+    reports_to: po
+    owns:
+      - cryptogalera/state/
+    notes: YAML landed. Released after independent review.
+
+queued: []
+
+completed_this_phase:
+  - id: independent_reviewer
+    role: Independent Reviewer
+    name: Review runtime install
+    bc_id: bc-476dd494-3460-5411-9df2-60da75336fc4
+    status: completed
+    reports_to: po
+    reviewer_neq_author: true
+    purpose: Independent review of runtime docs. Approved-with-nits; nits applied.
+    notes: Reviewer ≠ author of constitution/state. Product trees untouched.
+
+# Prior session (T-001) agents — idle, not restaffed as product workers.
+prior_session_idle:
+  - id: t001_docs
+    name: Write company operating docs
+    bc_id: bc-ea5365cd-7007-5a2c-bced-7f7b53d73d8d
+    status: idle
+    notes: Produced unverified session SoT (AGENTS.md, docs/*). Preserve; do not revert.
+  - id: t001_research
+    name: Research Rope product state
+    bc_id: bc-6f11af23-8889-5734-81cf-18a61158591c
+    status: idle
+  - id: t001_review
+    name: Review operating-model docs
+    bc_id: bc-4b497937-4049-5f0b-b6a3-c1cf3bdce773
+    status: idle
+    notes: Prior docs review. Not the queued Independent Reviewer for T-006 runtime.
+
+# Historical Stage-2 / product-slice agents (calls, TURN, Telegram UI, landing, release bumps).
+agent_sprawl_history: true
+historical_product_agents:
+  active: false
+  approx_count: 38
+  status: inactive
+  do_not_restaff: true
+  do_not_list_as_active: true
+  notes: >-
+    Overlapping cursor/* workers on calls, ICE/TURN, UI chrome, landing, and
+    0.2.x release tags. Organizational failure recorded in D-006 / T-003.
+    Names and bc_ids stay out of the active registry. Do not spawn catch-up
+    agents until T-007 and D-005 (if trunk would change).

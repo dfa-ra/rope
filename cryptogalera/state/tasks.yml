@@ -1,0 +1,112 @@
+# Live task queue. One task → one accountable owner.
+# Session file docs/tasks.md is unverified SoT and is preserved (State Lead does not edit it).
+# This YAML is the live machine-readable queue for the adoption.
+# Status: doing | blocked | queued | done
+# As of: 2026-09-08.
+
+schema_version: 1
+as_of: "2026-09-08"
+updated_by: state_lead
+prose: docs/tasks.md  # unverified; live statuses below may be ahead of that file
+
+tasks:
+  - id: T-001
+    title: Encode CryptoGalera operating model
+    status: done
+    owner: founder_po
+    goal: Company OS in-repo so future agents follow one product, one trunk, and one owner per task.
+    deliverables:
+      - AGENTS.md
+      - docs/company.md
+      - docs/organization.md
+      - docs/product.md
+      - docs/decisions.md
+      - docs/tasks.md
+      - README.md Working here pointer
+    notes: >-
+      Unverified session docs preserved (not reverted). Independent review of
+      those docs was requested in the original DoD; docs remain labeled unverified.
+      Live state and docs/tasks.md both mark T-001 done and T-006 doing.
+
+  - id: T-002
+    title: User chooses the product trunk (D-005)
+    status: blocked
+    blocked_on: user
+    owner: user
+    recorder: founder_po
+    goal: End the dual-product split (main MVP vs Stage-2).
+    options:
+      - A: Promote Stage-2 to main (likely tag v0.2.15)
+      - B: Keep MVP; freeze/close Stage-2
+      - C: Named subset with new threat model and protocol bump
+    definition_of_done: D-005 status accepted with a single chosen option
+    depends_on: [T-001]
+
+  - id: T-003
+    title: Feature-agent freeze
+    status: doing
+    in_force: true
+    owner: founder_po
+    constraint: every lead refuses Stage-2 work that is not on this list
+    goal: No new overlapping agents for calls, TURN/ICE, Telegram UI, groups, landing, or version bumps until T-002.
+    depends_on: [D-006]
+    notes: Freeze remains in force during MIGRATION.
+
+  - id: T-004
+    title: Single integration after T-002
+    status: queued
+    owner: engineering_lead  # named when T-002 is answered; role not seated while frozen
+    goal: One branch to main matching the chosen trunk; close nested PRs #2 / #3; sync README, protocol, threat model.
+    depends_on: [T-002]
+    forbidden_until_then:
+      - merging PR #2 or #3 to make progress
+      - tagging from a side branch
+      - spawning UI and call agents in parallel
+
+  - id: T-005
+    title: Threat model + protocol sync (after trunk)
+    status: queued
+    owner: engineering_lead
+    required_reviewer: independent_reviewer  # QA/Security; reviewer ≠ author
+    goal: threat-model.md and protocol/docs match the chosen trunk (or remain explicitly out).
+    depends_on: [T-004]
+
+  - id: T-006
+    title: Install CryptoGalera runtime around existing Rope
+    status: done
+    owner: founder_po  # integrator
+    workers:
+      - process_lead  # constitution, persistent rules, Cursor enforcement
+      - state_lead    # this directory (company/org/agents/tasks/inventory/decisions YAML)
+    goal: Runtime wraps Rope; product implementation stays frozen (D-007).
+    deliverables:
+      - cryptogalera/CONSTITUTION.md
+      - cryptogalera/rules/
+      - .cursor/rules/cryptogalera.mdc
+      - cryptogalera/state/*.yml
+    definition_of_done: >-
+      Named runtime and state files exist; product trees (apps/, core/, server/,
+      deployment/, protocol/) were not modified; session docs preserved.
+    depends_on: [T-001]
+    notes: Process Lead files + State Lead files; PO integrator. Do not implement Rope.
+
+  - id: T-007
+    title: Unfreeze product implementation
+    status: queued
+    owner: founder_po
+    goal: Resume product work only when the user says so, and only after D-005 if that work would change the trunk.
+    unfreeze_requires:
+      user_says_unfreeze: true
+      d005_if_implementation_would_change_trunk: true
+    depends_on: [T-006]
+    notes: >-
+      T-003 freeze stays until this task is accepted. Engineering Lead is not
+      seated for product work until then. D-005 / T-002 is required only if
+      the intended implementation would change the trunk.
+
+not_tasks:
+  - Another Telegram-chrome polish agent
+  - Another ICE/TURN unstick agent
+  - Another ship APK 0.2.x agent
+  - Landing-page brand work
+  - iOS / web / desktop / ratchet / MLS
