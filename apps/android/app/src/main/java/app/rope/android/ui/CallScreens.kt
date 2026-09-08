@@ -89,7 +89,7 @@ fun CallsPane(
                         )
                     }
                     itemsIndexed(recent, key = { _, c -> "call-${c.id}" }) { index, c ->
-                        FadeIn(80 + SplashTiming.staggerDelayMs(index)) {
+                        FadeIn(0) {
                             ConversationRow(c, onClick = { onOpen(c) }, onPin = {}, onMute = {})
                         }
                     }
@@ -103,7 +103,7 @@ fun CallsPane(
                         )
                     }
                     itemsIndexed(people, key = { _, d -> "p-${d.deviceId}" }) { index, d ->
-                        FadeIn(120 + SplashTiming.staggerDelayMs(index)) {
+                        FadeIn(0) {
                             SectionCard(Modifier.padding(horizontal = 12.dp), onClick = { onOpen(conversationOf(d)) }) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,

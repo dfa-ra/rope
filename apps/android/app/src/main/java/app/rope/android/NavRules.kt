@@ -58,7 +58,9 @@ object NavRules {
 
     fun titleOpensHome(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
 
-    fun showsHomeAction(screen: Screen, signedIn: Boolean): Boolean = canOpenHome(screen, signedIn)
+    /** Logo is the only home control — no «На главную» label. */
+    fun showsHomeAction(screen: Screen, signedIn: Boolean): Boolean =
+        InstantUi.showsHomeAction(screen, signedIn)
 
     fun showsInviteCta(role: String?): Boolean = RoleRules.canShowInviteQr(role)
 

@@ -100,7 +100,6 @@ fun NewGroupPane(
                 Modifier.fillMaxWidth(),
                 enabled = state.groupNameDraft.isNotBlank(),
             )
-            TextButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Назад") }
         }
     }
 }
@@ -117,9 +116,7 @@ fun GroupInfoPane(
     if (g == null) {
         RopeEmptyState(
             title = "Нет группы",
-            body = "Вернитесь в чат и откройте группу ещё раз.",
-            actionLabel = "Назад в чат",
-            onAction = onBack,
+            body = "Системная «назад» вернёт в чат.",
         )
         return
     }
@@ -214,7 +211,6 @@ fun GroupInfoPane(
                     QuietButton("Выйти из группы", { confirmLeave = true }, Modifier.fillMaxWidth())
                 }
             }
-            QuietButton("Назад в чат", onBack, Modifier.fillMaxWidth())
         }
     }
 }

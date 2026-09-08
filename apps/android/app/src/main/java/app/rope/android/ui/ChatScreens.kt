@@ -44,7 +44,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -235,7 +234,7 @@ fun ChatsPane(
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     itemsIndexed(rows, key = { _, c -> c.id }) { index, c ->
-                        FadeIn(SplashTiming.staggerDelayMs(index)) {
+                        FadeIn(0) {
                             ConversationRow(
                                 c,
                                 onClick = { onOpen(c) },
@@ -467,9 +466,6 @@ fun ChatPane(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад")
-            }
             InitialsAvatar(title, state.group != null, online)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
@@ -976,18 +972,7 @@ private fun ComposerBar(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (!state.recording) {
-                    IconButton(onClick = onAttach) {
-                        Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
-                    }
-                    IconButton(onClick = { showEmoji = !showEmoji }) {
-                        Icon(
-                            Icons.Outlined.Mood,
-                            contentDescription = "Смайлики",
-                            tint = if (showEmoji) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else if (recordingLocked) {
+                if (state.recording && recordingLocked) {
                     IconButton(onClick = { onVoiceFinish(false) }) {
                         Icon(Icons.Outlined.Close, contentDescription = "Отменить запись", tint = RecRed)
                     }
@@ -1002,18 +987,42 @@ private fun ComposerBar(
                             .padding(bottom = 6.dp),
                     )
                 } else {
-                    TextField(
-                        value = state.draftText,
-                        onValueChange = onDraft,
+                    Surface(
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Сообщение") },
-                        colors = TextFieldDefaults.colors(
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                        shape = RoundedCornerShape(RopeShapes.field),
-                        maxLines = 5,
-                    )
+                        shape = RoundedCornerShape(22.dp),
+                        tonalElevation = 0.dp,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            modifier = Modifier.padding(start = 2.dp, end = 4.dp),
+                        ) {
+                            IconButton(onClick = onAttach) {
+                                Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
+                            }
+                            IconButton(onClick = { showEmoji = !showEmoji }) {
+                                Icon(
+                                    Icons.Outlined.Mood,
+                                    contentDescription = "Смайлики",
+                                    tint = if (showEmoji) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextField(
+                                value = state.draftText,
+                                onValueChange = onDraft,
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("Сообщение") },
+                                colors = TextFieldDefaults.colors(
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                ),
+                                maxLines = 5,
+                            )
+                        }
+                    }
                 }
                 if (showSend) {
                     SendActionButton(
@@ -1257,10 +1266,10 @@ fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
         IconButton(
             onClick = onClose,
             modifier = Modifier
-                .align(Alignment.TopStart)
+                .align(Alignment.TopEnd)
                 .padding(8.dp),
         ) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color.White)
+            Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White)
         }
     }
 }

@@ -72,6 +72,7 @@ fun rememberSplashOverlay(state: UiState): SplashOverlay {
         hasError = !state.error.isNullOrBlank(),
         callActive = state.call != null,
         reduceMotion = reduce,
+        screen = state.screen,
     )
     val visible = cold || longLoad
     val caption = when {

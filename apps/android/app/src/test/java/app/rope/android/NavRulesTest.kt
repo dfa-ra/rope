@@ -23,7 +23,7 @@ class NavRulesTest {
         signedIn.forEach { screen ->
             assertTrue(screen.name, NavRules.canOpenHome(screen, signedIn = true))
             assertTrue(screen.name, NavRules.titleOpensHome(screen, signedIn = true))
-            assertTrue(screen.name, NavRules.showsHomeAction(screen, signedIn = true))
+            assertFalse(screen.name, NavRules.showsHomeAction(screen, signedIn = true))
         }
         assertFalse(NavRules.canOpenHome(Screen.Home, signedIn = true))
         assertFalse(NavRules.canOpenHome(Screen.Chats, signedIn = false))
@@ -130,6 +130,10 @@ class NavRulesTest {
     fun chromeBarDropsWordmarkAndUsername() {
         assertFalse(NavRules.chromeShowsWordmark())
         assertFalse(NavRules.chromeShowsUsername())
+        Screen.entries.forEach { screen ->
+            assertFalse(screen.name, NavRules.showsHomeAction(screen, signedIn = true))
+            assertFalse(screen.name, NavRules.showsHomeAction(screen, signedIn = false))
+        }
         assertTrue(NavRules.chromeShowsUserChip(true))
         assertFalse(NavRules.chromeShowsUserChip(false))
         assertTrue(NavRules.contentShowsOwnName(Screen.Home))

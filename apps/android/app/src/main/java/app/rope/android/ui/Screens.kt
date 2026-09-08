@@ -3,6 +3,8 @@ package app.rope.android
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,7 +34,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.DarkMode
@@ -154,23 +155,17 @@ fun RopeScaffold(
     Box {
     Scaffold(
         topBar = {
+            if (InstantUi.showsAppBar(state.screen)) {
             TopAppBar(
-                navigationIcon = {
-                    val showBack = BackStack.canPop(BackStack.currentStack(state.backStack, state.screen))
-                    if (showBack) {
-                        IconButton(onClick = { onBack() }) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад")
-                        }
-                    }
-                },
+                navigationIcon = {},
                 title = {
                     val title = NavRules.chromeTitle(state.screen, offline = state.offline)
                     val opensHome = NavRules.titleOpensHome(state.screen, signedIn)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable(enabled = opensHome) { onTab(Screen.Home) },
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         RopeLogoMark(
+                            modifier = Modifier
+                                .semantics { contentDescription = "На главную" }
+                                .clickable(enabled = opensHome) { onTab(Screen.Home) },
                             size = 28.dp,
                             animate = true,
                             breathe = state.screen == Screen.Home || state.screen == Screen.Start,
@@ -183,9 +178,6 @@ fun RopeScaffold(
                     }
                 },
                 actions = {
-                    if (NavRules.showsHomeAction(state.screen, signedIn)) {
-                        TextButton(onClick = { onTab(Screen.Home) }) { Text("На главную") }
-                    }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
                             if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
@@ -220,6 +212,7 @@ fun RopeScaffold(
                     }
                 },
             )
+            }
         },
         bottomBar = {
             if (NavRules.showsBottomBar(state.screen, signedIn)) {
@@ -233,7 +226,7 @@ fun RopeScaffold(
                 .padding(padding)
                 .imePadding(),
         ) {
-            if (state.busy) {
+            if (state.busy && InstantUi.busyBlocksUi(state.screen)) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
             state.notice?.let {
@@ -349,16 +342,19 @@ private fun RopeBottomBar(
 }
 
 private fun screenTransition(from: Screen, to: Screen): ContentTransform {
+    if (InstantUi.instantTransition(from, to)) {
+        return EnterTransition.None togetherWith ExitTransition.None
+    }
     val enterMessenger = from == Screen.Home && NavRules.isMessengerShell(to)
     val leaveMessenger = to == Screen.Home && NavRules.isMessengerShell(from)
     return when {
         enterMessenger ->
-            (slideInHorizontally(tween(340)) { it / 4 } + fadeIn(tween(280))) togetherWith
-                (slideOutHorizontally(tween(280)) { -it / 8 } + fadeOut(tween(200)))
+            (slideInHorizontally(tween(220)) { it / 6 } + fadeIn(tween(160))) togetherWith
+                (slideOutHorizontally(tween(160)) { -it / 10 } + fadeOut(tween(120)))
         leaveMessenger ->
-            (slideInHorizontally(tween(340)) { -it / 4 } + fadeIn(tween(280))) togetherWith
-                (slideOutHorizontally(tween(280)) { it / 8 } + fadeOut(tween(200)))
-        else -> fadeIn(tween(200)) togetherWith fadeOut(tween(160))
+            (slideInHorizontally(tween(220)) { -it / 6 } + fadeIn(tween(160))) togetherWith
+                (slideOutHorizontally(tween(160)) { it / 10 } + fadeOut(tween(120)))
+        else -> fadeIn(tween(80)) togetherWith fadeOut(tween(60))
     }
 }
 
@@ -447,7 +443,6 @@ private fun SettingsPane(state: UiState, onToggleTheme: () -> Unit, onHome: () -
                 Modifier.fillMaxWidth(),
             )
         }
-        QuietButton("На главную", onHome, Modifier.fillMaxWidth())
     }
 }
 
@@ -647,9 +642,6 @@ private fun ProvisionPane(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = canInstall,
             )
-            TextButton(onClick = onBack, enabled = enabled, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("Назад")
-            }
         }
     }
 }
@@ -754,9 +746,6 @@ private fun JoinPane(
                 Modifier.fillMaxWidth(),
                 enabled = enabled && url.isNotBlank() && LoginRules.isValid(name),
             )
-            TextButton(onClick = onBack, enabled = enabled, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("Назад")
-            }
         }
     }
 }
@@ -798,12 +787,9 @@ private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onB
             } else {
                 RopeEmptyState(
                     title = "Ссылка ещё готовится",
-                    body = "Подождите секунду или вернитесь на главную.",
-                    actionLabel = "На главную",
-                    onAction = onHome,
+                    body = "Подождите секунду. Петля в шапке вернёт на главную.",
                 )
             }
-            QuietButton("На главную", onHome, Modifier.fillMaxWidth())
         }
     }
 }

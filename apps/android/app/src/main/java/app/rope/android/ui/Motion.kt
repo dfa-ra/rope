@@ -266,16 +266,17 @@ fun FadeIn(
     content: @Composable () -> Unit,
 ) {
     val reduce = rememberReduceMotion()
-    var shown by remember { mutableStateOf(reduce || delayMs <= 0) }
+    val instant = reduce || delayMs <= 0
+    var shown by remember { mutableStateOf(instant) }
     LaunchedEffect(delayMs, reduce) {
-        if (!reduce && delayMs > 0) {
+        if (!instant) {
             shown = false
             delay(delayMs.toLong())
         }
         shown = true
     }
-    val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(460), label = "fadeA")
-    val ty by animateFloatAsState(if (shown) 0f else 16f, tween(460), label = "fadeY")
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(if (instant) 0 else 180), label = "fadeA")
+    val ty by animateFloatAsState(if (shown) 0f else 8f, tween(if (instant) 0 else 180), label = "fadeY")
     Box(
         modifier.graphicsLayer {
             this.alpha = alpha

@@ -1054,50 +1054,45 @@ class RopeRepository(private val app: Application) {
         if (group == null && peer == null) {
             throw IllegalStateException("откройте чат, чтобы отправить вложение")
         }
-        busy(true)
-        try {
-            val enc = encryptObject(bytes)
-            val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
-            val objectId = uploaded.getString("object_id")
-            val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
-            val payload = MediaPayload(
-                kind = kind,
-                objectId = objectId,
-                sha256 = enc.sha256,
-                keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
-                mime = mime,
-                name = name,
-                size = bytes.size.toLong(),
-                durationMs = durationMs,
-                groupId = if (inKnownGroup) group?.groupId else null,
-            )
-            val cache = persistPlain(objectId, name, mime, bytes)
-            if (inKnownGroup && group != null) {
-                sendGroupPayload(group, EnvelopeTypes.MEDIA, payload.toJson().toByteArray(), payload.preview(), payload.messageKind(), payload.toJson(), cache)
-                return
-            }
-            val dest = peer ?: throw IllegalStateException("откройте личный чат")
-            val env = id.encryptTyped(publicIdentityFromBlob(dest.publicIdentity), EnvelopeTypes.MEDIA, payload.toJson().toByteArray())
-            val local = ChatMessage(
-                id = env.messageId,
-                peerDeviceId = dest.deviceId,
-                outgoing = true,
-                text = payload.preview(),
-                status = MessageStatus.CREATED,
-                timestampMs = env.timestampMs.toLong(),
-                envelope = env.bytes,
-                kind = payload.messageKind(),
-                extra = payload.toJson(),
-                localPath = cache.absolutePath,
-                senderId = id.deviceId(),
-                senderName = _state.value.profile?.displayName.orEmpty(),
-            )
-            store.insertMessage(local)
-            refreshMessages(dest.deviceId)
-            pushEnvelope(env.bytes)
-        } finally {
-            _state.value = _state.value.copy(busy = false)
+        val enc = encryptObject(bytes)
+        val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
+        val objectId = uploaded.getString("object_id")
+        val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
+        val payload = MediaPayload(
+            kind = kind,
+            objectId = objectId,
+            sha256 = enc.sha256,
+            keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
+            mime = mime,
+            name = name,
+            size = bytes.size.toLong(),
+            durationMs = durationMs,
+            groupId = if (inKnownGroup) group?.groupId else null,
+        )
+        val cache = persistPlain(objectId, name, mime, bytes)
+        if (inKnownGroup && group != null) {
+            sendGroupPayload(group, EnvelopeTypes.MEDIA, payload.toJson().toByteArray(), payload.preview(), payload.messageKind(), payload.toJson(), cache)
+            return
         }
+        val dest = peer ?: throw IllegalStateException("откройте личный чат")
+        val env = id.encryptTyped(publicIdentityFromBlob(dest.publicIdentity), EnvelopeTypes.MEDIA, payload.toJson().toByteArray())
+        val local = ChatMessage(
+            id = env.messageId,
+            peerDeviceId = dest.deviceId,
+            outgoing = true,
+            text = payload.preview(),
+            status = MessageStatus.CREATED,
+            timestampMs = env.timestampMs.toLong(),
+            envelope = env.bytes,
+            kind = payload.messageKind(),
+            extra = payload.toJson(),
+            localPath = cache.absolutePath,
+            senderId = id.deviceId(),
+            senderName = _state.value.profile?.displayName.orEmpty(),
+        )
+        store.insertMessage(local)
+        refreshMessages(dest.deviceId)
+        pushEnvelope(env.bytes)
     }
 
     private fun sendGroupText(group: RopeGroup, text: String, reply: ChatMessage? = null) {

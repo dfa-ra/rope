@@ -51,11 +51,8 @@ fun StatusPane(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        FadeIn(40) { Text("Сервер и обновления", style = MaterialTheme.typography.titleLarge) }
-        FadeIn(80) {
-            QuietButton("На главную", onHome, Modifier.fillMaxWidth())
-        }
-        FadeIn(120) {
+        Text("Сервер и обновления", style = MaterialTheme.typography.titleLarge)
+        FadeIn(0) {
             Text(
                 "Приложение ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -116,7 +113,7 @@ fun StatusPane(
             }
         } else {
             cards.forEachIndexed { index, card ->
-                FadeIn(140 + SplashTiming.staggerDelayMs(index, stepMs = 50, capMs = 360)) {
+                FadeIn(0) {
                     SectionCard {
                         val turnBad = card.label == "TURN" && (card.value == "нет" || card.value == "не слушает")
                         Text(card.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

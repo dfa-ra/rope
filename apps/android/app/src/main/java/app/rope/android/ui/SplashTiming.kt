@@ -39,8 +39,10 @@ object SplashTiming {
         hasError: Boolean,
         callActive: Boolean,
         reduceMotion: Boolean = false,
+        screen: Screen? = null,
     ): Boolean {
         if (!busy || hasError || callActive || reduceMotion) return false
+        if (screen != null && !app.rope.android.InstantUi.busyBlocksUi(screen)) return false
         return busyElapsedMs >= LONG_LOAD_AFTER_MS
     }
 
