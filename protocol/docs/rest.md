@@ -39,7 +39,7 @@ Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running":
 ### `GET /version`
 
 ```json
-{ "server": "0.2.15", "protocol": 1 }
+{ "server": "0.3.0", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -64,7 +64,9 @@ Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running":
       "credential": "base64(HMAC-SHA1(turn_secret, username))",
       "hostname": "vps.example"
     }
-  ]
+  ],
+  "ice_ttl_seconds": 604800
+}
 }
 ```
 
@@ -130,7 +132,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.2.15",
+  "version": "0.3.0",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,

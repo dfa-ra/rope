@@ -10,12 +10,12 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, matching GitHub Latest release **`v0.2.15`**.
+The product trunk is **`main`**, shipping **0.3.0**. GitHub Release `v0.2.15` remains published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped Stage-2 tree: Android `versionName=0.2.15` / `versionCode=23`, plus CryptoGalera operating layer |
-| **GitHub Release `v0.2.15`** | Same product commit `9694e80`. Assets: `rope-0.2.15-debug.apk`, `rope-server-linux-amd64`, `rope-server-linux-arm64`, `SHA256SUMS`. **Do not retag or replace.** |
+| **`main`** | Shipped tree: Android `versionName=0.3.0` / `versionCode=24`, plus CryptoGalera operating layer |
+| **GitHub Release `v0.2.15`** | Previous Latest until `v0.3.0` publishes. Do not retag `v0.2.15`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -25,7 +25,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (current published APK is `v0.2.15`).
+1. Install the Android app (this cycle ships `v0.3.0`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).

@@ -4,7 +4,7 @@ PO-owned live snapshot. Not a changelog.
 
 ## Product Goal
 
-**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. Trunk is `main` matching GitHub Latest `v0.2.15` until this cycle ships **0.3.0**.
+**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. This cycle ships **0.3.0** (UI density, calls/TURN, core parse hardening). `v0.2.15` stays published; do not retag it.
 
 ## Current Phase
 
