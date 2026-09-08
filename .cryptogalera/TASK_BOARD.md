@@ -4,7 +4,11 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | DONE | unfreeze for 0.3.4 complete | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.5 chat-list search | — |
+| CG-054 | Slice: Telegram-like chat list search + pinned polish as 0.3.5 | PO | IN_PROGRESS | open-ended sprint; do not redo 0.3.2 menus | CG-007 |
+| CG-055 | Android: ranked search, highlight, pill field, pin divider | AND-01 | IN_PROGRESS | D-018 | CG-054 |
+| CG-056 | Independent review | REV-01 | IN_PROGRESS | PASS pending CI after normalize assertion fix | CG-055 |
+| CG-057 | Ship **0.3.5** | PO | QUEUED | versionCode 29; do not retag v0.3.4 | CG-056 |
 | CG-050 | Slice: mute vs call ringtone tests as 0.3.4 | PO | DONE | shipped v0.3.4 | CG-007 |
 | CG-051 | Android: `CallToneRules` + wire RingIn/NotifyIncoming | AND-01 | DONE | D-016 / D-017 | CG-050 |
 | CG-052 | Independent review | REV-01 | DONE | reviewer ≠ implementer | CG-051 |
