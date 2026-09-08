@@ -29,6 +29,7 @@ import app.rope.android.BuildConfig
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.AdminSnapshot
+import app.rope.android.data.CallLink
 import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 
@@ -72,6 +73,20 @@ fun StatusPane(
         val role = state.profile?.role
         val owner = RoleRules.canShowAdminCards(role)
         val cards = if (owner) state.admin?.cards.orEmpty() else emptyList()
+        if (state.profile != null) {
+            val iceLine = CallLink.infoStatusLine(state.profile.iceServersJson)
+            val iceBad = iceLine.contains("нет")
+            FadeIn(130) {
+                SectionCard {
+                    Text("ice_servers", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        iceLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (iceBad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
         if (cards.isEmpty()) {
             FadeIn(140) {
                 SectionCard {
@@ -103,10 +118,19 @@ fun StatusPane(
             cards.forEachIndexed { index, card ->
                 FadeIn(140 + SplashTiming.staggerDelayMs(index, stepMs = 50, capMs = 360)) {
                     SectionCard {
+                        val turnBad = card.label == "TURN" && (card.value == "нет" || card.value == "не слушает")
                         Text(card.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(card.value, style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            card.value,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = if (turnBad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
                         if (card.hint.isNotBlank()) {
-                            Text(card.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                card.hint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (turnBad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }

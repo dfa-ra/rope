@@ -297,7 +297,13 @@ fun RopeScaffold(
         }
     }
     state.call?.let { call ->
-        app.rope.android.ui.CallOverlay(call, onAcceptCall, onRejectCall, onHangup)
+        app.rope.android.ui.CallOverlay(
+            call,
+            state.profile?.iceServersJson.orEmpty(),
+            onAcceptCall,
+            onRejectCall,
+            onHangup,
+        )
     }
     state.viewingImage?.let { img ->
         app.rope.android.ui.ImageViewer(img, onCloseImage)

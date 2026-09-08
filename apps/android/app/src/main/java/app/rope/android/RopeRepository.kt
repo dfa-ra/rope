@@ -158,6 +158,7 @@ class RopeRepository(private val app: Application) {
     private var rtc: WebRtcSession? = null
     private val queuedSignals = mutableListOf<CallSignal>()
     private var connectWatch: Job? = null
+    private var ringWatch: Job? = null
     private var iceRestarted = false
     private val rtcLock = Any()
 
@@ -808,20 +809,25 @@ class RopeRepository(private val app: Application) {
 
     fun startCall() {
         val peer = _state.value.peer ?: return
-        val call = CallInfo(
-            callId = UUID.randomUUID().toString(),
-            peerDeviceId = peer.deviceId,
-            peerName = peer.displayName,
-            outgoing = true,
-            phase = CallPhase.RINGING_OUT,
-            media = "WebRTC · соединяем",
-            link = CallLinkState.RINGING,
+        val seeded = CallLink.applyInfo(
+            _state.value.profile?.iceServersJson,
+            CallInfo(
+                callId = UUID.randomUUID().toString(),
+                peerDeviceId = peer.deviceId,
+                peerName = peer.displayName,
+                outgoing = true,
+                phase = CallPhase.RINGING_OUT,
+                media = "ожидаем ответа",
+                link = CallLinkState.RINGING,
+                startedAtMs = System.currentTimeMillis(),
+            ),
         )
-        _state.value = _state.value.copy(call = call)
+        _state.value = _state.value.copy(call = seeded)
         recordCall(peer.deviceId, "Исходящий звонок", outgoing = true)
-        sendCall(call.callId, peer.deviceId, "ring", "")
-        sendCallEnvelope(peer, call.callId, "ring")
+        sendCall(seeded.callId, peer.deviceId, "ring", "")
+        sendCallEnvelope(peer, seeded.callId, "ring")
         prefetchIce()
+        watchRinging()
         startTone(true)
         audioMode(true)
     }
@@ -842,6 +848,8 @@ class RopeRepository(private val app: Application) {
         stopTone()
         audioMode(true)
         notifier.clearCall()
+        ringWatch?.cancel()
+        ringWatch = null
         scope.launch { startRtc(asCaller = false) }
     }
 
@@ -1278,7 +1286,8 @@ class RopeRepository(private val app: Application) {
             val cur = store.profile() ?: return@launch
             val updated = refreshIceServers(cur)
             store.saveProfile(updated)
-            _state.value = _state.value.copy(profile = updated)
+            val call = _state.value.call?.let { CallLink.applyInfo(updated.iceServersJson, it) }
+            _state.value = _state.value.copy(profile = updated, call = call)
         }
     }
 
@@ -1595,7 +1604,14 @@ class RopeRepository(private val app: Application) {
             "deliver" -> handleDeliver(obj)
             "call" -> handleCallEvent(obj)
             "error" -> {
-                _state.value = _state.value.copy(error = obj.optString("message"))
+                val code = obj.optString("code")
+                val msg = obj.optString("message")
+                val call = _state.value.call
+                if (call != null && (code == "not_found" || msg.contains("offline", ignoreCase = true))) {
+                    failConnecting(CallLink.offlineDetail())
+                } else {
+                    _state.value = _state.value.copy(error = msg)
+                }
             }
         }
     }
@@ -1787,17 +1803,23 @@ class RopeRepository(private val app: Application) {
                             link = CallLinkState.CONNECTING,
                         ),
                     )
+                    ringWatch?.cancel()
+                    ringWatch = null
                     stopTone()
                     scope.launch { startRtc(asCaller = iOffer) }
                     return
                 }
                 if (current != null) return
                 _state.value = _state.value.copy(
-                    call = CallInfo(
-                        callId, from, name, outgoing = false, phase = CallPhase.RINGING_IN,
-                        payload = obj.optString("payload"),
-                        media = "WebRTC · соединяем",
-                        link = CallLinkState.RINGING,
+                    call = CallLink.applyInfo(
+                        _state.value.profile?.iceServersJson,
+                        CallInfo(
+                            callId, from, name, outgoing = false, phase = CallPhase.RINGING_IN,
+                            payload = obj.optString("payload"),
+                            media = "один тап — ответить",
+                            link = CallLinkState.RINGING,
+                            startedAtMs = System.currentTimeMillis(),
+                        ),
                     ),
                 )
                 recordCall(from, "Входящий звонок", outgoing = false)
@@ -1817,6 +1839,8 @@ class RopeRepository(private val app: Application) {
                     ),
                 )
                 if (cur.outgoing) scope.launch { startRtc(asCaller = true) }
+                ringWatch?.cancel()
+                ringWatch = null
                 stopTone()
             }
             "reject", "hangup" -> {
@@ -1835,9 +1859,26 @@ class RopeRepository(private val app: Application) {
         val ice = awaitIce()
         val hasTurn = !CallLink.missingTurn(ice)
         val cur = _state.value.call ?: return
-        val media = if (hasTurn) cur.media.ifBlank { CallMedia.label("CHECKING") } else CallLink.missingTurnDetail()
-        _state.value = _state.value.copy(call = cur.copy(hasTurn = hasTurn, media = media, link = CallLinkState.CONNECTING))
+        val parsed = IceServers.parse(_state.value.profile?.iceServersJson)
+        val media = when {
+            parsed.isEmpty() -> CallLink.missingIceServersDetail()
+            !hasTurn -> CallLink.missingTurnDetail()
+            cur.media.contains("нет TURN") || cur.media.contains("ice_servers") ||
+                cur.media.contains("ожидаем") || cur.media.contains("ответить") ->
+                CallMedia.label("CHECKING")
+            else -> cur.media.ifBlank { CallMedia.label("CHECKING") }
+        }
+        _state.value = _state.value.copy(
+            call = cur.copy(
+                hasTurn = hasTurn,
+                iceReady = true,
+                media = media,
+                link = CallLinkState.CONNECTING,
+            ),
+        )
         attachRtc(asCaller, ice)
+        ringWatch?.cancel()
+        ringWatch = null
         watchConnecting()
     }
 
@@ -1893,7 +1934,7 @@ class RopeRepository(private val app: Application) {
     private fun applyIceState(name: String, viaRelay: Boolean) {
         val cur = _state.value.call ?: return
         val (link, label) = CallLink.applyIce(name, viaRelay, cur.hasTurn)
-        _state.value = _state.value.copy(call = cur.copy(media = label, link = link))
+        _state.value = _state.value.copy(call = cur.copy(media = label, link = link, lastIce = name, iceReady = true))
         if (link == CallLinkState.CONNECTED) {
             connectWatch?.cancel()
             connectWatch = null
@@ -1923,6 +1964,18 @@ class RopeRepository(private val app: Application) {
                 return@launch
             }
             failConnecting(CallLink.timeoutDetail(call.hasTurn))
+        }
+    }
+
+    private fun watchRinging() {
+        ringWatch?.cancel()
+        ringWatch = scope.launch {
+            delay(CallLink.RING_TIMEOUT_MS)
+            val call = _state.value.call ?: return@launch
+            if (!CallLink.ringTimedOut(System.currentTimeMillis() - call.startedAtMs, call.phase, call.link)) {
+                return@launch
+            }
+            failConnecting(CallLink.noAnswerDetail())
         }
     }
 
@@ -1983,14 +2036,15 @@ class RopeRepository(private val app: Application) {
                 .toString(),
         ) == true
         if (!sent && event == "ring") {
-            _state.value = _state.value.copy(error = "собеседник не в сети")
-            endCall()
+            failConnecting(CallLink.offlineDetail())
         }
     }
 
     private fun endCall() {
         connectWatch?.cancel()
         connectWatch = null
+        ringWatch?.cancel()
+        ringWatch = null
         iceRestarted = false
         stopTone()
         audioMode(false)

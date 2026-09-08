@@ -145,6 +145,13 @@ class Stage2UxTest {
         val turn = snap.cards.first { it.label == "TURN" }
         assertEquals("не слушает", turn.value)
         assertTrue(turn.hint.contains("443"))
+        assertEquals("работает", AdminSnapshot.turnValue(JSONObject().put("turn_running", true).put("ice_enabled", true)))
+        assertEquals("настроен", AdminSnapshot.turnValue(JSONObject().put("ice_enabled", true)))
+        assertEquals("нет", AdminSnapshot.turnValue(JSONObject()))
+        assertEquals(
+            "обновите ядро, чтобы звонки шли через сервер",
+            AdminSnapshot.turnHint(JSONObject()),
+        )
         assertEquals("ожидает", ComposerRules.statusLabel(MessageStatus.CREATED, true))
         assertEquals("на сервере", ComposerRules.statusLabel(MessageStatus.SENT_TO_SERVER, true))
         assertEquals("доставлено", ComposerRules.statusLabel(MessageStatus.DELIVERED_TO_DEVICE, true))
