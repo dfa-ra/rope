@@ -74,8 +74,10 @@ import app.rope.android.ui.HomePane
 import app.rope.android.ui.PeoplePane
 import app.rope.android.ui.QuietButton
 import app.rope.android.ui.RopeEmptyState
-import app.rope.android.ui.RopeKnot
+import app.rope.android.ui.RopeLogoMark
+import app.rope.android.ui.RopeSplash
 import app.rope.android.ui.SectionCard
+import app.rope.android.ui.rememberSplashOverlay
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
@@ -131,6 +133,8 @@ fun RopeScaffold(
     onDismissNotice: () -> Unit,
 ) {
     val signedIn = state.profile != null
+    val splash = rememberSplashOverlay(state)
+    val selectedTab = NavRules.selectedTab(state.screen)
     Box {
     Scaffold(
         topBar = {
@@ -148,9 +152,11 @@ fun RopeScaffold(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable(enabled = opensHome) { onGo(Screen.Home) },
                     ) {
-                        RopeKnot(
+                        RopeLogoMark(
                             size = 28.dp,
-                            animate = state.screen == Screen.Home || state.screen == Screen.Start,
+                            animate = true,
+                            breathe = state.screen == Screen.Home || state.screen == Screen.Start,
+                            replayKey = selectedTab?.ordinal ?: state.screen.ordinal,
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(title)
@@ -266,6 +272,9 @@ fun RopeScaffold(
     state.viewingImage?.let { img ->
         app.rope.android.ui.ImageViewer(img, onCloseImage)
     }
+    if (splash.visible) {
+        RopeSplash(caption = splash.caption, loop = splash.loop, compact = splash.compact)
+    }
     }
 }
 
@@ -312,7 +321,7 @@ private fun StartPane(onGo: (Screen) -> Unit, onRestore: () -> Unit) {
         ) {
             FadeIn(40) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    RopeKnot(size = 132.dp, animate = true)
+                    RopeLogoMark(size = 132.dp, animate = true)
                     Spacer(Modifier.height(10.dp))
                     Text("self-hosted · E2EE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Личный мессенджер на своём VPS", style = MaterialTheme.typography.headlineSmall)
@@ -697,7 +706,7 @@ private fun InvitePane(url: String, onHome: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            FadeIn(40) { RopeKnot(size = 72.dp, animate = true) }
+            FadeIn(40) { RopeLogoMark(size = 72.dp, animate = true) }
             FadeIn(120) { Text("Приглашение", style = MaterialTheme.typography.titleLarge) }
             FadeIn(180) {
                 Text(

@@ -47,7 +47,7 @@ fun HomePane(
         ) {
             FadeIn(40) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    RopeKnot(size = 148.dp, animate = true)
+                    RopeLogoMark(size = 148.dp, animate = true)
                     Spacer(Modifier.height(12.dp))
                     Text("self-hosted · E2EE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Rope", style = MaterialTheme.typography.headlineLarge)

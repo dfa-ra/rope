@@ -127,6 +127,7 @@ data class UiState(
     val scrollToMessageId: String? = null,
     val notice: String? = null,
     val pinnedMessageId: String? = null,
+    val sessionReady: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo }
@@ -178,6 +179,8 @@ class RopeRepository(private val app: Application) {
                 }
             } catch (e: Exception) {
                 error(e)
+            } finally {
+                _state.value = _state.value.copy(sessionReady = true)
             }
         }
     }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.rope.android.update.ApkInstaller
@@ -27,6 +28,7 @@ import java.io.File
 class MainActivity : AppCompatActivity() {
     private var waitingForInstallPerm = false
     private var startedInstallFor: String? = null
+    private val composeReady = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val scanner = registerForActivityResult(ScanContract()) { result ->
         val text = result.contents ?: return@registerForActivityResult
@@ -64,12 +66,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        splash.setKeepOnScreenCondition { !composeReady.get() }
         val repo = (application as RopeApp).repo
-        if (intent?.action != ApkInstaller.ACTION) {
-            repo.start(intent?.data?.toString())
-        }
+        repo.start(
+            if (intent?.action == ApkInstaller.ACTION) null else intent?.data?.toString(),
+        )
         handleInstallResult(intent)
         requestNotifications()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -80,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         })
         setContent {
             val state by repo.state.collectAsState()
+            LaunchedEffect(Unit) { composeReady.set(true) }
             LaunchedEffect(state.pendingApkPath, state.installTick) {
                 startedInstallFor = null
                 if (state.pendingApkPath != null) tryInstallPending()
