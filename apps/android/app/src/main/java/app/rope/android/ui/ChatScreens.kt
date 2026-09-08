@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -226,13 +227,15 @@ fun ChatsPane(
                 )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(rows, key = { it.id }) { c ->
-                        ConversationRow(
-                            c,
-                            onClick = { onOpen(c) },
-                            onPin = { onPinChat(c.id) },
-                            onMute = { onMuteChat(c.id) },
-                        )
+                    itemsIndexed(rows, key = { _, c -> c.id }) { index, c ->
+                        FadeIn(SplashTiming.staggerDelayMs(index)) {
+                            ConversationRow(
+                                c,
+                                onClick = { onOpen(c) },
+                                onPin = { onPinChat(c.id) },
+                                onMute = { onMuteChat(c.id) },
+                            )
+                        }
                     }
                 }
             }
@@ -926,17 +929,12 @@ private fun ComposerBar(
                     )
                 }
                 if (showSend) {
-                    IconButton(
-                        onClick = {
+                    SendActionButton(
+                        locked = recordingLocked,
+                        onSend = {
                             if (recordingLocked || state.recording) onVoiceFinish(true) else onSend()
                         },
-                    ) {
-                        Icon(
-                            if (recordingLocked) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Send,
-                            contentDescription = "Отправить",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                    )
                 } else {
                     Box(
                         Modifier
@@ -977,6 +975,48 @@ private fun ComposerBar(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SendActionButton(
+    locked: Boolean,
+    onSend: () -> Unit,
+) {
+    var tick by remember { mutableStateOf(0) }
+    val reduce = rememberReduceMotion()
+    val pop by animateFloatAsState(
+        targetValue = if (tick % 2 == 0) 1f else 1.14f,
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = 480f),
+        label = "sendPop",
+    )
+    IconButton(
+        onClick = {
+            tick += 1
+            onSend()
+        },
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+            if (!reduce && tick > 0) {
+                RopeLogoMark(
+                    size = 30.dp,
+                    animate = true,
+                    breathe = false,
+                    replayKey = tick,
+                    strokeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                )
+            }
+            Icon(
+                if (locked) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Send,
+                contentDescription = "Отправить",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.graphicsLayer {
+                    val s = if (reduce) 1f else pop
+                    scaleX = s
+                    scaleY = s
+                },
+            )
         }
     }
 }

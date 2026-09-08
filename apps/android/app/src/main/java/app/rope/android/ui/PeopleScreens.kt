@@ -50,7 +50,7 @@ fun PeoplePane(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 itemsIndexed(people, key = { _, d -> d.deviceId }) { index, d ->
-                    FadeIn(80 + index * 40) {
+                    FadeIn(80 + SplashTiming.staggerDelayMs(index)) {
                         PersonRow(d) { onOpen(conversationOf(d)) }
                     }
                 }

@@ -82,7 +82,7 @@ fun CallsPane(
                         )
                     }
                     itemsIndexed(recent, key = { _, c -> "call-${c.id}" }) { index, c ->
-                        FadeIn(80 + index * 40) {
+                        FadeIn(80 + SplashTiming.staggerDelayMs(index)) {
                             ConversationRow(c, onClick = { onOpen(c) }, onPin = {}, onMute = {})
                         }
                     }
@@ -96,7 +96,7 @@ fun CallsPane(
                         )
                     }
                     itemsIndexed(people, key = { _, d -> "p-${d.deviceId}" }) { index, d ->
-                        FadeIn(120 + index * 40) {
+                        FadeIn(120 + SplashTiming.staggerDelayMs(index)) {
                             SectionCard(Modifier.padding(horizontal = 12.dp), onClick = { onOpen(conversationOf(d)) }) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -152,7 +152,12 @@ fun CallOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                RopeKnot(size = 56.dp, animate = call.phase != CallPhase.ENDED)
+                RopeLogoMark(
+                    size = 56.dp,
+                    animate = call.phase != CallPhase.ENDED,
+                    loop = call.phase != CallPhase.ACTIVE && call.phase != CallPhase.ENDED,
+                    breathe = call.phase != CallPhase.ENDED,
+                )
                 Text(
                     CallLink.heading(call.phase, call.link),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
