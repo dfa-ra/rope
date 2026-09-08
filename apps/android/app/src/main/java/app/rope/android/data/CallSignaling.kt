@@ -185,7 +185,7 @@ class CallMachine {
     fun onRingSendFailed(): List<CallEffect> = synchronized(lock) {
         if (!state.live) return emptyList()
         hardEndLocked()
-        return listOf(CallEffect.Notice(CallLink.offlineDetail()), CallEffect.TearDown)
+        return listOf(CallEffect.Notice("собеседник не в сети"), CallEffect.TearDown)
     }
 
     private fun localAcceptLocked(): List<CallEffect> {
