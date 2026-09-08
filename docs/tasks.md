@@ -12,7 +12,7 @@ Status: done
 Owner: Product Owner
 Goal: Company OS in-repo so future agents follow one product, one trunk, and one owner per task.
 Deliverables: `AGENTS.md`, [company.md](company.md), [organization.md](organization.md), this file, [product.md](product.md), [decisions.md](decisions.md), README pointer.
-Definition of Done: Docs exist and match repo reality (including the `main` vs `v0.2.x` split); no application-code changes.
+Definition of Done: Docs exist and match repo reality; no application-code changes.
 Notes: Session docs exist, are **unverified**, and are **preserved** (D-007). Independent verification remains available as later review; do not revert them.
 Depends on: —
 

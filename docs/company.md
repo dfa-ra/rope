@@ -135,7 +135,7 @@ Cloud agents, reviews, and context windows are scarce.
 - Do not spawn an agent to write a status report.
 - Do not explore out-of-scope features (calls, groups, iOS, web, landing sites) “while we are here.”
 - Stop when the brief’s Definition of Done is met. Extra polish is new scope.
-- If `main` is MVP and a prompt asks for a parallel product, that is a PO/user decision, not a staffing exercise.
+- If a prompt asks to fork a second product line off `main`, that is a PO/user decision, not a staffing exercise.
 
 ## Product development loop
 
