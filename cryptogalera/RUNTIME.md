@@ -4,7 +4,7 @@ How Cursor subagents are **spawned, tasked, and reported**. Binding. Compact.
 
 **Who is who:** [CONSTITUTION.md](CONSTITUTION.md). **Who may work:** [AGENTS.md](../AGENTS.md). **Live company memory:** `.cryptogalera/` (PO-owned; see below). This file is the spawn/report contract, not a product spec.
 
-Mode is **STABILIZATION / 0.3.0**. D-005 A is done. CG-007 is unfrozen **only** for the seated UI/calls/core workstream (CG-020–CG-026). Do not invent iOS/ratchet/landing. Do not spawn overlapping chrome/calls/landing agents beyond the named owners.
+Mode is **STABILIZATION / 0.3.1**. D-005 A is done. CG-007 is unfrozen **only** for the seated Telegram-UI + WSS-call-fallback workstream (CG-030–CG-036). Do not invent iOS/ratchet/landing. Do not spawn overlapping chrome/calls/landing agents beyond the named owners. No VK/Yandex/WB tunnels.
 
 ---
 

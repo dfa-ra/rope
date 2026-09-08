@@ -27,3 +27,5 @@ These were already true in Rope **before** CryptoGalera. Not invented here.
 **D-005 A (2026-09-08):** User asked to put current releases on `main`, verify they match published artifacts, and tidy extra branches without losing work. Integration tip is GitHub Latest tag `v0.2.15` = `origin/cursor/release-0215-872f` = `9694e804691bfb32b9a2ecc9e1f9e7e2cf48f0a5`. Path is merge (not fast-forward): `main` has 6 CryptoGalera commits; tag has 92 Stage-2 commits from merge-base `30ebaa7`.
 
 **CG-004 (2026-09-08):** Tag `v0.2.15` (`9694e80`) merged onto `main` (`0fb2ea5` then docs `a869927`). Product trees match the tag. GitHub Release assets unchanged. 31 contained `cursor/*` branches deleted; `telegram-chrome-872f` kept.
+
+**D-011 (2026-09-08):** Calls stay on the organizer VPS. WebRTC + self-hosted TURNS/TCP 443 remains the fast path. If ICE cannot connect, fall back to E2EE audio frames on the existing live WSS `type=call` (UniFFI `encryptTyped` CALL). Do not tunnel via VK / Yandex / WB / Cloudflare-as-only-path. Do not put realtime audio on mailbox `send` (60/min + SQLite). No new Rust envelope type for 0.3.1.
