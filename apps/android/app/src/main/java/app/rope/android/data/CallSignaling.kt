@@ -89,14 +89,16 @@ class CallMachine {
     fun reset() = synchronized(lock) { state = CallMachineState() }
 
     fun localStart(callId: String, peerId: String, myId: String): List<CallEffect> = synchronized(lock) {
-        if (callId.isBlank() || peerId.isBlank()) return emptyList()
-        if (state.live && state.peerDeviceId == peerId && state.phase == CallPhase.RINGING_IN) {
+        val id = callId.trim()
+        val peer = PeerIds.normalize(peerId)
+        if (id.isBlank() || peer.isBlank() || ChatIds.isGroup(peerId)) return emptyList()
+        if (state.live && PeerIds.same(state.peerDeviceId, peer) && state.phase == CallPhase.RINGING_IN) {
             return localAcceptLocked()
         }
         if (state.live) return emptyList()
         state = CallMachineState(
-            callId = callId,
-            peerDeviceId = peerId,
+            callId = id,
+            peerDeviceId = peer,
             outgoing = true,
             phase = CallPhase.RINGING_OUT,
             link = CallLinkState.RINGING,
@@ -105,8 +107,8 @@ class CallMachine {
             startedAtMs = System.currentTimeMillis(),
         )
         return listOf(
-            CallEffect.Send(callId, peerId, CallSignal.RING),
-            CallEffect.Record(peerId, true),
+            CallEffect.Send(id, peer, CallSignal.RING),
+            CallEffect.Record(peer, true),
             CallEffect.PrefetchIce,
             CallEffect.RingOut,
             CallEffect.WatchRing,
@@ -122,12 +124,15 @@ class CallMachine {
     fun onWire(from: String, event: String, callId: String, payload: Any?, myId: String): List<CallEffect> =
         synchronized(lock) {
             val ev = CallSignal.parseEvent(event) ?: return emptyList()
-            if (from.isBlank() || callId.isBlank()) return emptyList()
+            val fromId = PeerIds.normalize(from)
+            val id = callId.trim()
+            if (fromId.isBlank() || id.isBlank()) return emptyList()
+            val mine = PeerIds.normalize(myId)
             when (ev) {
-                CallSignal.RING -> onRingLocked(from, callId, myId)
-                CallSignal.ACCEPT -> onAcceptLocked(from, callId)
-                CallSignal.REJECT, CallSignal.HANGUP -> onRemoteEndLocked(from, callId)
-                in CallSignal.EVENTS -> onMediaLocked(from, callId, ev, payload)
+                CallSignal.RING -> onRingLocked(fromId, id, mine)
+                CallSignal.ACCEPT -> onAcceptLocked(fromId, id)
+                CallSignal.REJECT, CallSignal.HANGUP -> onRemoteEndLocked(fromId, id)
+                in CallSignal.EVENTS -> onMediaLocked(fromId, id, ev, payload)
                 else -> emptyList()
             }
         }
@@ -318,7 +323,7 @@ class CallMachine {
     }
 
     private fun onRingLocked(from: String, callId: String, myId: String): List<CallEffect> {
-        if (state.live && state.peerDeviceId == from && state.outgoing && state.phase == CallPhase.RINGING_OUT) {
+        if (state.live && PeerIds.same(state.peerDeviceId, from) && state.outgoing && state.phase == CallPhase.RINGING_OUT) {
             return resolveGlareLocked(from, callId, myId)
         }
         if (state.live && matchesLocked(from, callId)) return emptyList()
@@ -364,7 +369,7 @@ class CallMachine {
 
     private fun onRemoteEndLocked(from: String, callId: String): List<CallEffect> {
         if (!state.live) return emptyList()
-        if (state.peerDeviceId != from && !matchesLocked(from, callId)) return emptyList()
+        if (!PeerIds.same(state.peerDeviceId, from) && !matchesLocked(from, callId)) return emptyList()
         hardEndLocked()
         return listOf(CallEffect.TearDown)
     }

@@ -41,10 +41,13 @@ class RopeNotifier(private val context: Context) {
     }
 
     fun incomingCall(name: String) {
+        val launch = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val intent = PendingIntent.getActivity(
             context,
             2,
-            Intent(context, MainActivity::class.java),
+            launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val n = NotificationCompat.Builder(context, CALL)
@@ -52,6 +55,8 @@ class RopeNotifier(private val context: Context) {
             .setContentTitle("Входящий вызов")
             .setContentText(name)
             .setContentIntent(intent)
+            .setFullScreenIntent(intent, true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)

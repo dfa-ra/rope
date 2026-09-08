@@ -74,6 +74,11 @@ class CallLinkTest {
         assertEquals("aaa-1", CallLink.canonicalCallId("zzz-2", "aaa-1"))
         assertTrue(CallLink.matchesCall("theirs", "bob", "mine", "theirs", "bob"))
         assertFalse(CallLink.matchesCall("other", "eve", "mine", "theirs", "bob"))
+        assertTrue(CallLink.weCreateOffer("AAA", "bbb"))
+        assertFalse(CallLink.weCreateOffer("BBB", "aaa"))
+        assertEquals(CallLink.weCreateOffer("AbC", "def"), CallLink.weCreateOffer("abc", "DEF"))
+        assertTrue(CallLink.matchesCall("c1", "BOB", "c1", "", "bob"))
+        assertFalse(CallLink.matchesCall("other", "BOB", "c1", "", "eve"))
     }
 
     @Test

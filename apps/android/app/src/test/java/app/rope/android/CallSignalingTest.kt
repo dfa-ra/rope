@@ -268,4 +268,39 @@ class CallSignalingTest {
         assertEquals(CallPhase.ACTIVE, m.state.phase)
         assertEquals("c1", m.state.callId)
     }
+
+    @Test
+    fun mixedCaseFromStillMatchesLiveCall() {
+        val m = CallMachine()
+        m.localStart("c1", "BOB", "ALICE")
+        assertEquals("bob", m.state.peerDeviceId)
+        val accept = m.onWire("Bob", CallSignal.ACCEPT, "c1", "", "Alice")
+        assertTrue(accept.any { it is CallEffect.StartRtc && it.asCaller })
+        m.onSessionAttached()
+        m.onLocalOfferSent()
+        val ans = m.media("BOB", CallSignal.ANSWER, "c1", answer(), "alice")
+        assertTrue(ans.any { it is CallEffect.DeliverRemote })
+    }
+
+    @Test
+    fun glareWithMixedCasePicksOneOfferer() {
+        val a = CallMachine()
+        val b = CallMachine()
+        a.localStart("call-aaa", "BBB", "AAA")
+        b.localStart("call-bbb", "AAA", "BBB")
+        val aGlare = a.onWire("Bbb", CallSignal.RING, "call-bbb", "", "Aaa")
+        val bGlare = b.onWire("Aaa", CallSignal.RING, "call-aaa", "", "Bbb")
+        val aStarts = aGlare.filterIsInstance<CallEffect.StartRtc>().single()
+        val bStarts = bGlare.filterIsInstance<CallEffect.StartRtc>().single()
+        assertTrue(aStarts.asCaller xor bStarts.asCaller)
+        assertEquals(a.state.callId, b.state.callId)
+    }
+
+    @Test
+    fun groupChatIdIsNotACallTarget() {
+        val m = CallMachine()
+        val start = m.localStart("c1", "g:crew", "alice")
+        assertTrue(start.isEmpty())
+        assertFalse(m.state.live)
+    }
 }

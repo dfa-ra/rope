@@ -145,4 +145,69 @@ object ChatRouting {
     fun showLeftoverThread(id: String): Boolean = !ChatIds.isGroup(id)
 }
 
+/** Device / member ids on the wire are 64-hex or UUID; compare them case-insensitively. */
+object PeerIds {
+    fun normalize(raw: String?): String = JsonIds.optional(raw)?.lowercase().orEmpty()
+
+    fun same(a: String?, b: String?): Boolean {
+        val x = normalize(a)
+        val y = normalize(b)
+        return x.isNotBlank() && x == y
+    }
+
+    fun looksLikeDevice(id: String?): Boolean {
+        val v = normalize(id)
+        return v.length == 64 && v.all { it in '0'..'9' || it in 'a'..'f' }
+    }
+
+    fun findDevice(devices: List<DirectoryDevice>, id: String?): DirectoryDevice? {
+        val n = normalize(id)
+        if (n.isBlank()) return null
+        return devices.find { same(it.deviceId, n) }
+    }
+
+    fun devicesForMember(devices: List<DirectoryDevice>, memberId: String?): List<DirectoryDevice> {
+        val n = normalize(memberId)
+        if (n.isBlank()) return emptyList()
+        return devices.filter { same(it.memberId, n) }
+    }
+
+    fun preferReachable(candidates: List<DirectoryDevice>, onlineIds: Set<String> = emptySet()): DirectoryDevice? {
+        if (candidates.isEmpty()) return null
+        val online = onlineIds.map { normalize(it) }.toSet()
+        return candidates.find { it.online || normalize(it.deviceId) in online } ?: candidates.first()
+    }
+
+    /**
+     * Map a chat hint (device id, member id, or leftover stub) to the device we should ring.
+     * Never returns a group id. Prefers an online device of the same member.
+     */
+    fun resolve(
+        devices: List<DirectoryDevice>,
+        hint: DirectoryDevice?,
+        rawId: String?,
+        onlineIds: Set<String> = emptySet(),
+    ): DirectoryDevice? {
+        if (ChatIds.isGroup(rawId.orEmpty()) || ChatIds.isGroup(hint?.deviceId.orEmpty())) return null
+        findDevice(devices, rawId)?.let { return it }
+        preferReachable(devicesForMember(devices, rawId), onlineIds)?.let { return it }
+        if (hint == null) return null
+        val hintMatches = rawId.isNullOrBlank() ||
+            same(hint.deviceId, rawId) ||
+            same(hint.memberId, rawId)
+        if (!hintMatches) return null
+        findDevice(devices, hint.deviceId)?.let { return it }
+        val memberKey = hint.memberId.ifBlank { hint.deviceId }
+        preferReachable(devicesForMember(devices, memberKey), onlineIds)?.let { return it }
+        if (hint.publicIdentity.isNotEmpty() && looksLikeDevice(hint.deviceId)) return hint
+        return null
+    }
+
+    fun wireId(peer: DirectoryDevice?, fallback: String?): String {
+        val fromPeer = normalize(peer?.deviceId)
+        if (fromPeer.isNotBlank()) return fromPeer
+        return normalize(fallback)
+    }
+}
+
 enum class ThemeMode { LIGHT, DARK }
