@@ -20,14 +20,24 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 
 ### `GET /health`
 
+`ok` is the Go process. `turn_running` is a live TCP probe of coturn on `turn_port` (listening), not “`turn_secret` exists”.
+
 ```json
-{ "ok": true }
+{
+  "ok": true,
+  "turn_running": true,
+  "turns_listening": true,
+  "turn_port": 3478,
+  "turns_port": 443
+}
 ```
+
+Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running": false }`. A down coturn does **not** make `/health` fail — installer still greps `"ok"`.
 
 ### `GET /version`
 
 ```json
-{ "server": "0.2.11", "protocol": 1 }
+{ "server": "0.2.13", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -56,7 +66,7 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 
 On `--allow-http` debug servers `fingerprint` is the SHA-256 of the ASCII string `rope-http-dev`.
 
-`ice_servers` is present when the VPS has coturn (`public_host` + `turn_secret` in `/etc/rope/config.json`). Guests and the owner both read this unauthenticated endpoint. Credentials are time-limited (coturn REST / HMAC-SHA1); the long-term secret never leaves the VPS. If 443 is already taken, installer uses TURNS on 5349 and advertises that port. Without TURN (local `--allow-http`) the field is omitted.
+`ice_servers` is present when the VPS has coturn (`public_host` + `turn_secret` in `/etc/rope/config.json`). Guests and the owner both read this unauthenticated endpoint. Credentials are time-limited (coturn REST / HMAC-SHA1, username `<unix_expiry>:rope`, default TTL 7 days); the long-term secret never leaves the VPS. If 443 is already taken or did not bind, installer uses TURNS on 5349 (or omits `turns:`). Without TURN (local `--allow-http`) the field is omitted.
 
 ### `POST /v1/bootstrap`
 
@@ -114,7 +124,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.2.11",
+  "version": "0.2.13",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,

@@ -94,6 +94,7 @@ func (s *Server) ListenAndServe() error {
 		Handler:           s.Router(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	s.logTurn()
 	if s.Cfg.AllowHTTP {
 		s.Log.Printf("rope-server %s listening http://%s (debug)", config.ServerVersion, s.Cfg.Listen)
 		return h.ListenAndServe()
@@ -133,8 +134,30 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func (s *Server) logTurn() {
+	if !s.Cfg.IceEnabled() {
+		s.Log.Printf("ICE disabled (need public_host and turn_secret in config.json)")
+		return
+	}
+	s.Log.Printf("ICE host=%s turn=%d turns=%d ttl=%s", s.Cfg.PublicHost, s.Cfg.EffectiveTurnPort(), s.Cfg.EffectiveTurnsPort(), s.Cfg.IceTTL())
+	rep := s.Cfg.ProbeTurn(400 * time.Millisecond)
+	s.Log.Printf("TURN listening=%v turns_listening=%v listen=%s external_ip=%s advertised=%d err=%q",
+		rep.Running, rep.TurnsListening, rep.Listen, rep.ExternalIP, len(rep.Advertised), rep.Error)
+}
+
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"ok": true})
+	out := map[string]any{"ok": true, "turn_running": false}
+	if s.Cfg.IceEnabled() {
+		turn := s.Cfg.ProbeTurn(400 * time.Millisecond)
+		out["turn_running"] = turn.Running
+		out["turns_listening"] = turn.TurnsListening
+		out["turn_port"] = turn.TurnPort
+		out["turns_port"] = turn.TurnsPort
+		if turn.Error != "" {
+			out["turn_error"] = turn.Error
+		}
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/dfa-ra/rope/server/go/internal/config"
 )
@@ -136,4 +137,49 @@ func TestAdminStage2Fields(t *testing.T) {
 			t.Fatalf("missing admin field %s in %v", key, out)
 		}
 	}
+	if out["ice_enabled"] != false {
+		t.Fatalf("no TURN config so ice_enabled must be false: %v", out["ice_enabled"])
+	}
+	if out["turn_running"] != false {
+		t.Fatalf("turn_running means coturn listen, not secret: %v", out["turn_running"])
+	}
 }
+
+func TestAdminTurnRunningIsListenNotSecret(t *testing.T) {
+	_, hs, setup := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "198.51.100.20"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+	orig := config.DialTCP
+	t.Cleanup(func() { config.DialTCP = orig })
+	config.DialTCP = func(string, time.Duration) error { return errAdminTurnDown }
+	req := authReq(t, http.MethodGet, hs.URL+"/v1/admin/status", "/v1/admin/status", nil, owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["ice_enabled"] != true {
+		t.Fatal("secret+host must set ice_enabled")
+	}
+	if out["turn_running"] != false {
+		t.Fatalf("nothing listening so turn_running must be false: %v", out)
+	}
+	errStr, _ := out["turn_error"].(string)
+	if errStr == "" {
+		t.Fatal("expected turn_error when coturn is down")
+	}
+}
+
+type adminTurnDown string
+
+func (e adminTurnDown) Error() string { return string(e) }
+
+var errAdminTurnDown = adminTurnDown("down")

@@ -40,9 +40,12 @@ func (c Config) IceTTL() time.Duration {
 	if c.TurnTTLSeconds > 0 {
 		return time.Duration(c.TurnTTLSeconds) * time.Second
 	}
-	return 24 * time.Hour
+	// Clients cache GET /v1/info; 24h HMAC expires under that cache.
+	return 7 * 24 * time.Hour
 }
 
+// IceEnabled is "HMAC + host configured", not "coturn is listening".
+// Use ProbeTurn().Running or GET /health turn_running for the listen check.
 func (c Config) IceEnabled() bool {
 	return c.TurnSecret != "" && strings.TrimSpace(c.PublicHost) != ""
 }

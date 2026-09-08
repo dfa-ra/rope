@@ -67,7 +67,7 @@ func TestIceServersShapeAndHMAC(t *testing.T) {
 	if strings.Join(turn.URLs, ",") != strings.Join(wantURLs, ",") {
 		t.Fatalf("urls %+v", turn.URLs)
 	}
-	wantUser := TurnUsername(now, 24*time.Hour)
+	wantUser := TurnUsername(now, cfg.IceTTL())
 	if turn.Username != wantUser {
 		t.Fatalf("user %s want %s", turn.Username, wantUser)
 	}
@@ -76,6 +76,20 @@ func TestIceServersShapeAndHMAC(t *testing.T) {
 	}
 	if !strings.Contains(turn.Username, ":rope") {
 		t.Fatal(turn.Username)
+	}
+	if !strings.HasSuffix(turn.Username, ":rope") {
+		t.Fatalf("use-auth-secret user must be expiry:rope, got %s", turn.Username)
+	}
+}
+
+func TestIceTTLDefaultCoversCachedInfo(t *testing.T) {
+	if Default().IceTTL() < 48*time.Hour {
+		t.Fatalf("HMAC ttl %s is too short for cached /v1/info", Default().IceTTL())
+	}
+	cfg := Default()
+	cfg.TurnTTLSeconds = 3600
+	if cfg.IceTTL() != time.Hour {
+		t.Fatalf("override %s", cfg.IceTTL())
 	}
 }
 
