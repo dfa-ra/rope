@@ -12,7 +12,7 @@ import (
 )
 
 const ProtocolVersion uint16 = 1
-const ServerVersion = "0.2.11"
+const ServerVersion = "0.2.13"
 const HTTPDevFingerprintSeed = "rope-http-dev"
 
 type Config struct {
@@ -30,6 +30,8 @@ type Config struct {
 	AllowHTTP           bool   `json:"allow_http"`
 	FingerprintOverride string `json:"fingerprint,omitempty"`
 	PublicHost          string `json:"public_host,omitempty"`
+	PublicIP            string `json:"public_ip,omitempty"`
+	TLSHostname         string `json:"tls_hostname,omitempty"`
 	TurnSecret          string `json:"turn_secret,omitempty"`
 	TurnPort            int    `json:"turn_port,omitempty"`
 	TurnsPort           int    `json:"turns_port,omitempty"`
