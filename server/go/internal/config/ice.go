@@ -72,6 +72,49 @@ func isIPLiteral(s string) bool {
 	return net.ParseIP(h) != nil
 }
 
+// IsPrivateIPv4 is RFC1918 / loopback / link-local / CGNAT (100.64/10).
+// Phones behind Russian mobile CGNAT cannot reach these as TURN URLs.
+func IsPrivateIPv4(s string) bool {
+	ip := net.ParseIP(strings.TrimSpace(s))
+	if ip == nil {
+		return false
+	}
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return false
+	}
+	if ip4.IsPrivate() || ip4.IsLoopback() || ip4.IsUnspecified() || ip4.IsLinkLocalUnicast() {
+		return true
+	}
+	// RFC 6598 CGNAT — net.IP.IsPrivate does not include 100.64/10.
+	return ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127
+}
+
+func (c Config) iceURLHosts() []string {
+	host := strings.TrimSpace(c.PublicHost)
+	ip := c.PublicIPv4()
+	add := func(out []string, h string) []string {
+		h = IceHost(strings.TrimSpace(h))
+		if h == "" || h == "localhost" || h == "127.0.0.1" || h == "[::1]" {
+			return out
+		}
+		for _, e := range out {
+			if strings.EqualFold(e, h) {
+				return out
+			}
+		}
+		return append(out, h)
+	}
+	// A private public_host is a common «Обновить ядро» mistake (SSH to 10.x).
+	if IsPrivateIPv4(host) && ip != "" && !IsPrivateIPv4(ip) {
+		return add(nil, ip)
+	}
+	var out []string
+	out = add(out, host)
+	out = add(out, ip)
+	return out
+}
+
 // IceHostname is the DNS/SNI name for TURNS when ICE URLs use a raw IP.
 // Empty when public_host is itself an IP and tls_hostname is unset.
 func (c Config) IceHostname() string {
@@ -129,25 +172,31 @@ func (c Config) IceServers(now time.Time) []IceServer {
 	if !c.IceEnabled() {
 		return nil
 	}
-	host := IceHost(c.PublicHost)
+	hosts := c.iceURLHosts()
+	if len(hosts) == 0 {
+		return nil
+	}
 	sni := c.IceHostname()
 	turnPort := c.EffectiveTurnPort()
 	user := TurnUsername(now, c.IceTTL())
 	cred := TurnCredential(c.TurnSecret, user)
-	stun := IceServer{URLs: []string{fmt.Sprintf("stun:%s:%d", host, turnPort)}, Hostname: sni}
-	turnURLs := []string{
-		fmt.Sprintf("turn:%s:%d?transport=udp", host, turnPort),
-		fmt.Sprintf("turn:%s:%d", host, turnPort),
-		fmt.Sprintf("turn:%s:%d?transport=tcp", host, turnPort),
-	}
-	if turns := c.EffectiveTurnsPort(); turns > 0 {
-		turnURLs = append([]string{
-			fmt.Sprintf("turns:%s:%d?transport=tcp", host, turns),
-			fmt.Sprintf("turns:%s:%d", host, turns),
-		}, turnURLs...)
+	var stunURLs, turnURLs []string
+	for _, host := range hosts {
+		stunURLs = append(stunURLs, fmt.Sprintf("stun:%s:%d", host, turnPort))
+		if turns := c.EffectiveTurnsPort(); turns > 0 {
+			turnURLs = append(turnURLs,
+				fmt.Sprintf("turns:%s:%d?transport=tcp", host, turns),
+				fmt.Sprintf("turns:%s:%d", host, turns),
+			)
+		}
+		turnURLs = append(turnURLs,
+			fmt.Sprintf("turn:%s:%d?transport=tcp", host, turnPort),
+			fmt.Sprintf("turn:%s:%d?transport=udp", host, turnPort),
+			fmt.Sprintf("turn:%s:%d", host, turnPort),
+		)
 	}
 	return []IceServer{
-		stun,
+		{URLs: stunURLs, Hostname: sni},
 		{URLs: turnURLs, Username: user, Credential: cred, Hostname: sni},
 	}
 }
@@ -166,8 +215,10 @@ type TurnReport struct {
 	Configured     bool     `json:"configured"`
 	Running        bool     `json:"running"`
 	TurnsListening bool     `json:"turns_listening"`
+	AllocateOK     bool     `json:"allocate_ok"`
 	Listen         string   `json:"listen"`
 	ExternalIP     string   `json:"external_ip,omitempty"`
+	RelayedIP      string   `json:"relayed_ip,omitempty"`
 	Error          string   `json:"error,omitempty"`
 	TurnPort       int      `json:"turn_port"`
 	TurnsPort      int      `json:"turns_port"`
@@ -261,6 +312,15 @@ func (c Config) ProbeTurn(timeout time.Duration) TurnReport {
 		if rep.Error == "" {
 			rep.Error = fmt.Sprintf("coturn не слушает 127.0.0.1:%d", rep.TurnPort)
 		}
+	}
+	if !rep.Running {
+		return rep
+	}
+	alloc := c.cachedAllocate(timeout)
+	rep.AllocateOK = alloc.OK
+	rep.RelayedIP = alloc.RelayedIP
+	if !alloc.OK && alloc.Error != "" {
+		rep.Error = alloc.Error
 	}
 	return rep
 }

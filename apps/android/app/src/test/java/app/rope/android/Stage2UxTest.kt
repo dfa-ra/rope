@@ -146,6 +146,12 @@ class Stage2UxTest {
         assertEquals("не слушает", turn.value)
         assertTrue(turn.hint.contains("443"))
         assertEquals("работает", AdminSnapshot.turnValue(JSONObject().put("turn_running", true).put("ice_enabled", true)))
+        assertEquals(
+            "allocate нет",
+            AdminSnapshot.turnValue(
+                JSONObject().put("turn_running", true).put("ice_enabled", true).put("turn_allocate_ok", false),
+            ),
+        )
         assertEquals("настроен", AdminSnapshot.turnValue(JSONObject().put("ice_enabled", true)))
         assertEquals("нет", AdminSnapshot.turnValue(JSONObject()))
         assertTrue(AdminSnapshot.turnHint(JSONObject()).contains("3478"))

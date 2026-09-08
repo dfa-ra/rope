@@ -131,7 +131,7 @@ func TestAdminStage2Fields(t *testing.T) {
 	for _, key := range []string{
 		"server_id", "version", "device_count", "object_count", "object_bytes",
 		"group_count", "max_object_bytes", "online_devices", "mailbox_count",
-		"turn_running", "turns_listening", "turn_error", "ice_enabled",
+		"turn_running", "turn_allocate_ok", "turns_listening", "turn_error", "ice_enabled",
 	} {
 		if _, ok := out[key]; !ok {
 			t.Fatalf("missing admin field %s in %v", key, out)

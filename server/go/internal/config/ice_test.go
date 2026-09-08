@@ -61,9 +61,9 @@ func TestIceServersShapeAndHMAC(t *testing.T) {
 	wantURLs := []string{
 		"turns:203.0.113.9:443?transport=tcp",
 		"turns:203.0.113.9:443",
+		"turn:203.0.113.9:3478?transport=tcp",
 		"turn:203.0.113.9:3478?transport=udp",
 		"turn:203.0.113.9:3478",
-		"turn:203.0.113.9:3478?transport=tcp",
 	}
 	if strings.Join(turn.URLs, ",") != strings.Join(wantURLs, ",") {
 		t.Fatalf("urls %+v", turn.URLs)
@@ -206,9 +206,96 @@ func TestIceServersOmitsTurnsWhenTLSFailed(t *testing.T) {
 	}
 }
 
+func TestIceServersUsesPublicIPWhenHostIsPrivate(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "10.0.0.4"
+	cfg.PublicIP = "203.0.113.9"
+	cfg.TurnSecret = "shared-hmac"
+	cfg.TurnsPort = 443
+	ice := cfg.IceServers(time.Unix(1_700_000_000, 0))
+	joined := strings.Join(ice[1].URLs, " ")
+	if strings.Contains(joined, "10.0.0.4") {
+		t.Fatalf("must not advertise RFC1918 TURN URL: %s", joined)
+	}
+	if !strings.Contains(joined, "turns:203.0.113.9:443?transport=tcp") {
+		t.Fatalf("need public IP TURNS: %s", joined)
+	}
+	if !strings.Contains(joined, "turn:203.0.113.9:3478?transport=tcp") {
+		t.Fatalf("need public IP TCP TURN: %s", joined)
+	}
+}
+
+func TestIceServersDuplicatesIPWhenDNSHost(t *testing.T) {
+	cfg := Default()
+	cfg.PublicHost = "vps.example"
+	cfg.PublicIP = "203.0.113.9"
+	cfg.TurnSecret = "s"
+	cfg.TurnsPort = 443
+	ice := cfg.IceServers(time.Now())
+	joined := strings.Join(ice[1].URLs, " ")
+	if !strings.Contains(joined, "turns:vps.example:443") {
+		t.Fatalf("dns: %s", joined)
+	}
+	if !strings.Contains(joined, "turns:203.0.113.9:443") {
+		t.Fatalf("ip duplicate: %s", joined)
+	}
+	if !strings.Contains(joined, "turn:203.0.113.9:3478?transport=tcp") {
+		t.Fatalf("ip tcp: %s", joined)
+	}
+}
+
+func TestIsPrivateIPv4(t *testing.T) {
+	for _, ip := range []string{"10.1.2.3", "192.168.0.1", "172.16.9.1", "127.0.0.1", "100.64.1.2", "169.254.1.1"} {
+		if !IsPrivateIPv4(ip) {
+			t.Fatalf("%s should be private", ip)
+		}
+	}
+	if IsPrivateIPv4("203.0.113.9") || IsPrivateIPv4("vps.example") {
+		t.Fatal("public / dns")
+	}
+}
+
+func TestProbeTurnAllocateFailureSetsError(t *testing.T) {
+	origD := DialTCP
+	origA := RunTurnAllocate
+	t.Cleanup(func() {
+		DialTCP = origD
+		RunTurnAllocate = origA
+		ResetTurnAllocCache()
+	})
+	ResetTurnAllocCache()
+	cfg := Default()
+	cfg.PublicHost = "203.0.113.9"
+	cfg.TurnSecret = "s"
+	cfg.DataDir = t.TempDir()
+	DialTCP = func(string, time.Duration) error { return nil }
+	RunTurnAllocate = func(Config, time.Duration) AllocResult {
+		return AllocResult{Error: "HMAC 401 — turn_secret не совпадает с static-auth-secret"}
+	}
+	rep := cfg.ProbeTurn(10 * time.Millisecond)
+	if !rep.Running {
+		t.Fatal("listen")
+	}
+	if rep.AllocateOK {
+		t.Fatal("allocate must fail")
+	}
+	if !strings.Contains(rep.Error, "HMAC 401") {
+		t.Fatalf("error %s", rep.Error)
+	}
+}
+
 func TestProbeTurnDistinguishes443ForeignVsListening(t *testing.T) {
 	orig := DialTCP
-	t.Cleanup(func() { DialTCP = orig })
+	origA := RunTurnAllocate
+	t.Cleanup(func() {
+		DialTCP = orig
+		RunTurnAllocate = origA
+		ResetTurnAllocCache()
+	})
+	ResetTurnAllocCache()
+	RunTurnAllocate = func(Config, time.Duration) AllocResult {
+		return AllocResult{OK: true, RelayedIP: "203.0.113.9", Proto: "udp"}
+	}
 	cfg := Default()
 	cfg.PublicHost = "203.0.113.9"
 	cfg.TurnSecret = "s"
@@ -242,6 +329,9 @@ func TestProbeTurnDistinguishes443ForeignVsListening(t *testing.T) {
 	rep = cfg.ProbeTurn(10 * time.Millisecond)
 	if !rep.Running || !rep.TurnsListening {
 		t.Fatalf("%+v", rep)
+	}
+	if !rep.AllocateOK {
+		t.Fatalf("allocate %+v", rep)
 	}
 	if rep.Error != "" {
 		t.Fatalf("error %s", rep.Error)
