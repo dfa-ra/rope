@@ -348,6 +348,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         put("theme", mode.name)
     }
 
+    fun saveNotificationsMuted(muted: Boolean) {
+        put("notifications_muted", if (muted) "1" else "0")
+    }
+
+    fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

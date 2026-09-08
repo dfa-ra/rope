@@ -4,8 +4,13 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | DONE | unfreeze for 0.3.2 complete | CG-043 |
-| CG-040 | Research: offline notify, TG menus, leftover ring, speaker | RESEARCH-01 | DONE | user follow-up | CG-007 |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.3 Settings slice | — |
+| CG-045 | Slice: real Settings (CG-012) as 0.3.3 | PO | IN_PROGRESS | open-ended sprint; stub was unreachable | CG-007 |
+| CG-046 | Android Settings: mute, appearance, fingerprint, about | AND-01 | IN_PROGRESS | CG-012 | CG-045 |
+| CG-047 | Rust: harden `parse_rejects_timestamp_beyond_future_skew` | CORE-01 | IN_PROGRESS | known flake; test-only | CG-045 |
+| CG-048 | Independent review | REV-01 | QUEUED | reviewer ≠ implementer | CG-046, CG-047 |
+| CG-049 | Ship **0.3.3** | PO | QUEUED | versionCode 27; do not retag v0.3.2 | CG-048 |
+| CG-040 | Research: offline notify, TG menus, leftover ring, speaker | RESEARCH-01 | DONE | user follow-up | — |
 | CG-041 | Android: FGS + lifecycle notify, TG tap/long-press, tones, громкая связь | AND-01 | DONE | this cycle | CG-040 |
 | CG-042 | Go: in-memory pending RING when callee offline | GO-01 | DONE | this cycle | CG-040 |
 | CG-043 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; Android CI later green | CG-041, CG-042 |
@@ -13,7 +18,7 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-026 | Ship **0.3.0** | PO | DONE | tag v0.3.0 = 69c35cb | CG-025 |
 | CG-036 | Ship **0.3.1** | PO | DONE | tag v0.3.1; versionCode 25; v0.2.15 and v0.3.0 unchanged | CG-035 |
 | CG-003 | No extra overlapping feature agents | PO | IN_PROGRESS | D-006 | — |
-| CG-012 | Settings stub | — | BACKLOG | — | — |
+| CG-012 | Settings stub | AND-01 | IN_PROGRESS | absorbed by CG-046 | — |
 | CG-013 | Owner revoke UI | — | BACKLOG | — | — |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 

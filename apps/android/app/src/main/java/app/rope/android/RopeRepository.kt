@@ -130,6 +130,7 @@ data class UiState(
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
+    val notificationsMuted: Boolean = false,
     val appUpdateAvailable: Boolean = false,
     val latestAppVersion: String = "",
     val replyTo: ChatMessage? = null,
@@ -193,7 +194,10 @@ class RopeRepository(private val app: Application) {
                 val night = app.resources.configuration.uiMode and
                     android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
-                _state.value = _state.value.copy(theme = store.themeMode(night))
+                _state.value = _state.value.copy(
+                    theme = store.themeMode(night),
+                    notificationsMuted = store.notificationsMuted(),
+                )
                 store.rehomeMisroutedMedia()
                 if (!vault.exists()) tryRestoreBackup()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -479,8 +483,26 @@ class RopeRepository(private val app: Application) {
 
     fun toggleTheme() {
         val next = if (_state.value.theme == ThemeMode.DARK) ThemeMode.LIGHT else ThemeMode.DARK
-        store.saveTheme(next)
-        _state.value = _state.value.copy(theme = next)
+        setTheme(next)
+    }
+
+    fun setTheme(mode: ThemeMode) {
+        if (_state.value.theme == mode) return
+        store.saveTheme(mode)
+        _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun toggleNotificationsMuted() {
+        val next = !_state.value.notificationsMuted
+        store.saveNotificationsMuted(next)
+        _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun copyText(value: String) {
+        if (value.isBlank()) return
+        val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("rope", value))
+        _state.value = _state.value.copy(notice = "Скопировано")
     }
 
     fun sendDraft() {
@@ -2254,7 +2276,7 @@ class RopeRepository(private val app: Application) {
             store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
             refreshConversations()
         }
-        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted)) {
+        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
             notifier.message(title, body)
         }
     }

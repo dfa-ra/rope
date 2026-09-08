@@ -96,12 +96,14 @@ class NavRulesTest {
     fun homeShortcutsStayInApp() {
         assertEquals(HomeCtas.messenger, HomeCtas.shortcuts[0])
         assertEquals(HomeCtas.status, HomeCtas.shortcuts[1])
+        assertEquals(HomeCtas.settings, HomeCtas.shortcuts[2])
         assertEquals(
-            listOf(Screen.Chats, Screen.Status),
+            listOf(Screen.Chats, Screen.Status, Screen.Settings),
             HomeCtas.shortcuts.map { it.destination },
         )
         assertEquals("Перейти к мессенджеру", HomeCtas.messenger.label)
         assertEquals("К статусу", HomeCtas.status.label)
+        assertEquals("Настройки", HomeCtas.settings.label)
         HomeCtas.shortcuts.forEach { shortcut ->
             val label = shortcut.label.lowercase()
             assertFalse(shortcut.label, label.contains("лендинг"))
@@ -148,6 +150,7 @@ class NavRulesTest {
         assertEquals("Звонки", NavRules.chromeTitle(Screen.Calls))
         assertEquals("Люди", NavRules.chromeTitle(Screen.People))
         assertEquals("Статус", NavRules.chromeTitle(Screen.Status))
+        assertEquals("Настройки", NavRules.chromeTitle(Screen.Settings))
         assertEquals("офлайн", NavRules.chromeTitle(Screen.Home, offline = true))
         Screen.entries.forEach { screen ->
             val title = NavRules.chromeTitle(screen)

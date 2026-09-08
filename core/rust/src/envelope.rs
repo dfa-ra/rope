@@ -430,8 +430,8 @@ mod tests {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();
         let mut env = encrypt_message(&alice, &bob.public_identity(), "x").unwrap();
-        let now = unix_ms();
-        let far = now.saturating_add(MAX_FUTURE_SKEW_MS).saturating_add(1);
+        // parse_envelope samples unix_ms() again; u64::MAX cannot race the +1 boundary.
+        let far = u64::MAX;
         env.bytes[24..32].copy_from_slice(&far.to_le_bytes());
         let err = match parse_envelope(&env.bytes) {
             Err(e) => e,

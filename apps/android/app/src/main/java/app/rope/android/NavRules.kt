@@ -15,7 +15,8 @@ data class HomeShortcut(
 object HomeCtas {
     val messenger = HomeShortcut("Перейти к мессенджеру", Screen.Chats)
     val status = HomeShortcut("К статусу", Screen.Status)
-    val shortcuts: List<HomeShortcut> = listOf(messenger, status)
+    val settings = HomeShortcut("Настройки", Screen.Settings)
+    val shortcuts: List<HomeShortcut> = listOf(messenger, status, settings)
 }
 
 data class MainTab(

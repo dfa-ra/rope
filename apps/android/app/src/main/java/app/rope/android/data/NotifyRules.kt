@@ -5,10 +5,16 @@ package app.rope.android.data
  *
  * A chat that is open while the process is not STARTED still alerts,
  * and still increments unread in the repository.
+ * Global mute (Settings) silences messages only — not the incoming-call overlay.
  */
 object NotifyRules {
-    fun shouldAlert(chatOpen: Boolean, appForeground: Boolean, muted: Boolean): Boolean {
-        if (muted) return false
+    fun shouldAlert(
+        chatOpen: Boolean,
+        appForeground: Boolean,
+        muted: Boolean,
+        globalMuted: Boolean = false,
+    ): Boolean {
+        if (globalMuted || muted) return false
         return !(chatOpen && appForeground)
     }
 }

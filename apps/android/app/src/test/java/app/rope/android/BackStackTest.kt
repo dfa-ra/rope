@@ -77,7 +77,15 @@ class BackStackTest {
     }
 
     @Test
-    fun homeToChatsThenBackThenExit() {
+    fun settingsPopsBackToHome() {
+        val stack = BackStack.push(listOf(Screen.Home), Screen.Settings)
+        assertEquals(listOf(Screen.Home, Screen.Settings), stack)
+        assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(UiState(screen = Screen.Settings, backStack = stack)),
+        )
+        assertEquals(listOf(Screen.Home), BackStack.pop(stack))
+    }
         var stack = BackStack.push(listOf(Screen.Home), Screen.Chats)
         assertEquals(listOf(Screen.Home, Screen.Chats), stack)
         assertEquals(BackLayer.Pop, BackStack.decide(UiState(screen = Screen.Chats, backStack = stack)))

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -135,6 +136,9 @@ fun RopeScaffold(
     onToggleCallMute: () -> Unit = {},
     onToggleCallSpeaker: () -> Unit = {},
     onToggleTheme: () -> Unit,
+    onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
+    onToggleNotifications: () -> Unit = {},
+    onCopyText: (String) -> Unit = {},
     onReply: (app.rope.android.data.ChatMessage) -> Unit,
     onEdit: (app.rope.android.data.ChatMessage) -> Unit,
     onDelete: (app.rope.android.data.ChatMessage) -> Unit,
@@ -194,11 +198,17 @@ fun RopeScaffold(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onToggleTheme) {
-                        Icon(
-                            if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                            contentDescription = if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
-                        )
+                    if (!signedIn) {
+                        IconButton(onClick = onToggleTheme) {
+                            Icon(
+                                if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                                contentDescription = if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
+                            )
+                        }
+                    } else if (state.screen != Screen.Settings) {
+                        IconButton(onClick = { onGo(Screen.Settings) }) {
+                            Icon(Icons.Outlined.Settings, contentDescription = "Настройки")
+                        }
                     }
                     if (signedIn) {
                         if (RoleRules.canShowInviteQr(state.profile?.role)) {
@@ -296,7 +306,12 @@ fun RopeScaffold(
                             HomePane(state, onGo, onStatus, onInvite)
                         }
                         Screen.Status -> app.rope.android.ui.StatusPane(state, onUpdateApp, onUpgradeCore) { onTab(Screen.Home) }
-                        Screen.Settings -> SettingsPane(state, onToggleTheme) { onTab(Screen.Home) }
+                        Screen.Settings -> app.rope.android.ui.SettingsPane(
+                            state,
+                            onSetTheme,
+                            onToggleNotifications,
+                            onCopyText,
+                        ) { onTab(Screen.Home) }
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
                     }
@@ -410,40 +425,6 @@ private fun StartPane(onGo: (Screen) -> Unit, onRestore: () -> Unit) {
                 "Если пришлось удалить приложение из‑за другой подписи: выберите файл rope-device.backup из Загрузок.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsPane(state: UiState, onToggleTheme: () -> Unit, onHome: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        FadeIn(40) { Text("О приложении", style = MaterialTheme.typography.titleLarge) }
-        FadeIn(120) {
-            val me = state.profile?.displayName.orEmpty()
-            SectionCard {
-                Text("Rope ${app.rope.android.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
-                if (me.isNotBlank()) {
-                    Text("Вы · $me", style = MaterialTheme.typography.titleSmall)
-                }
-                Text(
-                    "Приватный self-hosted мессенджер. Тема: ${if (state.theme == ThemeMode.DARK) "тёмная" else "светлая"}.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        FadeIn(200) {
-            GlowButton(
-                if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
-                onToggleTheme,
-                Modifier.fillMaxWidth(),
             )
         }
     }

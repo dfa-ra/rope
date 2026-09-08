@@ -17,6 +17,7 @@ class NotifyRulesTest {
         assertFalse(NotifyRules.shouldAlert(chatOpen = false, appForeground = false, muted = true))
         assertFalse(NotifyRules.shouldAlert(chatOpen = true, appForeground = true, muted = true))
         assertFalse(NotifyRules.shouldAlert(chatOpen = true, appForeground = false, muted = true))
+        assertFalse(NotifyRules.shouldAlert(chatOpen = false, appForeground = false, muted = false, globalMuted = true))
     }
 
     @Test

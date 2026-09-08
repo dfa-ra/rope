@@ -14,6 +14,7 @@ class InstantUiTest {
         assertTrue(InstantUi.showsAppBar(Screen.Chats))
         assertTrue(InstantUi.showsAppBar(Screen.Home))
         assertTrue(InstantUi.showsAppBar(Screen.Status))
+        assertTrue(InstantUi.showsAppBar(Screen.Settings))
     }
 
     @Test
