@@ -1570,7 +1570,7 @@ class RopeRepository(private val app: Application) {
                 val msg = obj.optString("message")
                 val call = _state.value.call
                 if (call != null && (code == "not_found" || msg.contains("offline", ignoreCase = true))) {
-                    failConnecting(CallLink.offlineDetail())
+                    applyCallEffects(callMachine.onRingSendFailed())
                 } else {
                     _state.value = _state.value.copy(error = msg)
                 }
