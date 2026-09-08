@@ -4,7 +4,7 @@ How Cursor subagents are **spawned, tasked, and reported**. Binding. Compact.
 
 **Who is who:** [CONSTITUTION.md](CONSTITUTION.md). **Who may work:** [AGENTS.md](../AGENTS.md). **Live company memory:** `.cryptogalera/` (PO-owned; see below). This file is the spawn/report contract, not a product spec.
 
-Mode is **MIGRATION / trunk promotion**. D-005 A is accepted (merge shipped `v0.2.15` onto `main`). New product implementation stays frozen until CG-007. Do not invent extra product scope. Do not spawn overlapping Stage-2 feature agents.
+Mode is **STABILIZATION / 0.3.0**. D-005 A is done. CG-007 is unfrozen **only** for the seated UI/calls/core workstream (CG-020–CG-026). Do not invent iOS/ratchet/landing. Do not spawn overlapping chrome/calls/landing agents beyond the named owners.
 
 ---
 
