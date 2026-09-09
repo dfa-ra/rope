@@ -22,6 +22,9 @@ class MediaHubRulesTest {
         assertEquals(listOf("v", "p"), media.map { it.id })
         assertTrue(media.all { MediaHubRules.opensViewer(it) })
         assertFalse(MediaHubRules.opensViewer(voice))
+        assertTrue(MediaHubRules.usesVideoPoster(MessageKind.VIDEO))
+        assertFalse(MediaHubRules.usesVideoPoster(MessageKind.IMAGE))
+        assertEquals(320, MediaHubRules.TILE_EDGE)
     }
 
     @Test

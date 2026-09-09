@@ -42,11 +42,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.graphics.Bitmap
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaHubRules
 import app.rope.android.data.MediaHubTab
 import app.rope.android.data.MessageKind
 import app.rope.android.media.ImageCodec
+import app.rope.android.media.VideoCodec
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SharedMediaHub(
@@ -136,9 +140,20 @@ private fun HubMediaTile(
     onEnsure: (ChatMessage) -> Unit,
     onClick: () -> Unit,
 ) {
-    LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
-    val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
-    val video = m.kind == MessageKind.VIDEO
+    var bmp by remember(m.id, m.localPath, m.kind) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(m.id, m.localPath, m.kind) {
+        onEnsure(m)
+        val path = m.localPath
+        if (path.isNullOrBlank()) {
+            bmp = null
+            return@LaunchedEffect
+        }
+        bmp = withContext(Dispatchers.Default) {
+            runCatching { hubTileBitmap(path, m.kind) }.getOrNull()
+        }
+    }
+    val video = MediaHubRules.usesVideoPoster(m.kind)
+    val poster = bmp
     Box(
         Modifier
             .aspectRatio(1f)
@@ -148,9 +163,9 @@ private fun HubMediaTile(
             .semantics { contentDescription = if (video) "Видео" else "Фото" },
         contentAlignment = Alignment.Center,
     ) {
-        if (bmp != null) {
+        if (poster != null) {
             Image(
-                bitmap = bmp.asImageBitmap(),
+                bitmap = poster.asImageBitmap(),
                 contentDescription = if (video) "Видео" else "Фото",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -178,6 +193,14 @@ private fun HubMediaTile(
             }
         }
     }
+}
+
+private fun hubTileBitmap(path: String, kind: MessageKind): Bitmap? {
+    if (MediaHubRules.usesVideoPoster(kind)) {
+        val frame = VideoCodec.poster(path) ?: return null
+        return ImageCodec.scale(frame, MediaHubRules.TILE_EDGE)
+    }
+    return ImageCodec.decodePreview(path)
 }
 
 @Composable

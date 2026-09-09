@@ -8,6 +8,7 @@ enum class MediaHubTab { MEDIA, FILES, LINKS, VOICE }
 
 object MediaHubRules {
     const val GRID_COLUMNS = 3
+    const val TILE_EDGE = 320
     const val SECTION = "Общие медиа"
 
     fun items(messages: List<ChatMessage>, tab: MediaHubTab): List<ChatMessage> = when (tab) {
@@ -37,6 +38,8 @@ object MediaHubRules {
 
     fun opensViewer(msg: ChatMessage): Boolean =
         !msg.deleted && (msg.kind == MessageKind.IMAGE || msg.kind == MessageKind.VIDEO)
+
+    fun usesVideoPoster(kind: MessageKind): Boolean = kind == MessageKind.VIDEO
 
     fun tabLabel(tab: MediaHubTab): String = when (tab) {
         MediaHubTab.MEDIA -> "Медиа"
