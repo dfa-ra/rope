@@ -98,6 +98,9 @@ class MainActivity : AppCompatActivity() {
                 if (VideoCallRules.incomingCameraMuted(cam)) repo.cameraDenied()
                 repo.acceptCall()
             }
+            "unmute-cam" -> {
+                if (cam) repo.toggleCallCamera() else repo.cameraDenied()
+            }
         }
     }
 
@@ -189,7 +192,16 @@ class MainActivity : AppCompatActivity() {
                     onHangup = repo::hangup,
                     onToggleCallMute = repo::toggleCallMute,
                     onToggleCallSpeaker = repo::toggleCallSpeaker,
-                    onToggleCallCamera = repo::toggleCallCamera,
+                    onToggleCallCamera = {
+                        val r = (application as RopeApp).repo
+                        val muted = r.state.value.callCamMuted
+                        if (VideoCallRules.inCallUnmuteNeedsCameraPermission(muted, hasCam())) {
+                            afterAudio = "unmute-cam"
+                            callMediaPerm.launch(arrayOf(Manifest.permission.CAMERA))
+                        } else {
+                            r.toggleCallCamera()
+                        }
+                    },
                     onFlipCallCamera = repo::flipCallCamera,
                     callEgl = { (application as RopeApp).repo.callEglContext() },
                     onBindCallRemote = { (application as RopeApp).repo.bindCallRemote(it) },

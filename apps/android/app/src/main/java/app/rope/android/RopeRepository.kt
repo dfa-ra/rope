@@ -554,30 +554,33 @@ class RopeRepository(private val app: Application) {
     }
 
     fun sendDraft() {
-        val pending = _state.value.pendingAttachments
-        if (pending.isNotEmpty() && !_state.value.recording) {
-            val caption = _state.value.draftText
-            val pack = replyPack(_state.value.replyTo)
-            _state.value = _state.value.copy(
-                draftText = "",
-                pendingAttachments = emptyList(),
-                replyTo = null,
-                replySpan = null,
-                editTarget = null,
-            )
-            persistOpenDraft()
-            sendAttachments(pending, caption = caption, pack = pack)
-            return
-        }
-        val text = _state.value.draftText
-        if (text.isBlank() || _state.value.recording) return
         val edit = _state.value.editTarget
-        if (edit != null) {
+        if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
+            val text = _state.value.draftText
+            if (text.isBlank()) return
             _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null)
             persistOpenDraft()
             applyEdit(edit, text)
             return
         }
+        val pending = _state.value.pendingAttachments
+        if (pending.isNotEmpty() && !_state.value.recording) {
+            val caption = _state.value.draftText
+            val pack = replyPack(_state.value.replyTo)
+            val destPeer = _state.value.peer
+            val destGroup = _state.value.group
+            _state.value = _state.value.copy(
+                draftText = "",
+                pendingAttachments = emptyList(),
+                replyTo = null,
+                replySpan = null,
+            )
+            persistOpenDraft()
+            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
+            return
+        }
+        val text = _state.value.draftText
+        if (text.isBlank() || _state.value.recording) return
         val reply = _state.value.replyTo
         val pack = replyPack(reply)
         _state.value = _state.value.copy(draftText = "", replyTo = null, replySpan = null)
@@ -651,7 +654,13 @@ class RopeRepository(private val app: Application) {
     fun startEdit(msg: ChatMessage) {
         if (!msg.outgoing || msg.deleted) return
         if (msg.kind != MessageKind.TEXT && msg.kind != MessageKind.GROUP_TEXT) return
-        _state.value = _state.value.copy(editTarget = msg, replyTo = null, replySpan = null, draftText = msg.text)
+        _state.value = _state.value.copy(
+            editTarget = msg,
+            replyTo = null,
+            replySpan = null,
+            draftText = msg.text,
+            pendingAttachments = emptyList(),
+        )
     }
 
     fun cancelComposerExtra() {
@@ -785,6 +794,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun stageAttachments(uris: List<Uri>) {
+        if (_state.value.editTarget != null) return
         val merged = (_state.value.pendingAttachments + uris).distinct().take(AlbumRules.MAX_PHOTOS)
         if (merged.isEmpty()) return
         _state.value = _state.value.copy(pendingAttachments = merged)
@@ -795,6 +805,8 @@ class RopeRepository(private val app: Application) {
         forcedMime: String? = null,
         caption: String? = null,
         pack: ReplyPack = ReplyPack(),
+        destPeer: DirectoryDevice? = _state.value.peer,
+        destGroup: RopeGroup? = _state.value.group,
     ) {
         val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
         if (pack.id == null && resolved.id != null) {
@@ -822,10 +834,21 @@ class RopeRepository(private val app: Application) {
                         albumCount = slot.count,
                         caption = MediaSendRules.onFirstOnly(slot.index, cap),
                         pack = resolved,
+                        destPeer = destPeer,
+                        destGroup = destGroup,
                     )
                 }
                 rest.forEach { item ->
-                    sendMediaBytes(item.bytes, item.mime, item.name, item.kind, item.durationMs, pack = resolved)
+                    sendMediaBytes(
+                        item.bytes,
+                        item.mime,
+                        item.name,
+                        item.kind,
+                        item.durationMs,
+                        pack = resolved,
+                        destPeer = destPeer,
+                        destGroup = destGroup,
+                    )
                 }
             } catch (e: Exception) {
                 error(e)
@@ -914,11 +937,22 @@ class RopeRepository(private val app: Application) {
             return
         }
         val pack = replyPack(_state.value.replyTo)
+        val destPeer = _state.value.peer
+        val destGroup = _state.value.group
         _state.value = _state.value.copy(replyTo = null, replySpan = null)
         scope.launch {
             try {
                 val bytes = take.file.readBytes()
-                sendMediaBytes(bytes, "audio/mp4", take.file.name, "voice", take.durationMs, pack = pack)
+                sendMediaBytes(
+                    bytes,
+                    "audio/mp4",
+                    take.file.name,
+                    "voice",
+                    take.durationMs,
+                    pack = pack,
+                    destPeer = destPeer,
+                    destGroup = destGroup,
+                )
             } catch (e: Exception) {
                 error(e)
             } finally {
@@ -1134,7 +1168,11 @@ class RopeRepository(private val app: Application) {
     }
 
     fun micDenied() {
-        notice(VideoCallRules.micDeniedNotice())
+        if (VideoCallRules.micDeniedUsesOverlay(_state.value.call != null)) {
+            _state.value = _state.value.copy(callNotice = VideoCallRules.micDeniedNotice())
+        } else {
+            notice(VideoCallRules.micDeniedNotice())
+        }
     }
 
     fun callEglContext(): org.webrtc.EglBase.Context? = rtc?.eglContext()
@@ -1351,10 +1389,12 @@ class RopeRepository(private val app: Application) {
         albumCount: Int = 1,
         caption: String? = null,
         pack: ReplyPack = ReplyPack(),
+        destPeer: DirectoryDevice? = _state.value.peer,
+        destGroup: RopeGroup? = _state.value.group,
     ) {
         val id = identity ?: return
-        val group = _state.value.group
-        val peer = _state.value.peer
+        val group = destGroup
+        val peer = destPeer
         if (group == null && peer == null) {
             throw IllegalStateException("откройте чат, чтобы отправить вложение")
         }
@@ -1708,6 +1748,11 @@ class RopeRepository(private val app: Application) {
         val prefs = store.chatPrefs(chatId)
         val messages = store.messages(chatId)
         val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
+        val pending = if (MediaSendRules.keepPendingOnEnter(openChatId(), chatId)) {
+            _state.value.pendingAttachments
+        } else {
+            emptyList()
+        }
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
@@ -1721,7 +1766,7 @@ class RopeRepository(private val app: Application) {
             pinnedMessageId = prefs.pinnedMessageId,
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
-            pendingAttachments = emptyList(),
+            pendingAttachments = pending,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)

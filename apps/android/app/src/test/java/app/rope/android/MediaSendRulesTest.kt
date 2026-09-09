@@ -95,6 +95,28 @@ class MediaSendRulesTest {
     }
 
     @Test
+    fun inFlightSendKeepsFrozenChatAfterEnterChat() {
+        val frozen = MediaSendRules.freezeChatId("alice", null)
+        assertEquals("alice", frozen)
+        assertEquals("alice", MediaSendRules.sendToFrozenChat(frozen, liveChatId = "bob"))
+        assertEquals("g:gid", MediaSendRules.freezeChatId("alice", "gid"))
+        assertTrue(MediaSendRules.preferEditOverPending(true))
+        assertFalse(MediaSendRules.preferEditOverPending(false))
+        assertFalse(ComposerRules.showAttach(true))
+        assertTrue(ComposerRules.showAttach(false))
+    }
+
+    @Test
+    fun enterChatSamePeerKeepsPending() {
+        assertTrue(MediaSendRules.keepPendingOnEnter("alice", "alice"))
+        assertTrue(MediaSendRules.keepPendingOnEnter("g:gid", "g:gid"))
+        assertFalse(MediaSendRules.keepPendingOnEnter("alice", "bob"))
+        assertFalse(MediaSendRules.keepPendingOnEnter("alice", "g:gid"))
+        assertFalse(MediaSendRules.keepPendingOnEnter(null, "alice"))
+        assertFalse(MediaSendRules.keepPendingOnEnter("", "alice"))
+    }
+
+    @Test
     fun mediaReplyPackSurvivesJsonAndIncoming() {
         val bare = MediaPayload("image", "o", "ab", "KEY", "image/jpeg", "p.jpg", 1, caption = "подпись")
         val packed = bare.withReply("mid", "привет", "Анна", "фраг", 1, 4)

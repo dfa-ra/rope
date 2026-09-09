@@ -1913,7 +1913,7 @@ private fun ComposerBar(
                     onSpan = onReplySpan.takeIf { QuoteSpanRules.canSelect(target) },
                 )
             }
-            if (state.pendingAttachments.isNotEmpty()) {
+            if (state.editTarget == null && state.pendingAttachments.isNotEmpty()) {
                 val context = LocalContext.current
                 val videos = remember(state.pendingAttachments) {
                     MediaSendRules.videoCount(
@@ -1967,8 +1967,10 @@ private fun ComposerBar(
                             verticalAlignment = Alignment.Bottom,
                             modifier = Modifier.padding(start = 2.dp, end = 4.dp),
                         ) {
-                            IconButton(onClick = onAttach) {
-                                Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
+                            if (ComposerRules.showAttach(state.editTarget != null)) {
+                                IconButton(onClick = onAttach) {
+                                    Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
+                                }
                             }
                             IconButton(onClick = { showEmoji = !showEmoji }) {
                                 Icon(

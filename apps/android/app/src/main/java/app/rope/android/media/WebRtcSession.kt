@@ -85,6 +85,8 @@ class WebRtcSession(
     private var fellBack = false
     private var closed = false
     @Volatile
+    private var pcReady = false
+    @Volatile
     private var micEnabled = true
     private val mainHandler = Handler(Looper.getMainLooper())
     private val fallbackDirect = Runnable {
@@ -150,7 +152,10 @@ class WebRtcSession(
         override fun onAddStream(p0: MediaStream) = Unit
         override fun onRemoveStream(p0: MediaStream) = Unit
         override fun onDataChannel(p0: DataChannel) = Unit
-        override fun onRenegotiationNeeded() = Unit
+        override fun onRenegotiationNeeded() {
+            if (closed || !pcReady) return
+            createOffer(renegotiate = true)
+        }
     }
 
     init {
@@ -220,7 +225,10 @@ class WebRtcSession(
                 if (!ok) {
                     sendCamera = false
                     onCameraFailed()
+                    reserveVideoTransceiverLocked()
                 }
+            } else {
+                reserveVideoTransceiverLocked()
             }
         }
         Log.i(
@@ -230,11 +238,12 @@ class WebRtcSession(
         if (plan.forceRelay) {
             mainHandler.postDelayed(fallbackDirect, IceUnstick.NO_PROGRESS_MS)
         }
+        pcReady = true
     }
 
-    fun createOffer(iceRestart: Boolean = false) {
+    fun createOffer(iceRestart: Boolean = false, renegotiate: Boolean = false) {
         if (closed) return
-        if (callee && !iceRestart) {
+        if (callee && !iceRestart && !renegotiate) {
             Log.i("rope-webrtc", "skip offer: this side is callee")
             return
         }
@@ -317,6 +326,7 @@ class WebRtcSession(
         if (closed) return
         sendCamera = on
         if (on) {
+            val hadTrack = videoTrack != null
             if (videoTrack == null) {
                 if (!startCameraLocked()) {
                     sendCamera = false
@@ -327,6 +337,9 @@ class WebRtcSession(
             videoTrack?.setEnabled(true)
             runCatching {
                 capturer?.startCapture(VideoCallRules.WIDTH, VideoCallRules.HEIGHT, VideoCallRules.FPS)
+            }
+            if (VideoCallRules.renegotiateOnCameraUnmute(hadTrack)) {
+                createOffer(renegotiate = true)
             }
         } else {
             videoTrack?.setEnabled(false)
@@ -417,6 +430,9 @@ class WebRtcSession(
             if (sendCamera && videoTrack == null && !startCameraLocked()) {
                 sendCamera = false
                 onCameraFailed()
+                reserveVideoTransceiverLocked()
+            } else if (!sendCamera) {
+                reserveVideoTransceiverLocked()
             }
         }
         pc?.setRemoteDescription(object : SdpObserver by noopSdp {
@@ -486,21 +502,7 @@ class WebRtcSession(
             cap.startCapture(VideoCallRules.WIDTH, VideoCallRules.HEIGHT, VideoCallRules.FPS)
             val track = factory.createVideoTrack(VideoCallRules.TRACK_ID, source)
             track.setEnabled(true)
-            val added = runCatching { pc?.addTrack(track, listOf(VideoCallRules.STREAM_ID)) }.getOrNull()
-            if (added == null) {
-                pc?.addTransceiver(
-                    track,
-                    RtpTransceiver.RtpTransceiverInit(
-                        RtpTransceiver.RtpTransceiverDirection.SEND_RECV,
-                        listOf(VideoCallRules.STREAM_ID),
-                    ),
-                )
-            }
-            pc?.transceivers?.forEach { t ->
-                if (t.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO) {
-                    runCatching { t.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
-                }
-            }
+            attachLocalVideoLocked(track)
             localSink?.let { track.addSink(it) }
             capturer = cap
             surfaceHelper = helper
@@ -512,6 +514,50 @@ class WebRtcSession(
         } catch (e: Exception) {
             Log.w("rope-webrtc", "camera", e)
             false
+        }
+    }
+
+    private fun reserveVideoTransceiverLocked() {
+        if (closed) return
+        val hasVideo = pc?.transceivers?.any {
+            it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO
+        } == true
+        if (hasVideo) return
+        pc?.addTransceiver(
+            MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+            RtpTransceiver.RtpTransceiverInit(
+                RtpTransceiver.RtpTransceiverDirection.SEND_RECV,
+                listOf(VideoCallRules.STREAM_ID),
+            ),
+        )
+    }
+
+    private fun attachLocalVideoLocked(track: VideoTrack) {
+        val existing = pc?.transceivers?.firstOrNull {
+            it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO
+        }
+        if (existing != null) {
+            val replaced = runCatching { existing.sender.setTrack(track, false) }.getOrDefault(false)
+            if (!replaced) {
+                runCatching { pc?.addTrack(track, listOf(VideoCallRules.STREAM_ID)) }
+            }
+            runCatching { existing.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
+        } else {
+            val added = runCatching { pc?.addTrack(track, listOf(VideoCallRules.STREAM_ID)) }.getOrNull()
+            if (added == null) {
+                pc?.addTransceiver(
+                    track,
+                    RtpTransceiver.RtpTransceiverInit(
+                        RtpTransceiver.RtpTransceiverDirection.SEND_RECV,
+                        listOf(VideoCallRules.STREAM_ID),
+                    ),
+                )
+            }
+        }
+        pc?.transceivers?.forEach { t ->
+            if (t.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO) {
+                runCatching { t.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
+            }
         }
     }
 

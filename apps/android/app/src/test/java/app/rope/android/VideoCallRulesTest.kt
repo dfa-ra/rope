@@ -86,6 +86,26 @@ class VideoCallRulesTest {
         assertEquals(null, VideoCallRules.noticeCameraDenyFallback(wantVideo = false, cameraGranted = false))
     }
 
+    @Test
+    fun micDeniedNoticeLandsOnOverlayWhileCallPresent() {
+        assertTrue(VideoCallRules.micDeniedUsesOverlay(hasCall = true))
+        assertFalse(VideoCallRules.micDeniedUsesOverlay(hasCall = false))
+        assertEquals(VideoCallRules.micDeniedNotice(), VideoCallRules.overlayMicDenied(hasCall = true))
+        assertEquals(null, VideoCallRules.overlayMicDenied(hasCall = false))
+    }
+
+    @Test
+    fun unmuteAfterMuteBeforeConnectReservesAndRenegotiates() {
+        assertTrue(VideoCallRules.reserveVideoTransceiver(wantVideo = true, startCamera = false))
+        assertFalse(VideoCallRules.reserveVideoTransceiver(wantVideo = true, startCamera = true))
+        assertFalse(VideoCallRules.reserveVideoTransceiver(wantVideo = false, startCamera = false))
+        assertTrue(VideoCallRules.renegotiateOnCameraUnmute(hadLocalTrack = false))
+        assertFalse(VideoCallRules.renegotiateOnCameraUnmute(hadLocalTrack = true))
+        assertTrue(VideoCallRules.inCallUnmuteNeedsCameraPermission(unmuting = true, cameraGranted = false))
+        assertFalse(VideoCallRules.inCallUnmuteNeedsCameraPermission(unmuting = true, cameraGranted = true))
+        assertFalse(VideoCallRules.inCallUnmuteNeedsCameraPermission(unmuting = false, cameraGranted = false))
+    }
+
     /**
      * Compact VP8+opus offer similar to Unified Plan. Real device SDP is larger
      * (ICE, fingerprint, more fmtp) but still typically 2–6 KiB — under 16 KiB.

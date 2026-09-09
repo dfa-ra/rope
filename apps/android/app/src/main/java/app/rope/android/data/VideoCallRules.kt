@@ -57,6 +57,25 @@ object VideoCallRules {
 
     fun micDeniedNotice(): String = "Нет доступа к микрофону"
 
+    /** Incoming Accept + mic deny must land on the overlay, not a Scaffold snackbar. */
+    fun micDeniedUsesOverlay(hasCall: Boolean): Boolean = hasCall
+
+    fun overlayMicDenied(hasCall: Boolean): String? =
+        if (hasCall) micDeniedNotice() else null
+
+    /**
+     * Video sessions keep an m=video transceiver even when the local camera is
+     * muted or denied, so later unmute can send without a missing m-line.
+     */
+    fun reserveVideoTransceiver(wantVideo: Boolean, startCamera: Boolean): Boolean =
+        wantVideo && !startCamera
+
+    /** Adding the first local video track after mute-before-connect needs a new offer. */
+    fun renegotiateOnCameraUnmute(hadLocalTrack: Boolean): Boolean = !hadLocalTrack
+
+    fun inCallUnmuteNeedsCameraPermission(unmuting: Boolean, cameraGranted: Boolean): Boolean =
+        unmuting && !cameraGranted
+
     /** Incoming accept with camera deny still proceeds; local camera stays muted. */
     fun incomingCameraMuted(cameraGranted: Boolean): Boolean = !cameraGranted
 

@@ -702,6 +702,8 @@ object ComposerRules {
     /** Chats FAB → name → create. */
     const val GROUP_CREATE_TAPS = 2
 
+    fun showAttach(editing: Boolean): Boolean = !editing
+
     fun showSendButton(
         draft: String,
         recording: Boolean,

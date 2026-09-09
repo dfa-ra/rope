@@ -31,6 +31,18 @@ object MediaSendRules {
             VideoRules.looksLikeVideo(names.getOrElse(i) { "" }, mimes[i])
         }
 
+    /** Bind in-flight media to the thread that tapped Send, not a later enterChat. */
+    fun freezeChatId(peerId: String?, groupId: String?): String =
+        if (!groupId.isNullOrBlank()) ChatIds.group(groupId) else peerId.orEmpty()
+
+    fun sendToFrozenChat(frozenChatId: String, liveChatId: String): String = frozenChatId
+
+    /** Tab-away / remount of the same thread keeps staged URIs; a different chat wipes. */
+    fun keepPendingOnEnter(previousChatId: String?, nextChatId: String): Boolean =
+        !previousChatId.isNullOrBlank() && previousChatId == nextChatId
+
+    fun preferEditOverPending(editing: Boolean): Boolean = editing
+
     fun hint(count: Int, videos: Int = 0): ComposerHintCopy {
         val n = count.coerceAtLeast(1)
         val title = when {
