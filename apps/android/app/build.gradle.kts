@@ -11,8 +11,8 @@ android {
         applicationId = "app.rope.android"
         minSdk = 26
         targetSdk = 34
-        versionCode = 63
-        versionName = "0.3.39"
+        versionCode = 64
+        versionName = "0.3.40"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
