@@ -283,6 +283,8 @@ object QueryHighlight {
     fun firstRange(text: String, query: String): IntRange? {
         val q = ChatListRules.normalize(query)
         if (q.isEmpty() || text.isEmpty()) return null
+        val word = ChatListRules.wordPrefixIndex(text, query)
+        if (word >= 0) return word until (word + q.length)
         val i = text.indexOf(q, ignoreCase = true)
         if (i < 0) return null
         return i until (i + q.length)
@@ -297,6 +299,22 @@ object ChatListRules {
 
     fun searching(query: String): Boolean = normalize(query).isNotEmpty()
 
+    /** First index where a Unicode letter/digit word starts with the normalized query, or -1. */
+    fun wordPrefixIndex(text: String, query: String): Int {
+        val q = normalize(query)
+        if (q.isEmpty() || text.isEmpty()) return -1
+        val hay = text.lowercase()
+        var i = 0
+        while (i < hay.length) {
+            while (i < hay.length && !hay[i].isLetterOrDigit()) i++
+            if (i >= hay.length) break
+            val start = i
+            while (i < hay.length && hay[i].isLetterOrDigit()) i++
+            if (q.length <= i - start && hay.startsWith(q, startIndex = start)) return start
+        }
+        return -1
+    }
+
     fun visible(c: Conversation, mode: ChatListMode): Boolean = when (mode) {
         ChatListMode.ALL -> true
         ChatListMode.GROUPS -> c.isGroup
@@ -307,7 +325,7 @@ object ChatListRules {
         val q = normalize(query)
         if (q.isEmpty()) return ChatListHit.NONE
         val title = c.title.lowercase()
-        if (title.startsWith(q)) return ChatListHit.TITLE_PREFIX
+        if (title.startsWith(q) || wordPrefixIndex(c.title, query) >= 0) return ChatListHit.TITLE_PREFIX
         if (title.contains(q)) return ChatListHit.TITLE
         val hay = buildString {
             c.last?.preview()?.takeIf { it.isNotBlank() }?.let { append(it).append('\n') }

@@ -342,6 +342,29 @@ class Stage2UxTest {
     }
 
     @Test
+    fun chatListSearchWordPrefixRanksSecondTitleWord() {
+        fun msg(text: String, t: Long) =
+            ChatMessage("m$t", "p", false, text, MessageStatus.DELIVERED_TO_DEVICE, t)
+        val word = Conversation("w", "Мария Анна", "zzz", false, false, msg("zzz", 10L))
+        val substring = Conversation("s", "Марианна", "zzz", false, false, msg("zzz", 20L))
+        val first = Conversation("f", "Анна", "zzz", false, true, msg("zzz", 1L), pinned = true)
+        val hyphen = Conversation("h", "Анна-Мария", "zzz", false, false, msg("zzz", 5L))
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(word, "анн"))
+        assertEquals(ChatListHit.TITLE, ChatListRules.hit(substring, "анн"))
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(first, "анн"))
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(hyphen, "мар"))
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(hyphen, "анн"))
+        assertEquals(ChatListHit.TITLE, ChatListRules.hit(Conversation("i", "Иван", "zzz", false, false, msg("zzz", 2L)), "ан"))
+        val ranked = ChatListRules.rows(listOf(substring, word, first), "анн")
+        assertEquals(listOf("w", "f", "s"), ranked.map { it.id })
+        assertEquals(6 until 9, QueryHighlight.firstRange("Мария Анна", "анн"))
+        assertEquals(5 until 7, QueryHighlight.firstRange("Иван Анна", "ан"))
+        assertEquals(5 until 8, QueryHighlight.firstRange("Анна-Мария", "мар"))
+        assertEquals(6, ChatListRules.wordPrefixIndex("Мария Анна", "анн"))
+        assertEquals(-1, ChatListRules.wordPrefixIndex("Марианна", "анн"))
+    }
+
+    @Test
     fun webrtcSignalsStayInCallPayload() {
         val offer = CallSignal.parse(CallSignal(CallSignal.OFFER, sdp = "v=0").toJson())!!
         assertEquals(CallSignal.OFFER, offer.kind)

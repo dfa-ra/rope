@@ -8,7 +8,7 @@ PO-owned live snapshot. Not a changelog.
 
 ## Current Phase
 
-**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-081 landed. Next: **0.3.11** chat-list word-prefix search (D-024). User sprint is core + UI; revoke thread is enough.
+**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-081 landed. Slice **0.3.11** is Telegram-like title word-prefix ranking (D-024). User sprint is core + UI; revoke thread is enough.
 
 ## Staffing this cycle
 

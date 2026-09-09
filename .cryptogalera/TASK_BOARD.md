@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.11 chat-list word-prefix search | — |
+| CG-082 | Slice: chat-list word-prefix search as 0.3.11 | PO | IN_PROGRESS | REV-01: Мария Анна + анн is TITLE_PREFIX | CG-007 |
+| CG-083 | Android: TITLE_PREFIX on any title word | AND-01 | IN_PROGRESS | D-024; no 0.3.2 tap/long-press redo | CG-082 |
+| CG-084 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-083 |
+| CG-085 | Ship **0.3.11** | PO | IN_PROGRESS | versionCode 35; do not retag v0.3.10 | CG-084 |
 | CG-077 | Slice: already-revoked revoke-member 404 as 0.3.10 | PO | DONE | shipped v0.3.10 | CG-007 |
 | CG-078 | Go: RevokeMemberGuarded already-revoked → ErrNotFound | GO-01 | DONE | same as RevokeDeviceGuarded | CG-077 |
 | CG-079 | Android: revoke-member 404 is already-revoked | AND-01 | DONE | idempotent; no crypto | CG-077 |
