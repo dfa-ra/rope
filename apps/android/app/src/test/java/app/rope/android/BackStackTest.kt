@@ -175,6 +175,16 @@ class BackStackTest {
             BackStack.decide(UiState(screen = Screen.Chats, backStack = listOf(Screen.Chats), chatQuery = "анна")),
         )
         assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(
+                UiState(
+                    screen = Screen.Chat,
+                    backStack = listOf(Screen.Chats, Screen.Archive, Screen.Chat),
+                    chatQuery = "анна",
+                ),
+            ),
+        )
+        assertEquals(
             BackLayer.CancelForward,
             BackStack.decide(base.copy(screen = Screen.Chats, backStack = listOf(Screen.Chats), forwarding = photo)),
         )

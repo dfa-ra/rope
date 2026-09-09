@@ -338,13 +338,14 @@ class RopeRepository(private val app: Application) {
             BackLayer.Pop -> {
                 persistOpenDraft()
                 val next = BackStack.pop(BackStack.currentStack(s.backStack, s.screen))
+                val dest = next.last()
                 _state.value = s.copy(
-                    screen = next.last(),
+                    screen = dest,
                     backStack = next,
                     error = null,
                     viewingImage = null,
                     messageQuery = "",
-                    chatQuery = if (s.screen == Screen.Archive) "" else s.chatQuery,
+                    chatQuery = NavRules.chatQueryAfterPop(s.screen, dest, s.chatQuery),
                     unreadAnchorId = if (next.last() == Screen.Chat || next.last() == Screen.PeerProfile) {
                         s.unreadAnchorId
                     } else {

@@ -123,6 +123,23 @@ object NavRules {
                 to != Screen.Chat &&
                 to != Screen.PeerProfile)
 
+    /**
+     * List search is owned by the list. On Chat, system back must Pop back to
+     * Archive — not clear a preserved archive query while still in the thread.
+     */
+    fun backClearsChatQuery(screen: Screen): Boolean = when (screen) {
+        Screen.Chats, Screen.Groups, Screen.Calls, Screen.Archive -> true
+        else -> false
+    }
+
+    /** Query left after a back-stack pop. Chat → Archive keeps the archive search. */
+    fun chatQueryAfterPop(from: Screen, to: Screen, query: String): String = when {
+        from == Screen.Chat && to == Screen.Archive -> query
+        from == Screen.PeerProfile && to == Screen.Archive -> query
+        from == Screen.Archive -> ""
+        else -> query
+    }
+
     fun groupsOf(conversations: List<Conversation>): List<Conversation> =
         conversations.filter { it.isGroup && !ArchiveRules.shouldHideFromMain(it) }
 

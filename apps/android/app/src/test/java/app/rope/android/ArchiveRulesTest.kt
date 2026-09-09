@@ -207,6 +207,32 @@ class ArchiveRulesTest {
     }
 
     @Test
+    fun backFromArchivedChatKeepsQuery() {
+        assertFalse(NavRules.backClearsChatQuery(Screen.Chat))
+        assertTrue(NavRules.backClearsChatQuery(Screen.Archive))
+        assertEquals("анн", NavRules.chatQueryAfterPop(Screen.Chat, Screen.Archive, "анн"))
+        assertEquals("", NavRules.chatQueryAfterPop(Screen.Archive, Screen.Chats, "анн"))
+        val stack = listOf(Screen.Chats, Screen.Archive, Screen.Chat)
+        assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(UiState(screen = Screen.Chat, backStack = stack, chatQuery = "анн")),
+        )
+        val dest = BackStack.pop(stack).last()
+        assertEquals(Screen.Archive, dest)
+        assertEquals("анн", NavRules.chatQueryAfterPop(Screen.Chat, dest, "анн"))
+        assertEquals(
+            BackLayer.ClearChatQuery,
+            BackStack.decide(
+                UiState(
+                    screen = Screen.Archive,
+                    backStack = listOf(Screen.Chats, Screen.Archive),
+                    chatQuery = "анн",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun previewFallsBackToCount() {
         val emptyLast = archivedAnna.copy(last = null, subtitle = "")
         assertEquals("1 ${ArchiveRules.COUNT_SUFFIX}", ArchiveRules.preview(listOf(emptyLast)))
