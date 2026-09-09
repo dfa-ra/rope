@@ -258,4 +258,57 @@ class IceServersTest {
         assertTrue(IceServers.shouldRefresh(t0, t0 + 5_000, cached))
         assertFalse(IceServers.shouldRefresh(t0, t0 + 4_000, cached))
     }
+
+    @Test
+    fun parseArrayDropsNonStunTurnSchemes() {
+        val mixed = JSONArray()
+            .put("stun:vps:3478")
+            .put("turn:vps:3478")
+            .put("turns:vps:443?transport=tcp")
+            .put("file:///etc/passwd")
+            .put("http://evil.example/ice")
+            .put("https://evil.example/ice")
+            .put("javascript:alert(1)")
+            .put("data:text/plain,x")
+            .put("ws://vps/ice")
+        val parsed = IceServers.parseArray(mixed)
+        val urls = parsed.flatMap { it.urls }
+        assertEquals(listOf("stun:vps:3478", "turn:vps:3478", "turns:vps:443?transport=tcp"), urls)
+        assertFalse(IceServers.allowedUrl("file:foo"))
+        assertFalse(IceServers.allowedUrl("http://stun:3478"))
+        assertTrue(IceServers.allowedUrl("STUN:vps:3478"))
+        assertTrue(IceServers.allowedUrl("TURNS:vps:443"))
+    }
+
+    @Test
+    fun parseObjectDropsForbiddenUrlsAndKeepsTurn() {
+        val obj = JSONObject()
+            .put(
+                "urls",
+                JSONArray()
+                    .put("turn:vps:3478")
+                    .put("file:///tmp/x")
+                    .put("http://203.0.113.9:3478"),
+            )
+            .put("username", "u")
+            .put("credential", "c")
+        val parsed = IceServers.parseArray(JSONArray().put(obj))
+        assertEquals(1, parsed.size)
+        assertEquals(listOf("turn:vps:3478"), parsed[0].urls)
+        assertEquals("u", parsed[0].username)
+        val onlyBad = IceServers.parseArray(
+            JSONArray().put(JSONObject().put("urls", JSONArray().put("data:text/plain,x"))),
+        )
+        assertTrue(onlyBad.isEmpty())
+    }
+
+    @Test
+    fun resolveStripsForbiddenUrlsBeforeFallback() {
+        val dirty = listOf(
+            IceServerSpec(listOf("file:///x", "turn:vps:3478"), username = "u", credential = "c"),
+        )
+        val resolved = IceServers.resolve(dirty)
+        assertEquals(listOf("turn:vps:3478"), resolved.flatMap { it.urls })
+        assertFalse(IceServers.missingTurn(resolved))
+    }
 }

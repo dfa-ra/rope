@@ -109,14 +109,16 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             .put("memberId", p.memberId)
             .put("deviceId", p.deviceId)
             .put("displayName", p.displayName)
-            .put("iceServersJson", p.iceServersJson)
+            .put("iceServersJson", IceAtRest.seal(p.iceServersJson) { encryptBytes(it) })
         put("profile", o.toString())
     }
 
     fun profile(): ServerProfile? {
         val raw = get("profile") ?: return null
         val o = JSONObject(raw)
-        return ServerProfile(
+        val storedIce = o.optString("iceServersJson")
+        val ice = IceAtRest.open(storedIce) { decryptBytes(it) }
+        val p = ServerProfile(
             host = o.getString("host"),
             port = o.getInt("port"),
             serverId = o.getString("serverId"),
@@ -126,8 +128,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             memberId = o.getString("memberId"),
             deviceId = o.getString("deviceId"),
             displayName = o.optString("displayName"),
-            iceServersJson = JsonIds.optional(o.optString("iceServersJson")).orEmpty(),
+            iceServersJson = ice,
         )
+        if (ice.isNotBlank() && storedIce.isNotBlank() && !SecretKv.isWrapped(storedIce)) {
+            saveProfile(p)
+        }
+        return p
     }
 
     fun insertMessage(msg: ChatMessage) {

@@ -157,7 +157,7 @@ object IceServers {
             if (item === JSONObject.NULL) continue
             if (item is String) {
                 val url = item.trim()
-                if (url.isNotEmpty() && !url.equals("null", ignoreCase = true)) {
+                if (allowedUrl(url)) {
                     out += IceServerSpec(listOf(url))
                 }
                 continue
@@ -178,7 +178,7 @@ object IceServers {
     fun resolve(serverProvided: List<IceServerSpec>, hintHost: String? = null): List<IceServerSpec> {
         val cleaned = serverProvided.map { spec ->
             spec.copy(
-                urls = spec.urls.map { it.trim() }.filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) },
+                urls = spec.urls.map { it.trim() }.filter { allowedUrl(it) },
                 username = JsonIds.optional(spec.username),
                 credential = JsonIds.optional(spec.credential),
                 hostname = JsonIds.optional(spec.hostname),
@@ -391,6 +391,14 @@ object IceServers {
             is String -> listOf(raw)
             else -> emptyList()
         }
-        return values.map { it.trim() }.filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
+        return values.map { it.trim() }.filter { allowedUrl(it) }
+    }
+
+    /** PeerConnection only accepts STUN/TURN. Drop file/http/data/javascript and anything else. */
+    fun allowedUrl(url: String): Boolean {
+        val raw = url.trim()
+        if (raw.isEmpty() || raw.equals("null", ignoreCase = true)) return false
+        val scheme = raw.substringBefore(':', missingDelimiterValue = "").lowercase()
+        return scheme == "stun" || scheme == "turn" || scheme == "turns"
     }
 }
