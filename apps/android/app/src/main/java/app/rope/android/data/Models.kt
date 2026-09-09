@@ -43,6 +43,7 @@ data class DirectoryDevice(
     val publicIdentity: ByteArray,
     val lastSeen: String,
     val online: Boolean = false,
+    val role: String = "member",
 )
 
 data class ChatMessage(

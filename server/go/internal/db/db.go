@@ -120,12 +120,12 @@ type Member struct {
 }
 
 type Device struct {
-	ID              string
-	MemberID        string
-	PublicIdentity  []byte
-	SignPublic      []byte
-	LastSeen        string
-	Revoked         bool
+	ID             string
+	MemberID       string
+	PublicIdentity []byte
+	SignPublic     []byte
+	LastSeen       string
+	Revoked        bool
 }
 
 func (s *Store) InsertMember(id, name, role string) error {
@@ -190,9 +190,14 @@ func (s *Store) TouchDevice(id string) {
 }
 
 func (s *Store) HasOwner() (bool, error) {
+	n, err := s.OwnerCount()
+	return n > 0, err
+}
+
+func (s *Store) OwnerCount() (int, error) {
 	var n int
 	err := s.SQL.QueryRow(`SELECT COUNT(*) FROM members WHERE role = 'owner' AND revoked_at IS NULL`).Scan(&n)
-	return n > 0, err
+	return n, err
 }
 
 func (s *Store) InsertInvite(id, token, createdBy string, expires time.Time) error {

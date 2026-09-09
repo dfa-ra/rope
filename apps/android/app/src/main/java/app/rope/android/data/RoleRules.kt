@@ -16,6 +16,8 @@ object RoleRules {
 
     fun canWipeOrReinstall(role: String?): Boolean = isOwner(role)
 
+    fun canRevoke(role: String?): Boolean = isOwner(role)
+
     @Suppress("UNUSED_PARAMETER")
     fun canUpdateApp(role: String?): Boolean = true
 

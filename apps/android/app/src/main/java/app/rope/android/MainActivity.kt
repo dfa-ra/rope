@@ -141,6 +141,7 @@ class MainActivity : AppCompatActivity() {
                     onAddMember = repo::addMemberToOpenGroup,
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,
+                    onRevokeMember = repo::revokeMember,
                     onAcceptCall = { withMic("accept") { repo.acceptCall() } },
                     onRejectCall = repo::rejectCall,
                     onHangup = repo::hangup,

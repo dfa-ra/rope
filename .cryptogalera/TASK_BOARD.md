@@ -4,7 +4,12 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | DONE | unfreeze for 0.3.5 complete | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.6 owner revoke UI | — |
+| CG-058 | Slice: owner revoke UI as 0.3.6 | PO | IN_PROGRESS | CG-013; protocol already has revoke endpoints | CG-007 |
+| CG-059 | Android: People Исключить + RevokeRules | AND-01 | DONE | D-019 | CG-058 |
+| CG-060 | Go: last-owner 409 + drop WSS on revoke | GO-01 | DONE | existing POST /v1/admin/revoke-* | CG-058 |
+| CG-061 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS | CG-059, CG-060 |
+| CG-062 | Ship **0.3.6** | PO | IN_PROGRESS | versionCode 30; do not retag v0.3.5 | CG-061 |
 | CG-054 | Slice: Telegram-like chat list search + pinned polish as 0.3.5 | PO | DONE | shipped v0.3.5 | CG-007 |
 | CG-055 | Android: ranked search, highlight, pill field, pin divider | AND-01 | DONE | D-018 | CG-054 |
 | CG-056 | Independent review | REV-01 | DONE | PASS after normalize assertion fix | CG-055 |
@@ -27,7 +32,7 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-036 | Ship **0.3.1** | PO | DONE | tag v0.3.1; versionCode 25; v0.2.15 and v0.3.0 unchanged | CG-035 |
 | CG-003 | No extra overlapping feature agents | PO | IN_PROGRESS | D-006 | — |
 | CG-012 | Settings stub | AND-01 | DONE | absorbed by CG-046; shipped in 0.3.3 | — |
-| CG-013 | Owner revoke UI | — | BACKLOG | — | — |
+| CG-013 | Owner revoke UI | AND-01 | IN_PROGRESS | D-019; endpoints already in protocol | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
 **Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, or `v0.3.5`.**

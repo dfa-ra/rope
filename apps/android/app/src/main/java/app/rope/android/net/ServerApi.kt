@@ -37,10 +37,13 @@ class ServerApi(
     fun directory(): List<DirectoryDevice> {
         val obj = authed("GET", "/v1/directory", ByteArray(0))
         val members = mutableMapOf<String, String>()
+        val roles = mutableMapOf<String, String>()
         val mems = obj.optJSONArray("members") ?: JSONArray()
         for (i in 0 until mems.length()) {
             val m = mems.getJSONObject(i)
-            members[m.getString("member_id")] = m.optString("display_name")
+            val mid = m.getString("member_id")
+            members[mid] = m.optString("display_name")
+            roles[mid] = m.optString("role").ifBlank { "member" }
         }
         val devices = obj.getJSONArray("devices")
         val out = mutableListOf<DirectoryDevice>()
@@ -55,6 +58,7 @@ class ServerApi(
                 publicIdentity = blob,
                 lastSeen = d.optString("last_seen"),
                 online = d.optBoolean("online"),
+                role = roles[mid].orEmpty().ifBlank { "member" },
             )
         }
         return out
@@ -67,6 +71,16 @@ class ServerApi(
     }
 
     fun status(): JSONObject = authed("GET", "/v1/admin/status", ByteArray(0))
+
+    fun revokeMember(memberId: String): JSONObject {
+        val body = JSONObject().put("member_id", memberId).toString().toByteArray()
+        return authed("POST", "/v1/admin/revoke-member", body)
+    }
+
+    fun revokeDevice(deviceId: String): JSONObject {
+        val body = JSONObject().put("device_id", deviceId).toString().toByteArray()
+        return authed("POST", "/v1/admin/revoke-device", body)
+    }
 
     fun uploadObject(ciphertext: ByteArray, sha256: String): JSONObject {
         val path = "/v1/objects"

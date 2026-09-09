@@ -452,9 +452,31 @@ func (s *Server) revokeMember(w http.ResponseWriter, _ *http.Request, a authed, 
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
+	target, err := s.Store.Member(req.MemberID)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	if target.Role == "owner" {
+		n, err := s.Store.OwnerCount()
+		if err != nil || n <= 1 {
+			writeJSON(w, 409, map[string]string{"error": "last owner"})
+			return
+		}
+	}
+	devices, err := s.Store.ListDevices()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
 	if err := s.Store.RevokeMember(req.MemberID); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
+	}
+	for _, d := range devices {
+		if d.MemberID == req.MemberID {
+			s.Hub.Drop(d.ID)
+		}
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
@@ -869,8 +891,12 @@ func (h *Hub) Add(id string, c *clientConn) {
 
 func (h *Hub) Drop(id string) {
 	h.mu.Lock()
+	c := h.clients[id]
 	delete(h.clients, id)
 	h.mu.Unlock()
+	if c != nil && c.c != nil {
+		_ = c.c.Close(websocket.StatusPolicyViolation, "revoked")
+	}
 }
 
 func (h *Hub) DropIf(id string, c *clientConn) {

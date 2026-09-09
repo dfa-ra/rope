@@ -36,6 +36,7 @@ import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
+import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
@@ -923,6 +924,24 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.callSpeakerOn
         _state.value = _state.value.copy(callSpeakerOn = next)
         CallAudio.setSpeaker(app, next)
+    }
+
+    fun revokeMember(memberId: String) {
+        val st = _state.value
+        val target = st.devices.find { PeerIds.same(it.memberId, memberId) } ?: return
+        if (!RevokeRules.canRevokeTarget(st.profile?.role, st.profile?.memberId, st.profile?.deviceId, target)) {
+            return
+        }
+        scope.launch {
+            busy(true)
+            try {
+                api?.revokeMember(memberId) ?: error("нет сети")
+                notice(RevokeRules.noticeRevoked(target.displayName.ifBlank { target.deviceId.take(8) }))
+                refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
     }
 
     fun createInvite() {
