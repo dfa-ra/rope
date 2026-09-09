@@ -9,7 +9,7 @@ object GallerySaveRules {
     const val TITLE = "Сохранять в галерею"
 
     fun hint(): String =
-        "Фото и видео после скачивания. Голос и файлы не трогаем. Сервер альбом не видит."
+        "Фото и видео после скачивания — в галерею. Голос и файлы не трогаем. Сервер альбом не видит."
 
     fun shouldCopy(kind: MessageKind, enabled: Boolean): Boolean =
         enabled && (kind == MessageKind.IMAGE || kind == MessageKind.VIDEO)
