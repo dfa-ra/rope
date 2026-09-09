@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.22 in-chat video (not 0.3.21) | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.23 local Saved Messages / Избранное (not 0.3.22) | — |
+| CG-128 | Slice: in-chat video as 0.3.22 | PO | DONE | shipped v0.3.22; D-036; D-031 stays org law | CG-007 |
+| CG-129 | Android: VideoRules + compress + in-thread player | AND-01 | DONE | D-036; kind=video; Kotlin never crypto | CG-128 |
+| CG-130 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; transcode/player quality nits; no streaming; no video albums | CG-129 |
+| CG-131 | Ship **0.3.22** | PO | DONE | tag v0.3.22 = db4cd5e; versionCode 46; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 unchanged | CG-130 |
 | CG-124 | Slice: in-thread unread separator as 0.3.21 | PO | DONE | shipped v0.3.21; D-035; D-031 stays org law | CG-007 |
 | CG-125 | Android: UnreadSeparatorRules + «Непрочитанные» chip + jump FAB | AND-01 | DONE | D-035; snapshot unread on enter; Kotlin never crypto | CG-124 |
 | CG-126 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; separator not sticky; DOWN FAB on fully-read when scrolled up; return from peer profile remounts at latest; cluster ignores unread row | CG-125 |
@@ -100,4 +104,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, or `v0.3.21`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, or `v0.3.22`.**
