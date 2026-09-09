@@ -11,7 +11,6 @@ import app.rope.android.data.VideoCallRules
 import org.webrtc.EglBase
 import org.webrtc.EglRenderer
 import org.webrtc.GlRectDrawer
-import org.webrtc.RendererCommon
 import org.webrtc.VideoFrame
 import org.webrtc.VideoSink
 import java.util.concurrent.CountDownLatch
@@ -51,7 +50,6 @@ class CallVideoRenderer(context: Context) :
         if (released || started) return
         eglRenderer.init(sharedContext, EglBase.CONFIG_PLAIN, GlRectDrawer())
         eglRenderer.setMirror(mirror)
-        eglRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
         started = true
         val texture = surfaceTexture
         if (surfaceReady && texture != null) {
