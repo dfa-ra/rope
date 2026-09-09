@@ -6,9 +6,10 @@ import org.junit.Test
 
 class SecureDisplayRulesTest {
     @Test
-    fun lockProvisionAndJoinNotInvite() {
+    fun lockProvisionJoinAndStatusNotInvite() {
         assertTrue(SecureDisplayRules.lockRecents(Screen.Provision))
         assertTrue(SecureDisplayRules.lockRecents(Screen.Join))
+        assertTrue(SecureDisplayRules.lockRecents(Screen.Status))
         assertFalse(SecureDisplayRules.lockRecents(Screen.Invite))
         assertFalse(SecureDisplayRules.lockRecents(Screen.Home))
         assertFalse(SecureDisplayRules.lockRecents(Screen.Chat))
