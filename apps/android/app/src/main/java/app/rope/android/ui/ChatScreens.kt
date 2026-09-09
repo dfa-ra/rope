@@ -74,6 +74,7 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
@@ -151,6 +152,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
+import app.rope.android.data.DateJumpRules
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
@@ -788,6 +790,7 @@ fun ChatPane(
     val list = rememberLazyListState()
     val jumpScope = rememberCoroutineScope()
     var showSearch by remember { mutableStateOf(false) }
+    var showDateJump by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
@@ -895,6 +898,11 @@ fun ChatPane(
                         style = MaterialTheme.typography.bodySmall,
                         color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                if (!selecting && DateJumpRules.showButton(state.messages)) {
+                    IconButton(onClick = { showDateJump = true }) {
+                        Icon(Icons.Outlined.DateRange, contentDescription = DateJumpRules.ACTION)
+                    }
                 }
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
@@ -1136,6 +1144,13 @@ fun ChatPane(
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
+        )
+    }
+    if (showDateJump) {
+        DateJumpDialog(
+            messages = state.messages,
+            onJump = onJump,
+            onDismiss = { showDateJump = false },
         )
     }
     if (state.recordingVideoNote) {
