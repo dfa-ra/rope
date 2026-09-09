@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.17 chat-list last-message preview | — |
+| CG-106 | Slice: chat-list last-message preview as 0.3.17 | PO | IN_PROGRESS | Telegram Черновик / Вы:; mute after title | CG-007 |
+| CG-107 | Android: ChatListPreviewRules + row chrome | AND-01 | IN_PROGRESS | D-030; no 0.3.2 tap/long-press redo | CG-106 |
+| CG-108 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-107 |
+| CG-109 | Ship **0.3.17** | PO | IN_PROGRESS | versionCode 41; do not retag v0.3.16 | CG-108 |
 | CG-102 | Slice: in-thread search empty as 0.3.16 | PO | DONE | shipped v0.3.16 | CG-007 |
 | CG-103 | Android: ThreadEmptyRules search miss | AND-01 | DONE | D-029; no 0.3.2 tap/long-press redo | CG-102 |
 | CG-104 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; lowercase quoted q; miss is «Ничего не найдено» not idle / «Ничего не нашли» | CG-103 |

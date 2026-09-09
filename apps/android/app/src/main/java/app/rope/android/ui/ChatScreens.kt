@@ -122,6 +122,7 @@ import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
+import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
@@ -433,27 +434,35 @@ internal fun ConversationRow(
         ) {
             InitialsAvatar(c.title, c.isGroup, c.online)
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    HighlightedText(
-                        text = c.title,
-                        query = query,
-                        style = if (UnreadBadgeRules.emphasizeTitle(c.unread)) {
-                            MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                        } else {
-                            MaterialTheme.typography.titleMedium
-                        },
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (c.muted) {
-                        Icon(
-                            Icons.Outlined.NotificationsOff,
-                            contentDescription = "Без звука",
-                            modifier = Modifier
-                                .padding(end = 6.dp)
-                                .size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        HighlightedText(
+                            text = c.title,
+                            query = query,
+                            style = if (UnreadBadgeRules.emphasizeTitle(c.unread)) {
+                                MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                            } else {
+                                MaterialTheme.typography.titleMedium
+                            },
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
+                        if (c.muted) {
+                            Icon(
+                                Icons.Outlined.NotificationsOff,
+                                contentDescription = "Без звука",
+                                modifier = Modifier
+                                    .padding(start = 4.dp, end = 6.dp)
+                                    .size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     if (c.pinned) {
                         Icon(
@@ -473,37 +482,48 @@ internal fun ConversationRow(
                         )
                     }
                 }
-                HighlightedText(
-                    text = c.subtitle,
-                    query = query,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (c.online && !c.isGroup) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            val badge = UnreadBadgeRules.kind(c.unread, c.muted)
-            if (badge != UnreadBadgeKind.NONE) {
-                val bg = when (badge) {
-                    UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.primary
-                    UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.onSurfaceVariant
-                    UnreadBadgeKind.NONE -> Color.Transparent
-                }
-                val fg = when (badge) {
-                    UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.onPrimary
-                    UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.surface
-                    UnreadBadgeKind.NONE -> Color.Transparent
-                }
-                Box(
-                    Modifier
-                        .clip(CircleShape)
-                        .background(bg)
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        UnreadBadgeRules.label(c.unread),
-                        color = fg,
-                        style = MaterialTheme.typography.labelSmall,
+                    HighlightedText(
+                        text = c.subtitle,
+                        query = query,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            ChatListPreviewRules.isDraft(c.subtitle) -> MaterialTheme.colorScheme.primary
+                            c.last == null && c.online && !c.isGroup -> Color(0xFF2E7D32)
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.weight(1f),
                     )
+                    val badge = UnreadBadgeRules.kind(c.unread, c.muted)
+                    if (badge != UnreadBadgeKind.NONE) {
+                        val bg = when (badge) {
+                            UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.primary
+                            UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.onSurfaceVariant
+                            UnreadBadgeKind.NONE -> Color.Transparent
+                        }
+                        val fg = when (badge) {
+                            UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.onPrimary
+                            UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.surface
+                            UnreadBadgeKind.NONE -> Color.Transparent
+                        }
+                        Box(
+                            Modifier
+                                .padding(start = 8.dp)
+                                .clip(CircleShape)
+                                .background(bg)
+                                .padding(horizontal = 7.dp, vertical = 3.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                UnreadBadgeRules.label(c.unread),
+                                color = fg,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
                 }
             }
         }

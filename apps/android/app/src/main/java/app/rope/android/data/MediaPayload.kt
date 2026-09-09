@@ -330,7 +330,7 @@ object ChatListRules {
         if (title.contains(q)) return ChatListHit.TITLE
         val hay = buildString {
             c.last?.preview()?.takeIf { it.isNotBlank() }?.let { append(it).append('\n') }
-            if (c.last != null && c.subtitle.isNotBlank() && c.subtitle.lowercase() !in presenceSubtitles) {
+            if (c.subtitle.isNotBlank() && c.subtitle.lowercase() !in presenceSubtitles) {
                 append(c.subtitle)
             }
         }.lowercase()

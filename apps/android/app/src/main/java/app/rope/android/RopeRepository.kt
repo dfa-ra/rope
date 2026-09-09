@@ -34,6 +34,7 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
+import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.RevokeRules
@@ -1579,7 +1580,13 @@ class RopeRepository(private val app: Application) {
             Conversation(
                 id = d.deviceId,
                 title = d.displayName.ifBlank { d.deviceId.take(8) },
-                subtitle = last?.preview() ?: if (d.online) "в сети" else "не в сети",
+                subtitle = ChatListPreviewRules.copy(
+                    last = last,
+                    draft = p.draft,
+                    isGroup = false,
+                    myDeviceId = identity?.deviceId().orEmpty(),
+                    online = d.online,
+                ).text,
                 isGroup = false,
                 online = d.online,
                 last = last,
@@ -1596,7 +1603,13 @@ class RopeRepository(private val app: Application) {
             Conversation(
                 id = id,
                 title = g.name,
-                subtitle = GroupChatUx.groupSubtitle(last, g.members.size, identity?.deviceId().orEmpty()),
+                subtitle = ChatListPreviewRules.copy(
+                    last = last,
+                    draft = p.draft,
+                    isGroup = true,
+                    myDeviceId = identity?.deviceId().orEmpty(),
+                    memberCount = g.members.size,
+                ).text,
                 isGroup = true,
                 online = g.members.any { it in _state.value.onlineIds && it != identity?.deviceId() },
                 last = last,
@@ -1617,7 +1630,13 @@ class RopeRepository(private val app: Application) {
                 Conversation(
                     id = id,
                     title = id.take(8),
-                    subtitle = lastBy[id]?.preview().orEmpty(),
+                    subtitle = ChatListPreviewRules.copy(
+                        last = lastBy[id],
+                        draft = p.draft,
+                        isGroup = false,
+                        myDeviceId = identity?.deviceId().orEmpty(),
+                        online = id in _state.value.onlineIds,
+                    ).text,
                     isGroup = false,
                     online = id in _state.value.onlineIds,
                     last = lastBy[id],

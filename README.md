@@ -69,7 +69,7 @@ Production APK signing uses repository secrets documented in [docs/dev-setup.md]
 
 Stage 2 (v0.2): photos/files, hold-to-record voice, groups, call signaling, encrypted object store. Details: [docs/stage2.md](docs/stage2.md), metrics: [docs/stage2-metrics.md](docs/stage2-metrics.md).
 
-Canonical trunk is `main`. Current product version is **0.3.16**. Do not retag or replace older release assets (`v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, and `v0.3.15` stay published).
+Canonical trunk is `main`. Current product version is **0.3.17**. Do not retag or replace older release assets (`v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, and `v0.3.16` stay published).
 
 ## What is not in this tree
 
