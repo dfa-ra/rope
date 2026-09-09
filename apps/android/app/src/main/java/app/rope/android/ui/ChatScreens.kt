@@ -227,8 +227,12 @@ fun ChatsPane(
         val rows = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
-        val forwarding = state.forwarding != null
-        val empty = ChatListEmptyRules.copy(listMode, state.chatQuery, forwarding, state.profile?.role)
+        val empty = ChatListEmptyRules.copy(
+            listMode,
+            state.chatQuery,
+            state.forwarding != null,
+            state.profile?.role,
+        )
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty()) {
                 RopeEmptyState(
@@ -273,7 +277,7 @@ fun ChatsPane(
                     }
                 }
             }
-            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, forwarding)) {
+            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, state.forwarding != null)) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier
