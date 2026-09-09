@@ -505,7 +505,7 @@ func (s *Server) revokeDevice(w http.ResponseWriter, _ *http.Request, a authed, 
 		return
 	}
 	if member.Role == "owner" {
-		n, err := s.Store.OwnerCount()
+		n, err := s.Store.OwnerDeviceCount()
 		if err != nil || n <= 1 {
 			writeJSON(w, 409, map[string]string{"error": "last owner"})
 			return

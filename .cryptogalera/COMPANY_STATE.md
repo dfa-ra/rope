@@ -8,7 +8,7 @@ PO-owned live snapshot. Not a changelog.
 
 ## Current Phase
 
-**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-067 landed. Next: **0.3.8** owner-device 409 (D-021).
+**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-067 landed. Slice **0.3.8** is revoke-device 409 on remaining owner **devices**, not `OwnerCount` members (D-021).
 
 ## Staffing this cycle
 

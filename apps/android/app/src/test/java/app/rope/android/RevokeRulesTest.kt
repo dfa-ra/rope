@@ -47,14 +47,17 @@ class RevokeRulesTest {
     @Test
     fun lastOwnerDoesNotExposeRevokeDevice() {
         val self = device("dev-a", "mem-a", "Анна", "owner")
+        val spare = device("dev-a2", "mem-a", "Анна", "owner")
         val otherOwner = device("dev-c", "mem-c", "Кира", "owner")
         val bob = device("dev-b", "mem-b", "Боб")
-        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", self, ownerCount = 1))
-        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", otherOwner, ownerCount = 1))
-        assertFalse(RevokeRules.canRevokeDevice("guest", "dev-a", bob, ownerCount = 1))
-        assertTrue(RevokeRules.canRevokeDevice("owner", "dev-a", bob, ownerCount = 1))
-        assertTrue(RevokeRules.canRevokeDevice("owner", "dev-a", otherOwner, ownerCount = 2))
-        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", bob.copy(deviceId = ""), ownerCount = 1))
+        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", self, ownerDeviceCount = 1))
+        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", otherOwner, ownerDeviceCount = 1))
+        assertFalse(RevokeRules.canRevokeDevice("guest", "dev-a", bob, ownerDeviceCount = 1))
+        assertTrue(RevokeRules.canRevokeDevice("owner", "dev-a", bob, ownerDeviceCount = 1))
+        assertTrue(RevokeRules.canRevokeDevice("owner", "dev-a", otherOwner, ownerDeviceCount = 2))
+        assertTrue(RevokeRules.canRevokeDevice("owner", "dev-a", spare, ownerDeviceCount = 2))
+        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", otherOwner, ownerDeviceCount = 1))
+        assertFalse(RevokeRules.canRevokeDevice("owner", "dev-a", bob.copy(deviceId = ""), ownerDeviceCount = 1))
     }
 
     @Test

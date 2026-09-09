@@ -5,6 +5,9 @@ import (
 	"io"
 	"net/http"
 	"testing"
+
+	"github.com/dfa-ra/rope/server/go/internal/db"
+	"github.com/google/uuid"
 )
 
 func TestOwnerRevokeMemberDropsFromDirectory(t *testing.T) {
@@ -263,5 +266,140 @@ func TestOwnerCanRevokeGuestDevice(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 404 {
 		t.Fatalf("unknown device wanted 404 got %d %s", resp.StatusCode, b)
+	}
+}
+
+func attachDevice(t *testing.T, s *Server, memberID string, d testDevice) {
+	t.Helper()
+	if err := s.Store.InsertDevice(db.Device{
+		ID:             d.id,
+		MemberID:       memberID,
+		PublicIdentity: d.blob,
+		SignPublic:     d.pub,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLastOwnerCanRevokeSpareDevice(t *testing.T) {
+	s, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	dirReq := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, owner)
+	dirResp, err := http.DefaultClient.Do(dirReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dir struct {
+		Devices []struct {
+			DeviceID string `json:"device_id"`
+			MemberID string `json:"member_id"`
+		} `json:"devices"`
+	}
+	if err := json.NewDecoder(dirResp.Body).Decode(&dir); err != nil {
+		t.Fatal(err)
+	}
+	dirResp.Body.Close()
+	var ownerMember string
+	for _, d := range dir.Devices {
+		if d.DeviceID == owner.id {
+			ownerMember = d.MemberID
+		}
+	}
+	if ownerMember == "" {
+		t.Fatal("owner member id missing")
+	}
+
+	spare := newDevice(t)
+	attachDevice(t, s, ownerMember, spare)
+
+	okBody := []byte(`{"device_id":"` + spare.id + `"}`)
+	okReq := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", okBody, owner)
+	resp, err := http.DefaultClient.Do(okReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("spare owner device wanted 200 got %d %s", resp.StatusCode, b)
+	}
+
+	last := []byte(`{"device_id":"` + owner.id + `"}`)
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", last, owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 409 {
+		t.Fatalf("last owner device wanted 409 got %d %s", resp.StatusCode, b)
+	}
+}
+
+func TestCoOwnerRevokeDeviceKeysOffDevicesNotMembers(t *testing.T) {
+	s, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	peer := newDevice(t)
+	peerMember := uuid.NewString()
+	if err := s.Store.InsertMember(peerMember, "coowner", "owner"); err != nil {
+		t.Fatal(err)
+	}
+	attachDevice(t, s, peerMember, peer)
+
+	n, err := s.Store.OwnerCount()
+	if err != nil || n != 2 {
+		t.Fatalf("owner members %d %v", n, err)
+	}
+	devices, err := s.Store.OwnerDeviceCount()
+	if err != nil || devices != 2 {
+		t.Fatalf("owner devices %d %v", devices, err)
+	}
+
+	okBody := []byte(`{"device_id":"` + peer.id + `"}`)
+	okReq := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", okBody, owner)
+	resp, err := http.DefaultClient.Do(okReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("co-owner device wanted 200 got %d %s", resp.StatusCode, b)
+	}
+
+	n, err = s.Store.OwnerCount()
+	if err != nil || n != 2 {
+		t.Fatalf("OwnerCount still 2 after device revoke, got %d %v", n, err)
+	}
+	devices, err = s.Store.OwnerDeviceCount()
+	if err != nil || devices != 1 {
+		t.Fatalf("owner devices after revoke %d %v", devices, err)
+	}
+
+	last := []byte(`{"device_id":"` + owner.id + `"}`)
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", last, owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 409 {
+		t.Fatalf("last remaining owner device wanted 409 got %d %s", resp.StatusCode, b)
+	}
+
+	dirReq := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, owner)
+	resp, err = http.DefaultClient.Do(dirReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("surviving owner directory wanted 200 got %d", resp.StatusCode)
 	}
 }

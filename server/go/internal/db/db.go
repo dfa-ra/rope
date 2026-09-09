@@ -200,6 +200,18 @@ func (s *Store) OwnerCount() (int, error) {
 	return n, err
 }
 
+// OwnerDeviceCount is live owner devices, not owner members.
+// revoke-device 409 keys off this so two owners cannot brick the instance
+// by revoking every device while OwnerCount stays > 1.
+func (s *Store) OwnerDeviceCount() (int, error) {
+	var n int
+	err := s.SQL.QueryRow(`
+		SELECT COUNT(*) FROM devices d
+		JOIN members m ON m.member_id = d.member_id
+		WHERE m.role = 'owner' AND m.revoked_at IS NULL AND d.revoked_at IS NULL`).Scan(&n)
+	return n, err
+}
+
 func (s *Store) InsertInvite(id, token, createdBy string, expires time.Time) error {
 	sum := sha256.Sum256([]byte(token))
 	_, err := s.SQL.Exec(
