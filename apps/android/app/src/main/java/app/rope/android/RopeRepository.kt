@@ -1147,7 +1147,7 @@ class RopeRepository(private val app: Application) {
         val payload = runCatching { MediaPayload.parse(message.extra) }.getOrNull() ?: return
         if (payload.messageKind() != MessageKind.POLL) return
         val qzid = payload.pollQzid ?: message.id
-        val poll = pollStateOf(message, payload) ?: return
+        val poll = pollStateOf(message, payload)
         if (poll.closed) return
         val next = PollRules.nextIx(poll.multi, poll.myIndexes.toList(), tapped)
         sendPollReceipt(
@@ -1163,7 +1163,7 @@ class RopeRepository(private val app: Application) {
         val me = identity?.deviceId() ?: return
         val payload = runCatching { MediaPayload.parse(message.extra) }.getOrNull() ?: return
         if (payload.messageKind() != MessageKind.POLL) return
-        val poll = pollStateOf(message, payload) ?: return
+        val poll = pollStateOf(message, payload)
         if (poll.closed) return
         val organizer = GroupChatUx.organizerId(group)
         val owner = RoleRules.isOwner(_state.value.profile?.role)

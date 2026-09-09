@@ -44,7 +44,7 @@ object PollRules {
     fun validate(question: String, options: List<String>): Boolean {
         val q = question.trim()
         if (q.isEmpty() || q.length > Q_MAX) return false
-        val opts = cleanOptions(options)
+        val opts = options.map { it.trim() }.filter { it.isNotEmpty() }
         if (opts.size !in OPT_MIN..OPT_MAX) return false
         return opts.all { it.length in 1..OPT_LEN }
     }

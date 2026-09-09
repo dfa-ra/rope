@@ -133,7 +133,6 @@ fun PollSheet(
 fun PollBubble(
     poll: PollState,
     mine: Boolean,
-    selfId: String,
     accent: Color,
     headerModifier: Modifier = Modifier,
     onVote: (Int) -> Unit,
