@@ -4,7 +4,7 @@ How Cursor subagents are **spawned, tasked, and reported**. Binding. Compact.
 
 **Who is who:** [CONSTITUTION.md](CONSTITUTION.md). **Who may work:** [AGENTS.md](../AGENTS.md). **Live company memory:** `.cryptogalera/` (PO-owned; see below). This file is the spawn/report contract, not a product spec.
 
-Mode is **STABILIZATION**. D-005 A is done. Last ship is **v0.3.32** (camera TextureView + stable ring). Every completed product epic ends with PR → REV-01 → CI → ff-merge to `main` → tagged release → record on `main`. Do not invent iOS/ratchet/landing. No VK/Yandex/WB tunnels. Do not retag v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32.
+Mode is **STABILIZATION**. D-005 A is done. Last ship is **v0.3.32** (camera TextureView + stable ring). **0.3.33 Voice notes 2.0** is in flight on `cursor/ui-next-ae19`. Every completed product epic ends with PR → REV-01 → CI → ff-merge to `main` → tagged release → record on `main`. Do not invent iOS/ratchet/landing. No VK/Yandex/WB tunnels. Do not retag v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32.
 
 ---
 
