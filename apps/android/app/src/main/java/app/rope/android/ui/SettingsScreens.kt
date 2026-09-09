@@ -27,6 +27,7 @@ import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.ThemeRules
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -142,6 +143,12 @@ fun SettingsPane(
                         selected = state.theme == ThemeMode.LIGHT,
                         onClick = { onSetTheme(ThemeMode.LIGHT) },
                         label = { Text("Светлая") },
+                    )
+                    FilterChip(
+                        selected = state.theme == ThemeMode.SYSTEM,
+                        onClick = { onSetTheme(ThemeMode.SYSTEM) },
+                        label = { Text(ThemeRules.SYSTEM_LABEL) },
+                        modifier = Modifier.semantics { contentDescription = "Тема системы" },
                     )
                 }
             }

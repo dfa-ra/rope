@@ -224,4 +224,4 @@ object PeerIds {
     }
 }
 
-enum class ThemeMode { LIGHT, DARK }
+enum class ThemeMode { LIGHT, DARK, SYSTEM }

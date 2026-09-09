@@ -423,13 +423,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         put("chat_prefs", o.toString())
     }
 
-    fun themeMode(defaultDark: Boolean): ThemeMode {
-        return when (get("theme")?.lowercase()) {
-            "light" -> ThemeMode.LIGHT
-            "dark" -> ThemeMode.DARK
-            else -> if (defaultDark) ThemeMode.DARK else ThemeMode.LIGHT
-        }
-    }
+    fun themeMode(defaultDark: Boolean): ThemeMode =
+        ThemeRules.parseStored(get("theme"), defaultDark)
 
     fun rehomeMisroutedMedia() {
         val c = readableDatabase.rawQuery(

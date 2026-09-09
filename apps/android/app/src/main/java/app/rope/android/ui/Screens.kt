@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,7 +78,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.net.Uri
 import app.rope.android.data.RoleRules
-import app.rope.android.data.ThemeMode
+import app.rope.android.data.ThemeRules
 import app.rope.android.RopeShapes
 import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.ServerTarget
@@ -221,10 +222,11 @@ fun RopeScaffold(
                 },
                 actions = {
                     if (!signedIn) {
+                        val darkNow = ThemeRules.isDark(state.theme, isSystemInDarkTheme())
                         IconButton(onClick = onToggleTheme) {
                             Icon(
-                                if (state.theme == ThemeMode.DARK) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                                contentDescription = if (state.theme == ThemeMode.DARK) "Светлая тема" else "Тёмная тема",
+                                if (darkNow) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                                contentDescription = ThemeRules.signedOutContentDescription(state.theme),
                             )
                         }
                     } else if (state.screen != Screen.Settings) {

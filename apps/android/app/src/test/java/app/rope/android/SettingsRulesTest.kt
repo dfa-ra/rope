@@ -41,6 +41,7 @@ class SettingsRulesTest {
         assertTrue(hint.contains("звонок"))
         assertFalse(SettingsRules.aboutBody().contains("FCM"))
         assertTrue(SettingsRules.appearanceHint().contains("логотип"))
+        assertTrue(SettingsRules.appearanceHint().contains("системе"))
         assertTrue(SettingsRules.serverPinHint(true).contains("не видит"))
         assertTrue(SettingsRules.serverPinHint(false).contains("HTTP"))
     }
@@ -54,10 +55,11 @@ class SettingsRulesTest {
     }
 
     @Test
-    fun themeModesAreOnlyLightAndDark() {
-        assertEquals(2, ThemeMode.entries.size)
+    fun themeModesIncludeSystem() {
+        assertEquals(3, ThemeMode.entries.size)
         assertTrue(ThemeMode.DARK in ThemeMode.entries)
         assertTrue(ThemeMode.LIGHT in ThemeMode.entries)
+        assertTrue(ThemeMode.SYSTEM in ThemeMode.entries)
     }
 
     @Test

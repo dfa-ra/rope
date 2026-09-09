@@ -5,10 +5,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.ThemeRules
 
 /** Near-black surfaces. Primary stays black / white. */
 val RopeBlack = Color(0xFF09090B)
@@ -91,8 +93,9 @@ fun RopeTheme(
     mode: ThemeMode = ThemeMode.DARK,
     content: @Composable () -> Unit,
 ) {
+    val dark = ThemeRules.isDark(mode, isSystemInDarkTheme())
     MaterialTheme(
-        colorScheme = if (mode == ThemeMode.DARK) DarkColors else LightColors,
+        colorScheme = if (dark) DarkColors else LightColors,
         shapes = RopeMaterialShapes,
         content = content,
     )

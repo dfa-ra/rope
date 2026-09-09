@@ -31,7 +31,7 @@ import app.rope.android.UiState
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.CallLink
 import app.rope.android.data.RoleRules
-import app.rope.android.data.ThemeMode
+import app.rope.android.data.ThemeRules
 
 @Composable
 fun StatusPane(
@@ -59,11 +59,7 @@ fun StatusPane(
             )
         }
         Text(
-            if (state.theme == ThemeMode.DARK) {
-                "Тема: тёмная · иконка солнца в шапке включает светлую"
-            } else {
-                "Тема: светлая · иконка луны в шапке включает тёмную"
-            },
+            ThemeRules.statusLine(state.theme),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
