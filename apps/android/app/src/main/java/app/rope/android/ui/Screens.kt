@@ -175,6 +175,7 @@ fun RopeScaffold(
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
     onOpenImage: (app.rope.android.data.ChatMessage) -> Unit,
+    onOpenSharedMedia: (app.rope.android.data.ChatMessage) -> Unit = {},
     onCloseImage: () -> Unit,
     onConsumedScroll: () -> Unit,
     onDismissNotice: () -> Unit,
@@ -350,11 +351,19 @@ fun RopeScaffold(
                             onToggleLinkPreviews,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(
+                            state,
+                            onAddMember,
+                            onRemoveMember,
+                            onLeaveGroup,
+                            onBack = { onBack() },
+                            onOpenSharedMedia = onOpenSharedMedia,
+                            onEnsureMedia = onEnsureMedia,
+                        )
                         Screen.PeerProfile -> app.rope.android.ui.PeerProfilePane(
                             state,
                             onBack = { onBack() },
-                            onOpenImage = onOpenImage,
+                            onOpenItem = onOpenSharedMedia,
                             onEnsureMedia = onEnsureMedia,
                         )
                     }
@@ -363,8 +372,8 @@ fun RopeScaffold(
         }
     }
     state.viewingImage?.let { img ->
-        val siblings = if (state.screen == Screen.PeerProfile) {
-            app.rope.android.data.PeerProfileRules.photos(state.messages).ifEmpty { listOf(img) }
+        val siblings = if (state.screen == Screen.PeerProfile || state.screen == Screen.GroupInfo) {
+            app.rope.android.data.MediaHubRules.media(state.messages).ifEmpty { listOf(img) }
         } else {
             app.rope.android.data.AlbumRules.siblings(state.messages, img)
         }

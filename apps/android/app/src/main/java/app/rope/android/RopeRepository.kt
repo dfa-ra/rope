@@ -37,6 +37,7 @@ import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.MediaHubRules
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
@@ -792,6 +793,29 @@ class RopeRepository(private val app: Application) {
                 msg.id,
                 op = if (nextId == null) ReactionPayload.CLEAR else ReactionPayload.SET,
             ).toJson().toByteArray(),
+        )
+    }
+
+    fun openSharedMedia(msg: ChatMessage) {
+        if (msg.deleted) return
+        if (MediaHubRules.opensViewer(msg)) {
+            openImage(msg)
+            return
+        }
+        persistOpenDraft()
+        val s = _state.value
+        val stack = BackStack.currentStack(s.backStack, s.screen)
+        val next = if (s.screen == Screen.PeerProfile || s.screen == Screen.GroupInfo) {
+            BackStack.pop(stack)
+        } else {
+            stack
+        }
+        _state.value = s.copy(
+            screen = next.lastOrNull() ?: s.screen,
+            backStack = next,
+            viewingImage = null,
+            scrollToMessageId = msg.id,
+            error = null,
         )
     }
 

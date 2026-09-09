@@ -104,6 +104,8 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onBack: () -> Unit,
+    onOpenSharedMedia: (app.rope.android.data.ChatMessage) -> Unit = {},
+    onEnsureMedia: (app.rope.android.data.ChatMessage) -> Unit = {},
 ) {
     val g = state.group
     if (g == null) {
@@ -205,5 +207,11 @@ fun GroupInfoPane(
                 }
             }
         }
+        SharedMediaHub(
+            messages = state.messages,
+            modifier = Modifier.weight(1f),
+            onOpen = onOpenSharedMedia,
+            onEnsureMedia = onEnsureMedia,
+        )
     }
 }

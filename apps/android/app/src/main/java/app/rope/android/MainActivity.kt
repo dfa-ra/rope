@@ -255,6 +255,7 @@ class MainActivity : AppCompatActivity() {
                     onPinMessage = repo::togglePinMessage,
                     onJump = repo::jumpToMessage,
                     onOpenImage = repo::openImage,
+                    onOpenSharedMedia = repo::openSharedMedia,
                     onCloseImage = repo::closeImage,
                     onConsumedScroll = repo::consumeScrollTo,
                     onDismissNotice = repo::dismissNotice,
