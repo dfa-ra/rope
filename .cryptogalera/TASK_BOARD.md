@@ -4,11 +4,11 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.5 chat-list search | — |
-| CG-054 | Slice: Telegram-like chat list search + pinned polish as 0.3.5 | PO | IN_PROGRESS | open-ended sprint; do not redo 0.3.2 menus | CG-007 |
-| CG-055 | Android: ranked search, highlight, pill field, pin divider | AND-01 | IN_PROGRESS | D-018 | CG-054 |
-| CG-056 | Independent review | REV-01 | IN_PROGRESS | PASS pending CI after normalize assertion fix | CG-055 |
-| CG-057 | Ship **0.3.5** | PO | QUEUED | versionCode 29; do not retag v0.3.4 | CG-056 |
+| CG-007 | Unfreeze for this user task | PO | DONE | unfreeze for 0.3.5 complete | — |
+| CG-054 | Slice: Telegram-like chat list search + pinned polish as 0.3.5 | PO | DONE | shipped v0.3.5 | CG-007 |
+| CG-055 | Android: ranked search, highlight, pill field, pin divider | AND-01 | DONE | D-018 | CG-054 |
+| CG-056 | Independent review | REV-01 | DONE | PASS after normalize assertion fix | CG-055 |
+| CG-057 | Ship **0.3.5** | PO | DONE | tag v0.3.5 = cf83e48; versionCode 29; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 unchanged | CG-056 |
 | CG-050 | Slice: mute vs call ringtone tests as 0.3.4 | PO | DONE | shipped v0.3.4 | CG-007 |
 | CG-051 | Android: `CallToneRules` + wire RingIn/NotifyIncoming | AND-01 | DONE | D-016 / D-017 | CG-050 |
 | CG-052 | Independent review | REV-01 | DONE | reviewer ≠ implementer | CG-051 |
@@ -30,4 +30,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | — | BACKLOG | — | — |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, or `v0.3.4`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, or `v0.3.5`.**
