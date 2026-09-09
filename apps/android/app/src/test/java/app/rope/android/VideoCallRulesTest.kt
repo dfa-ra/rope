@@ -1,6 +1,8 @@
 package app.rope.android
 
+import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMediaStart
+import app.rope.android.data.CallPhase
 import app.rope.android.data.CallSignal
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.VideoCallRules
@@ -237,6 +239,37 @@ class VideoCallRulesTest {
         assertTrue(VideoCallRules.sdpHasVideo(CallSignal.parse(offer)!!.sdp))
         assertTrue(VideoCallRules.fitsWss(offer))
         assertFalse(VideoCallRules.sdpErrorFailsIce())
+        assertTrue(VideoCallRules.cameraTrackAttachedWhenVideoCall(wantVideo = true, camMuted = false))
+        assertFalse(VideoCallRules.cameraTrackAttachedWhenVideoCall(wantVideo = true, camMuted = true))
+        assertFalse(VideoCallRules.cameraTrackAttachedWhenVideoCall(wantVideo = false, camMuted = false))
+        assertTrue(
+            VideoCallRules.mountCallRenderer(
+                video = true,
+                phase = CallPhase.ACTIVE,
+                media = "через сервер",
+                rtcReady = true,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.mountCallRenderer(
+                video = true,
+                phase = CallPhase.ACTIVE,
+                media = "через сервер",
+                rtcReady = false,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.showIceCompact(
+                CallLinkState.CONNECTED,
+                "через сервер",
+            ),
+        )
+        assertTrue(
+            VideoCallRules.showIceCompact(
+                CallLinkState.CONNECTING,
+                "WebRTC · ищем путь…",
+            ),
+        )
     }
 
     /**

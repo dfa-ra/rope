@@ -141,8 +141,10 @@ fun RopeScaffold(
     onToggleCallCamera: () -> Unit = {},
     onFlipCallCamera: () -> Unit = {},
     callEgl: () -> org.webrtc.EglBase.Context? = { null },
-    onBindCallRemote: (org.webrtc.SurfaceViewRenderer) -> Unit = {},
-    onBindCallLocal: (org.webrtc.SurfaceViewRenderer) -> Unit = {},
+    onBindCallRemote: (org.webrtc.VideoSink) -> Unit = {},
+    onBindCallLocal: (org.webrtc.VideoSink) -> Unit = {},
+    onUnbindCallRemote: (org.webrtc.VideoSink) -> Unit = {},
+    onUnbindCallLocal: (org.webrtc.VideoSink) -> Unit = {},
     onToggleTheme: () -> Unit,
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
@@ -372,6 +374,8 @@ fun RopeScaffold(
             rtcReady = state.callRtcReady,
             onBindRemote = onBindCallRemote,
             onBindLocal = onBindCallLocal,
+            onUnbindRemote = onUnbindCallRemote,
+            onUnbindLocal = onUnbindCallLocal,
         )
     }
     if (splash.visible) {

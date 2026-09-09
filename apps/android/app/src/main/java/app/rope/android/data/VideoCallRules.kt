@@ -65,14 +65,30 @@ object VideoCallRules {
         iceName.trim().equals("CLOSED", ignoreCase = true)
 
     /**
-     * After DTLS is up, FAILED / DISCONNECTED are path blips (mute, flip,
-     * camera-deny, renegotiation). They must not hang up the remote.
+     * After DTLS is up, FAILED / DISCONNECTED / CHECKING / CONNECTING are path
+     * blips (mute, flip, camera-deny, renegotiation, PeerConnection CONNECTING).
+     * They must not hang up the remote or reset the in-call UI back to ringing.
      */
     fun iceBlipKeepsCall(iceName: String, mediaWasUp: Boolean): Boolean {
         val name = iceName.trim().uppercase()
         if (name == "DISCONNECTED" || name == "CLOSED") return true
-        return mediaWasUp && name == "FAILED"
+        if (!mediaWasUp) return false
+        return name == "FAILED" || name == "CHECKING" || name == "CONNECTING" || name == "NEW"
     }
+
+    /** ICE compact ("ICE CHECKING") stays off once the overlay is in-call. */
+    fun showIceCompact(link: CallLinkState, media: String): Boolean =
+        link != CallLinkState.CONNECTED &&
+            link != CallLinkState.FAILED &&
+            media != CallMedia.CHAT
+
+    /** Compose must not mount the sink until the PC EGL context exists. */
+    fun mountCallRenderer(video: Boolean, phase: CallPhase, media: String, rtcReady: Boolean): Boolean =
+        video && phase == CallPhase.ACTIVE && media != CallMedia.CHAT && rtcReady
+
+    /** Local camera track is added in WebRtcSession init, before createOffer. */
+    fun cameraTrackAttachedWhenVideoCall(wantVideo: Boolean, camMuted: Boolean): Boolean =
+        shouldStartLocalCamera(wantVideo, camMuted)
 
     /** WSS audio fallback only when ICE never connected. Never a user hangup. */
     fun iceFailedFallsBackToWss(iceName: String, mediaWasUp: Boolean): Boolean =

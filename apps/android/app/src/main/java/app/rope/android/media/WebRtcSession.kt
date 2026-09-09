@@ -189,7 +189,7 @@ class WebRtcSession(
             .setAudioDeviceModule(audioDevice)
             .setAudioEncoderFactoryFactory(BuiltinAudioEncoderFactoryFactory())
             .setAudioDecoderFactoryFactory(BuiltinAudioDecoderFactoryFactory())
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, false))
+            .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, false, false))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
             .createPeerConnectionFactory()
         val deps = PeerConnectionDependencies.builder(observer).apply {
@@ -323,6 +323,18 @@ class WebRtcSession(
         remoteSink?.let { remoteVideo?.removeSink(it) }
         remoteSink = sink
         remoteVideo?.addSink(sink)
+    }
+
+    fun detachLocalSink(sink: VideoSink) {
+        if (localSink !== sink) return
+        videoTrack?.removeSink(sink)
+        localSink = null
+    }
+
+    fun detachRemoteSink(sink: VideoSink) {
+        if (remoteSink !== sink) return
+        remoteVideo?.removeSink(sink)
+        remoteSink = null
     }
 
     fun detachSinks() {

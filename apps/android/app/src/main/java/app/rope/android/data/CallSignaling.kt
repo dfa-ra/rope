@@ -212,6 +212,7 @@ class CallMachine {
         val relay = state.viaRelay || viaRelay
         if (VideoCallRules.iceBlipKeepsCall(name, state.mediaUp) && state.mediaUp) {
             val out = mutableListOf<CallEffect>()
+            out += CallEffect.StopTone
             if (name.trim().equals("FAILED", ignoreCase = true) &&
                 state.hasTurn &&
                 !state.iceRestartUsed &&
@@ -221,18 +222,16 @@ class CallMachine {
                     iceRestartUsed = true,
                     lastIce = name,
                     viaRelay = relay,
+                    link = CallLinkState.CONNECTED,
                     media = CallLink.iceRestartDetail(),
                 )
                 out += CallEffect.RestartIce
             } else {
+                // Keep CONNECTED. Do not set RINGING. Do not flash DISCONNECTED copy.
                 state = state.copy(
                     lastIce = name,
                     viaRelay = relay,
-                    media = if (name.trim().equals("DISCONNECTED", ignoreCase = true)) {
-                        CallLink.disconnectedDetail()
-                    } else {
-                        state.media
-                    },
+                    link = CallLinkState.CONNECTED,
                 )
             }
             return out
@@ -244,16 +243,24 @@ class CallMachine {
             remoteReady = state.remoteDescriptionReady,
             fellBack = state.relayFellBack,
         )
+        val nextLink = if (state.mediaUp && link != CallLinkState.FAILED) {
+            CallLinkState.CONNECTED
+        } else {
+            link
+        }
         state = state.copy(
-            link = link,
-            media = label,
+            link = nextLink,
+            media = if (state.mediaUp && nextLink == CallLinkState.CONNECTED) state.media else label,
             lastIce = name,
             iceReady = true,
             viaRelay = relay,
-            mediaUp = state.mediaUp || link == CallLinkState.CONNECTED,
+            mediaUp = state.mediaUp || nextLink == CallLinkState.CONNECTED,
         )
         val out = mutableListOf<CallEffect>()
-        if (link == CallLinkState.CONNECTED) out += CallEffect.CancelWatch
+        if (nextLink == CallLinkState.CONNECTED) {
+            out += CallEffect.CancelWatch
+            out += CallEffect.StopTone
+        }
         if (link == CallLinkState.FAILED) {
             if (state.hasTurn && !state.iceRestartUsed && state.role == CallRtcRole.OFFERER) {
                 state = state.copy(

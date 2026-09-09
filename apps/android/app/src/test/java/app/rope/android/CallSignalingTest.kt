@@ -8,6 +8,7 @@ import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.CallRtcRole
 import app.rope.android.data.CallSignal
+import app.rope.android.data.CallToneRules
 import app.rope.android.data.VideoCallRules
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -50,8 +51,9 @@ class CallSignalingTest {
 
         m.onIce("CHECKING", false)
         assertEquals(CallLinkState.CONNECTING, m.state.link)
-        m.onIce("CONNECTED", false)
+        val up = m.onIce("CONNECTED", false)
         assertEquals(CallLinkState.CONNECTED, m.state.link)
+        assertTrue(up.contains(CallEffect.StopTone))
         assertEquals("Разговор", CallLink.heading(m.state.phase, m.state.link))
     }
 
@@ -479,10 +481,22 @@ class CallSignalingTest {
         assertTrue(m.state.mediaUp)
         val disc = m.onIce("DISCONNECTED", true)
         assertTrue(disc.none { it is CallEffect.TearDown || it is CallEffect.StartWssMedia })
-        assertTrue(disc.none { it is CallEffect.Send && it.event == CallSignal.HANGUP })
+        assertTrue(disc.none { it is CallEffect.RingIn || it is CallEffect.RingOut })
+        assertTrue(disc.contains(CallEffect.StopTone))
         assertTrue(m.state.live)
         assertEquals(CallLinkState.CONNECTED, m.state.link)
         assertFalse(m.state.wssMedia)
+        assertEquals(CallPhase.ACTIVE, m.state.phase)
+        assertFalse(CallToneRules.shouldPlayRing(m.state.phase, m.state.link, m.state.mediaUp))
+
+        val checking = m.onIce("CHECKING", true)
+        assertTrue(checking.none { it is CallEffect.RingIn || it is CallEffect.RingOut })
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+        assertEquals(CallPhase.ACTIVE, m.state.phase)
+
+        val connecting = m.onIce("CONNECTING", true)
+        assertTrue(connecting.none { it is CallEffect.RingIn || it is CallEffect.RingOut })
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
 
         val closed = m.onIce("CLOSED", true)
         assertTrue(closed.isEmpty())
@@ -491,10 +505,14 @@ class CallSignalingTest {
 
         val failed = m.onIce("FAILED", true)
         assertTrue(failed.contains(CallEffect.RestartIce))
+        assertTrue(failed.contains(CallEffect.StopTone))
         assertTrue(failed.none { it is CallEffect.TearDown || it is CallEffect.StartWssMedia })
+        assertTrue(failed.none { it is CallEffect.RingIn || it is CallEffect.RingOut })
         assertTrue(failed.none { it is CallEffect.Send && it.event == CallSignal.HANGUP })
         assertTrue(m.state.live)
         assertFalse(m.state.wssMedia)
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+        assertEquals(CallPhase.ACTIVE, m.state.phase)
         assertEquals(CallLinkState.CONNECTED, m.state.link)
 
         val failedAgain = m.onIce("FAILED", true)
@@ -509,6 +527,11 @@ class CallSignalingTest {
         assertTrue(VideoCallRules.iceBlipKeepsCall("FAILED", mediaWasUp = true))
         assertTrue(VideoCallRules.iceBlipKeepsCall("DISCONNECTED", mediaWasUp = true))
         assertTrue(VideoCallRules.iceBlipKeepsCall("CLOSED", mediaWasUp = false))
+        assertTrue(VideoCallRules.iceBlipKeepsCall("CHECKING", mediaWasUp = true))
+        assertTrue(VideoCallRules.iceBlipKeepsCall("CONNECTING", mediaWasUp = true))
+        assertTrue(VideoCallRules.iceBlipKeepsCall("NEW", mediaWasUp = true))
+        assertFalse(VideoCallRules.iceBlipKeepsCall("CHECKING", mediaWasUp = false))
+        assertFalse(VideoCallRules.iceBlipKeepsCall("CONNECTING", mediaWasUp = false))
         assertTrue(VideoCallRules.ignorePcClosed("CLOSED"))
         assertFalse(VideoCallRules.iceFailedFallsBackToWss("FAILED", mediaWasUp = true))
         assertTrue(VideoCallRules.iceFailedFallsBackToWss("FAILED", mediaWasUp = false))

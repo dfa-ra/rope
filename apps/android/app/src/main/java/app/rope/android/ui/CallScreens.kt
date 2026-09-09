@@ -65,8 +65,9 @@ import app.rope.android.data.CallPhase
 import app.rope.android.data.Conversation
 import kotlinx.coroutines.delay
 import org.webrtc.EglBase
-import org.webrtc.RendererCommon
-import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoSink
+import app.rope.android.data.VideoCallRules
+import app.rope.android.media.CallVideoRenderer
 
 @Composable
 fun CallsPane(
@@ -154,8 +155,10 @@ fun CallOverlay(
     onFlipCamera: () -> Unit = {},
     eglContext: () -> EglBase.Context? = { null },
     rtcReady: Boolean = false,
-    onBindRemote: (SurfaceViewRenderer) -> Unit = {},
-    onBindLocal: (SurfaceViewRenderer) -> Unit = {},
+    onBindRemote: (VideoSink) -> Unit = {},
+    onBindLocal: (VideoSink) -> Unit = {},
+    onUnbindRemote: (VideoSink) -> Unit = {},
+    onUnbindLocal: (VideoSink) -> Unit = {},
 ) {
     BackHandler {
         if (call.phase == CallPhase.RINGING_IN) onReject() else onHangup()
@@ -185,25 +188,34 @@ fun CallOverlay(
     val subtitle = CallLink.subtitle(call, iceServersJson)
     val heading = CallLink.heading(call.phase, call.link, subtitle, call.video)
     val clock = CallLink.clock(now - startAt, call.phase, call.link)
-    val ice = if (call.media == CallMedia.CHAT) "" else CallLink.iceCompact(call.lastIce)
+    val ice = if (VideoCallRules.showIceCompact(call.link, call.media)) {
+        CallLink.iceCompact(call.lastIce)
+    } else {
+        ""
+    }
     val failed = call.link == CallLinkState.FAILED
-    val showVideo = call.video && call.phase == CallPhase.ACTIVE && call.media != CallMedia.CHAT
+    val liveVideo = call.video && call.phase == CallPhase.ACTIVE && call.media != CallMedia.CHAT
+    val showVideo = VideoCallRules.mountCallRenderer(
+        video = call.video,
+        phase = call.phase,
+        media = call.media,
+        rtcReady = rtcReady,
+    )
     FadeIn(0) {
         Box(
             Modifier
                 .fillMaxSize()
                 .background(
-                    if (showVideo) Color.Black else MaterialTheme.colorScheme.background,
+                    if (liveVideo) Color.Black else MaterialTheme.colorScheme.background,
                 ),
         ) {
             if (showVideo) {
                 CallVideoView(
                     modifier = Modifier.fillMaxSize(),
                     mirror = false,
-                    overlay = false,
-                    rtcReady = rtcReady,
                     eglContext = eglContext,
                     onBind = onBindRemote,
+                    onUnbind = onUnbindRemote,
                 )
                 if (!camMuted) {
                     CallVideoView(
@@ -214,10 +226,9 @@ fun CallOverlay(
                             .height(160.dp)
                             .clip(RoundedCornerShape(12.dp)),
                         mirror = true,
-                        overlay = true,
-                        rtcReady = rtcReady,
                         eglContext = eglContext,
                         onBind = onBindLocal,
+                        onUnbind = onUnbindLocal,
                     )
                 }
             }
@@ -232,7 +243,7 @@ fun CallOverlay(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (!showVideo) {
+                    if (!liveVideo) {
                         RopeLogoMark(
                             size = 56.dp,
                             animate = call.phase != CallPhase.ENDED,
@@ -242,11 +253,11 @@ fun CallOverlay(
                     }
                     Text(
                         heading,
-                        color = (if (showVideo) Color.White else MaterialTheme.colorScheme.onSurface)
+                        color = (if (liveVideo) Color.White else MaterialTheme.colorScheme.onSurface)
                             .copy(alpha = 0.7f),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    if (!showVideo) {
+                    if (!liveVideo) {
                         Box(
                             Modifier
                                 .size(112.dp)
@@ -267,7 +278,7 @@ fun CallOverlay(
                     }
                     Text(
                         call.peerName,
-                        color = if (showVideo) Color.White else MaterialTheme.colorScheme.onBackground,
+                        color = if (liveVideo) Color.White else MaterialTheme.colorScheme.onBackground,
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
@@ -275,7 +286,7 @@ fun CallOverlay(
                         color = if (failed) {
                             MaterialTheme.colorScheme.error
                         } else {
-                            (if (showVideo) Color.White else MaterialTheme.colorScheme.onSurface)
+                            (if (liveVideo) Color.White else MaterialTheme.colorScheme.onSurface)
                                 .copy(alpha = 0.7f)
                         },
                         style = MaterialTheme.typography.bodyMedium,
@@ -283,14 +294,14 @@ fun CallOverlay(
                     if (!banner.isNullOrBlank()) {
                         Text(
                             banner,
-                            color = if (showVideo) Color.White else MaterialTheme.colorScheme.onSurface,
+                            color = if (liveVideo) Color.White else MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                     if (clock != null || ice.isNotBlank()) {
                         Text(
                             listOfNotNull(clock, ice.takeIf { it.isNotBlank() }).joinToString(" · "),
-                            color = (if (showVideo) Color.White else MaterialTheme.colorScheme.onSurface)
+                            color = (if (liveVideo) Color.White else MaterialTheme.colorScheme.onSurface)
                                 .copy(alpha = 0.55f),
                             style = MaterialTheme.typography.labelMedium,
                         )
@@ -363,32 +374,22 @@ fun CallOverlay(
 private fun CallVideoView(
     modifier: Modifier,
     mirror: Boolean,
-    overlay: Boolean,
-    rtcReady: Boolean,
     eglContext: () -> EglBase.Context?,
-    onBind: (SurfaceViewRenderer) -> Unit,
+    onBind: (VideoSink) -> Unit,
+    onUnbind: (VideoSink) -> Unit,
 ) {
+    val egl = eglContext() ?: return
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            SurfaceViewRenderer(ctx).apply {
-                setMirror(mirror)
-                setZOrderMediaOverlay(overlay)
-                setEnableHardwareScaler(true)
-                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-            }
-        },
-        update = { view ->
-            if (!rtcReady) return@AndroidView
-            val egl = eglContext() ?: return@AndroidView
-            if (view.tag != "rope-inited") {
-                view.init(egl, null)
-                view.tag = "rope-inited"
-                onBind(view)
+            CallVideoRenderer(ctx).apply {
+                init(egl, mirror)
+                onBind(this)
             }
         },
         onRelease = { view ->
-            runCatching { view.release() }
+            onUnbind(view)
+            view.release()
         },
     )
 }

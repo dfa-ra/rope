@@ -7,6 +7,8 @@ import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.MimeTypeMap
@@ -68,6 +70,7 @@ import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
 import app.rope.android.media.WebRtcSession
 import app.rope.android.media.WssAudioSession
+import org.webrtc.VideoSink
 import app.rope.android.net.ServerApi
 import app.rope.android.notify.RopeConnectionService
 import app.rope.android.notify.RopeNotifier
@@ -208,9 +211,11 @@ class RopeRepository(private val app: Application) {
     private var ringWatch: Job? = null
     private var rtcAsCaller = false
     private val rtcLock = Any()
-    private var boundRemote: org.webrtc.SurfaceViewRenderer? = null
-    private var boundLocal: org.webrtc.SurfaceViewRenderer? = null
+    private var boundRemote: VideoSink? = null
+    private var boundLocal: VideoSink? = null
     private var iceCachedAtMs: Long = 0L
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var toneOutgoing: Boolean? = null
 
     fun start(pendingLink: String?) {
         if (!sessionStarted.compareAndSet(false, true)) {
@@ -1191,14 +1196,32 @@ class RopeRepository(private val app: Application) {
 
     fun callEglContext(): org.webrtc.EglBase.Context? = rtc?.eglContext()
 
-    fun bindCallRemote(renderer: org.webrtc.SurfaceViewRenderer) {
-        boundRemote = renderer
-        rtc?.attachRemoteSink(renderer)
+    fun bindCallRemote(sink: VideoSink) {
+        val prev = boundRemote
+        if (prev !== null && prev !== sink) rtc?.detachRemoteSink(prev)
+        boundRemote = sink
+        rtc?.attachRemoteSink(sink)
     }
 
-    fun bindCallLocal(renderer: org.webrtc.SurfaceViewRenderer) {
-        boundLocal = renderer
-        rtc?.attachLocalSink(renderer)
+    fun bindCallLocal(sink: VideoSink) {
+        val prev = boundLocal
+        if (prev !== null && prev !== sink) rtc?.detachLocalSink(prev)
+        boundLocal = sink
+        rtc?.attachLocalSink(sink)
+    }
+
+    fun unbindCallRemote(sink: VideoSink) {
+        if (boundRemote === sink) {
+            rtc?.detachRemoteSink(sink)
+            boundRemote = null
+        }
+    }
+
+    fun unbindCallLocal(sink: VideoSink) {
+        if (boundLocal === sink) {
+            rtc?.detachLocalSink(sink)
+            boundLocal = null
+        }
     }
 
     fun revokeMember(memberId: String) {
@@ -2503,14 +2526,20 @@ class RopeRepository(private val app: Application) {
                 CallEffect.FallbackDirect -> if (!callMachine.state.wssMedia) rtc?.allowDirect()
                 CallEffect.TearDown -> teardownCall()
                 CallEffect.RingOut -> {
-                    if (CallToneRules.shouldRingOutgoing(_state.value.notificationsMuted)) {
+                    val s = callMachine.state
+                    if (CallToneRules.shouldPlayRing(s.phase, s.link, s.mediaUp) &&
+                        CallToneRules.shouldRingOutgoing(_state.value.notificationsMuted)
+                    ) {
                         startTone(true)
                     }
                     audioMode(true)
                 }
                 CallEffect.RingIn -> {
-                    val chatMuted = store.chatPrefs(callMachine.state.peerDeviceId).muted
-                    if (CallToneRules.shouldRingIncoming(_state.value.notificationsMuted, chatMuted)) {
+                    val s = callMachine.state
+                    val chatMuted = store.chatPrefs(s.peerDeviceId).muted
+                    if (CallToneRules.shouldPlayRing(s.phase, s.link, s.mediaUp) &&
+                        CallToneRules.shouldRingIncoming(_state.value.notificationsMuted, chatMuted)
+                    ) {
                         startTone(false)
                     }
                     audioMode(true)
@@ -2561,13 +2590,15 @@ class RopeRepository(private val app: Application) {
 
     private suspend fun startRtc(asCaller: Boolean, video: Boolean) {
         val ice = awaitIce()
-        if (!callMachine.state.live || !callMachine.state.rtcWanted) return
-        if (callMachine.state.wssMedia) return
-        val hasTurn = !CallLink.missingTurn(ice)
-        applyCallEffects(callMachine.onHasTurn(hasTurn, CallLink.missingTurnDetail()))
-        if (!callMachine.state.live) return
-        attachRtc(asCaller, ice, video || callMachine.state.video)
-        applyCallEffects(callMachine.onSessionAttached())
+        withContext(Dispatchers.Main) {
+            if (!callMachine.state.live || !callMachine.state.rtcWanted) return@withContext
+            if (callMachine.state.wssMedia) return@withContext
+            val hasTurn = !CallLink.missingTurn(ice)
+            applyCallEffects(callMachine.onHasTurn(hasTurn, CallLink.missingTurnDetail()))
+            if (!callMachine.state.live) return@withContext
+            attachRtc(asCaller, ice, video || callMachine.state.video)
+            applyCallEffects(callMachine.onSessionAttached())
+        }
     }
 
     private suspend fun awaitIce(): List<IceServerSpec> {
@@ -2885,20 +2916,33 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun startTone(outgoing: Boolean) {
-        stopTone()
-        val stream = if (outgoing) AudioManager.STREAM_VOICE_CALL else AudioManager.STREAM_RING
-        tone = ToneGenerator(stream, 80).also {
-            it.startTone(ToneGenerator.TONE_SUP_RINGTONE, 30_000)
+        onMain {
+            if (tone != null && toneOutgoing == outgoing) return@onMain
+            stopToneLocked()
+            val stream = if (outgoing) AudioManager.STREAM_VOICE_CALL else AudioManager.STREAM_RING
+            tone = ToneGenerator(stream, 80).also {
+                it.startTone(ToneGenerator.TONE_SUP_RINGTONE, 30_000)
+            }
+            toneOutgoing = outgoing
         }
     }
 
     private fun stopTone() {
+        onMain { stopToneLocked() }
+    }
+
+    private fun stopToneLocked() {
         try {
             tone?.stopTone()
             tone?.release()
         } catch (_: Exception) {
         }
         tone = null
+        toneOutgoing = null
+    }
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
     }
 
     private fun audioMode(on: Boolean) {

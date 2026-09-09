@@ -209,6 +209,8 @@ class MainActivity : AppCompatActivity() {
                     callEgl = { (application as RopeApp).repo.callEglContext() },
                     onBindCallRemote = { (application as RopeApp).repo.bindCallRemote(it) },
                     onBindCallLocal = { (application as RopeApp).repo.bindCallLocal(it) },
+                    onUnbindCallRemote = { (application as RopeApp).repo.unbindCallRemote(it) },
+                    onUnbindCallLocal = { (application as RopeApp).repo.unbindCallLocal(it) },
                     onToggleTheme = repo::toggleTheme,
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
