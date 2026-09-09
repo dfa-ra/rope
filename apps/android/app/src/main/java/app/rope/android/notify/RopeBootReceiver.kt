@@ -5,7 +5,12 @@ import android.content.Context
 import android.content.Intent
 import app.rope.android.data.LocalStore
 
-/** Restarts the keep-alive service after reboot when a signed-in profile exists. */
+/**
+ * Restarts the keep-alive service after reboot when a signed-in profile exists.
+ * Manifest must keep this receiver non-exported: BOOT_COMPLETED is a protected
+ * system broadcast, but an exported component can still be targeted explicitly
+ * by any app with a spoofed action.
+ */
 class RopeBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
