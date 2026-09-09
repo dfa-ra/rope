@@ -94,6 +94,7 @@ func ResetTurnAllocCache() {
 	allocCacheAt = time.Time{}
 	allocCacheVal = AllocResult{}
 	allocCacheMu.Unlock()
+	resetProbeTurnCache()
 }
 
 func allocateLocal(c Config, timeout time.Duration) AllocResult {

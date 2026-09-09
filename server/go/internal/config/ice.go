@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -391,4 +392,50 @@ func (c Config) ProbeTurn(timeout time.Duration) TurnReport {
 		rep.Error = alloc.Error
 	}
 	return rep
+}
+
+// Public GET /health used to ProbeTurn on every request (DialTCP + ALLOCATE).
+// Cache the report so the internet cannot stall the process on 800ms probes.
+// Loopback /health and --turn-check still call ProbeTurn directly.
+const probeTurnCacheTTL = 30 * time.Second
+
+var (
+	probeCacheMu  sync.Mutex
+	probeCacheKey string
+	probeCacheAt  time.Time
+	probeCacheVal TurnReport
+)
+
+func (c Config) CachedProbeTurn(timeout time.Duration) TurnReport {
+	key := fmt.Sprintf("%s|%d|%d|%s", c.TurnSecret, c.EffectiveTurnPort(), c.EffectiveTurnsPort(), strings.TrimSpace(c.PublicHost))
+	probeCacheMu.Lock()
+	if probeCacheKey == key && time.Since(probeCacheAt) < probeTurnCacheTTL {
+		out := copyTurnReport(probeCacheVal)
+		probeCacheMu.Unlock()
+		return out
+	}
+	probeCacheMu.Unlock()
+	rep := c.ProbeTurn(timeout)
+	probeCacheMu.Lock()
+	probeCacheKey = key
+	probeCacheAt = time.Now()
+	probeCacheVal = copyTurnReport(rep)
+	probeCacheMu.Unlock()
+	return rep
+}
+
+func copyTurnReport(in TurnReport) TurnReport {
+	out := in
+	if in.Advertised != nil {
+		out.Advertised = append([]string{}, in.Advertised...)
+	}
+	return out
+}
+
+func resetProbeTurnCache() {
+	probeCacheMu.Lock()
+	probeCacheKey = ""
+	probeCacheAt = time.Time{}
+	probeCacheVal = TurnReport{}
+	probeCacheMu.Unlock()
 }

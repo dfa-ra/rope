@@ -454,6 +454,44 @@ func TestProbeTurnDistinguishes443ForeignVsListening(t *testing.T) {
 	}
 }
 
+func TestCachedProbeTurnDialsOncePerTTL(t *testing.T) {
+	origD := DialTCP
+	origA := RunTurnAllocate
+	t.Cleanup(func() {
+		DialTCP = origD
+		RunTurnAllocate = origA
+		ResetTurnAllocCache()
+	})
+	ResetTurnAllocCache()
+	var n int
+	DialTCP = func(string, time.Duration) error {
+		n++
+		return errProbeDown
+	}
+	cfg := Default()
+	cfg.PublicHost = "203.0.113.9"
+	cfg.TurnSecret = "s"
+	cfg.DataDir = t.TempDir()
+	a := cfg.CachedProbeTurn(10 * time.Millisecond)
+	b := cfg.CachedProbeTurn(10 * time.Millisecond)
+	if n != 1 {
+		t.Fatalf("DialTCP %d want 1", n)
+	}
+	if a.Running || b.Running || a.AllocateOK {
+		t.Fatalf("down %+v %+v", a, b)
+	}
+	if a.Error != b.Error || a.Error == "" {
+		t.Fatalf("cached error %q vs %q", a.Error, b.Error)
+	}
+	live := cfg.ProbeTurn(10 * time.Millisecond)
+	if n != 2 {
+		t.Fatalf("direct ProbeTurn must not use cache, DialTCP %d", n)
+	}
+	if live.Error == "" {
+		t.Fatal("live probe error")
+	}
+}
+
 var errProbeDown = errString("down")
 
 type errString string

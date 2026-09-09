@@ -166,10 +166,15 @@ func (s *Server) logTurn() {
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	var turn config.TurnReport
 	ice := s.Cfg.IceEnabled()
+	loopback := addrIsLoopback(r.RemoteAddr)
 	if ice {
-		turn = s.Cfg.ProbeTurn(800 * time.Millisecond)
+		if loopback {
+			turn = s.Cfg.ProbeTurn(800 * time.Millisecond)
+		} else {
+			turn = s.Cfg.CachedProbeTurn(800 * time.Millisecond)
+		}
 	}
-	writeJSON(w, 200, healthJSON(ice, addrIsLoopback(r.RemoteAddr), turn))
+	writeJSON(w, 200, healthJSON(ice, loopback, turn))
 }
 
 // healthJSON is the unauthenticated /health body.

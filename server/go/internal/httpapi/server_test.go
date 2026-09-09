@@ -457,6 +457,55 @@ func TestHealthHidesTurnAddressOffLoopback(t *testing.T) {
 	}
 }
 
+func TestPublicHealthCachesTurnProbe(t *testing.T) {
+	orig := config.DialTCP
+	config.ResetTurnAllocCache()
+	t.Cleanup(func() {
+		config.DialTCP = orig
+		config.ResetTurnAllocCache()
+	})
+	var n int
+	config.DialTCP = func(string, time.Duration) error {
+		n++
+		return os.ErrClosed
+	}
+	s, _, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "203.0.113.9"
+		cfg.TurnSecret = "hmac-from-install"
+	})
+	n = 0
+	h := s.Router()
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.RemoteAddr = "203.0.113.9:4321"
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != 200 {
+			t.Fatalf("status %d", rr.Code)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["ok"] != true || body["turn_running"] != false {
+			t.Fatalf("public health %+v", body)
+		}
+		if _, ok := body["turn_error"]; ok {
+			t.Fatalf("public health leaked turn_error: %+v", body)
+		}
+	}
+	if n != 1 {
+		t.Fatalf("public /health DialTCP %d want 1 cached probe", n)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if n != 2 {
+		t.Fatalf("loopback /health must probe live, DialTCP %d", n)
+	}
+}
+
 func TestInfoBadAuthDoesNotLeakIce(t *testing.T) {
 	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "198.51.100.20"
