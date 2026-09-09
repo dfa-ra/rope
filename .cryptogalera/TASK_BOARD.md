@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.15 composer / reply bar polish | — |
+| CG-098 | Slice: composer / reply bar as 0.3.15 | PO | IN_PROGRESS | Telegram accent stripe + name title + X dismiss | CG-007 |
+| CG-099 | Android: ComposerHintRules + hint chrome | AND-01 | IN_PROGRESS | D-028; no 0.3.2 tap/long-press redo | CG-098 |
+| CG-100 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-099 |
+| CG-101 | Ship **0.3.15** | PO | IN_PROGRESS | versionCode 39; do not retag v0.3.14 | CG-100 |
 | CG-094 | Slice: chat-list empty-search as 0.3.14 | PO | DONE | shipped v0.3.14 | CG-007 |
 | CG-095 | Android: ChatListEmptyRules search miss | AND-01 | DONE | D-027; no 0.3.2 tap/long-press redo | CG-094 |
 | CG-096 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; lowercase quoted query; in-thread «Ничего не нашли» out of slice | CG-095 |

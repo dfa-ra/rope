@@ -131,6 +131,8 @@ import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
+import app.rope.android.data.ComposerHintCopy
+import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
@@ -1427,14 +1429,15 @@ private fun ComposerBar(
         Column(Modifier.fillMaxWidth()) {
             state.editTarget?.let { target ->
                 ComposerHint(
-                    title = "Редактирование",
-                    body = target.text,
+                    copy = ComposerHintRules.edit(target.preview()),
                     onCancel = onCancelComposer,
                 )
             } ?: state.replyTo?.let { target ->
                 ComposerHint(
-                    title = "Ответ · ${GroupChatUx.replyQuoteName(target.senderName, target.outgoing)}",
-                    body = target.preview(),
+                    copy = ComposerHintRules.reply(
+                        name = GroupChatUx.replyQuoteName(target.senderName, target.outgoing),
+                        preview = target.preview(),
+                    ),
                     onCancel = onCancelComposer,
                 )
             }
@@ -1697,25 +1700,40 @@ private fun DateChip(label: String) {
 }
 
 @Composable
-private fun ComposerHint(title: String, body: String, onCancel: () -> Unit) {
+private fun ComposerHint(copy: ComposerHintCopy, onCancel: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(36.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(
-                body,
+                copy.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                copy.body,
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onCancel) { Text("Отмена") }
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Outlined.Close, contentDescription = copy.dismissContentDescription)
+        }
     }
 }
 
