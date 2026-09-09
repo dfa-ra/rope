@@ -292,8 +292,10 @@ data class ChatControl(
         const val DELETE = "delete"
         const val TYPING = "typing"
         const val PIN = "pin"
+        const val VOTE = "vote"
+        const val POLL_CLOSE = "poll_close"
 
-        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN)
+        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN, VOTE, POLL_CLOSE)
 
         fun parse(raw: String): ChatControl? {
             val o = try {

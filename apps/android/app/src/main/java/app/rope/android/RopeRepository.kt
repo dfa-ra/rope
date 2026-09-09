@@ -2816,6 +2816,15 @@ class RopeRepository(private val app: Application) {
                             }
                         }
                     }
+                    control != null && (control.kind == ChatControl.VOTE || control.kind == ChatControl.POLL_CLOSE) -> {
+                        val target = store.message(control.targetId)
+                        val gid = JsonIds.optional(target?.groupId)
+                            ?: target?.peerDeviceId?.takeIf { ChatIds.isGroup(it) }?.let { ChatIds.rawGroupId(it) }
+                        val members = gid?.let { store.group(it)?.members }
+                        if (!ChatControlRules.allowVote(sender.deviceId, target, members)) {
+                            // drop: actor is not in the poll's thread
+                        }
+                    }
                     reaction != null -> {
                         val target = store.message(reaction.targetId)
                         val gid = JsonIds.optional(target?.groupId)

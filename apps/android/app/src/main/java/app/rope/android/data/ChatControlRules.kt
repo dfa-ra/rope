@@ -28,6 +28,13 @@ object ChatControlRules {
     fun allowReact(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean =
         allowThreadOp(actorId, msg, groupMembers)
 
+    /**
+     * RECEIPT `vote` / `poll_close` target a poll message in its thread.
+     * Same membership gate as pin / react. Missing UUID is a no-op.
+     */
+    fun allowVote(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean =
+        allowThreadOp(actorId, msg, groupMembers)
+
     private fun allowThreadOp(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean {
         if (msg == null || msg.deleted) return false
         val group = JsonIds.optional(msg.groupId) ?: ChatIds.rawGroupId(msg.peerDeviceId).takeIf { ChatIds.isGroup(msg.peerDeviceId) }

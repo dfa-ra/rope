@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
@@ -69,6 +70,29 @@ class ChatControlRulesTest {
         assertFalse(ChatControlRules.allowReact(bob, groupMsg, null))
         assertFalse(ChatControlRules.allowReact(bob, dm.copy(deleted = true), null))
         assertFalse(ChatControlRules.allowReact(bob, null, listOf(bob)))
+    }
+
+    @Test
+    fun voteAndPollCloseStayInTheThreadTheActorShares() {
+        val dm = msg(alice, peer = bob)
+        assertTrue(ChatControlRules.allowVote(bob, dm, null))
+        assertFalse(ChatControlRules.allowVote(alice, dm, null))
+        assertFalse(ChatControlRules.allowVote(bob, null, null))
+        assertFalse(ChatControlRules.allowVote(bob, dm.copy(deleted = true), null))
+        val stranger = "c".repeat(64)
+        assertFalse(ChatControlRules.allowVote(stranger, dm, null))
+        val gid = "11111111-2222-3333-4444-555555555555"
+        val groupMsg = msg(alice, groupId = gid)
+        assertTrue(ChatControlRules.allowVote(bob, groupMsg, listOf(alice, bob)))
+        assertFalse(ChatControlRules.allowVote(bob, groupMsg, listOf(alice)))
+        assertFalse(ChatControlRules.allowVote(bob, groupMsg, null))
+        assertFalse(ChatControlRules.allowVote(stranger, groupMsg, listOf(alice, bob)))
+        val vote = ChatControl.parse(ChatControl(ChatControl.VOTE, "poll-1").toJson())
+        assertEquals(ChatControl.VOTE, vote?.kind)
+        val close = ChatControl.parse(ChatControl(ChatControl.POLL_CLOSE, "poll-1").toJson())
+        assertEquals(ChatControl.POLL_CLOSE, close?.kind)
+        assertNull(ChatControl.parse("""{"kind":"vote"}"""))
+        assertNull(ChatControl.parse("""{"kind":"poll_close"}"""))
     }
 
     @Test
