@@ -790,7 +790,7 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(pendingAttachments = merged)
     }
 
-    fun sendAttachments(
+    private fun sendAttachments(
         uris: List<Uri>,
         forcedMime: String? = null,
         caption: String? = null,
