@@ -285,8 +285,14 @@ class RopeRepository(private val app: Application) {
         if (screen == Screen.Invite && !RoleRules.canInvite(_state.value.profile?.role)) {
             return
         }
+        val from = _state.value.screen
         if (screen != Screen.Chat) persistOpenDraft()
-        _state.value = applyNav(screen, if (tab) NavMode.SwitchTab else NavMode.Push).copy(error = null)
+        var next = applyNav(screen, if (tab) NavMode.SwitchTab else NavMode.Push).copy(error = null)
+        // Archive has its own search; do not carry the chats query in or out.
+        if (screen == Screen.Archive || (from == Screen.Archive && screen != Screen.Archive)) {
+            next = next.copy(chatQuery = "")
+        }
+        _state.value = next
         if (NavRules.refreshesLists(screen)) refreshConversations()
         if (screen == Screen.NewGroup) {
             _state.value = _state.value.copy(groupNameDraft = "", pickedMembers = emptySet())
@@ -339,6 +345,7 @@ class RopeRepository(private val app: Application) {
                     error = null,
                     viewingImage = null,
                     messageQuery = "",
+                    chatQuery = if (s.screen == Screen.Archive) "" else s.chatQuery,
                     unreadAnchorId = if (next.last() == Screen.Chat || next.last() == Screen.PeerProfile) {
                         s.unreadAnchorId
                     } else {
