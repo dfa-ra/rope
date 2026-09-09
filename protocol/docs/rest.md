@@ -1,6 +1,6 @@
 # REST API (v1)
 
-All application endpoints except `/health`, `/version`, and `/v1/bootstrap` require device authentication. Unauthenticated `GET /v1/info` returns `server_id`, `protocol_version`, `fingerprint`, and optional `public_ip` only — never TURN credentials. Authenticated `GET /v1/info` adds `ice_servers` / `ice_ttl_seconds` when coturn is configured.
+All application endpoints except `/health`, `/version`, and `/v1/bootstrap` require device authentication. Unauthenticated `GET /v1/info` returns `server_id`, `protocol_version`, and `fingerprint` only — never TURN credentials or `public_ip`. Authenticated `GET /v1/info` adds `public_ip` when known, plus `ice_servers` / `ice_ttl_seconds` when coturn is configured.
 
 ## Auth header
 
@@ -59,8 +59,7 @@ Unauthenticated:
 {
   "server_id": "hex",
   "protocol_version": 1,
-  "fingerprint": "hex sha256 of TLS cert DER",
-  "public_ip": "203.0.113.9"
+  "fingerprint": "hex sha256 of TLS cert DER"
 }
 ```
 
@@ -93,9 +92,9 @@ With `Authorization: Rope …` the same path may also include time-limited TURN:
 
 On `--allow-http` debug servers `fingerprint` is the SHA-256 of the ASCII string `rope-http-dev`.
 
-`ice_servers` is present on **authenticated** GET when the VPS has coturn (`public_host` + `turn_secret` in `/etc/rope/config.json`). Unauthenticated callers see fingerprint/server_id only. Credentials are time-limited (coturn REST / HMAC-SHA1, username `<unix_expiry>:rope`, default TTL 7 days); the long-term secret never leaves the VPS. If 443 is already taken or did not bind, installer uses TURNS on 5349 (or omits `turns:`). Without TURN (local `--allow-http`) the field is omitted.
+`ice_servers` is present on **authenticated** GET when the VPS has coturn (`public_host` + `turn_secret` in `/etc/rope/config.json`). Unauthenticated callers see fingerprint/server_id only — not `public_ip`. Credentials are time-limited (coturn REST / HMAC-SHA1, username `<unix_expiry>:rope`, default TTL 7 days); the long-term secret never leaves the VPS. If 443 is already taken or did not bind, installer uses TURNS on 5349 (or omits `turns:`). Without TURN (local `--allow-http`) the field is omitted.
 
-`public_ip` is the VPS IPv4 (from `public_ip` in config, a raw `public_host`, or installer `external_ip`) so the client can duplicate `turn`/`turns` URLs when DNS for `public_host` fails. `ice_servers[].hostname` is the DNS/SNI name for self-signed TURNS when the URL host is a raw IP (`public_host` DNS name, or `tls_hostname` if URLs stay on an IP). Omitted when there is no DNS name.
+`public_ip` is on the **authenticated** response (from `public_ip` in config, a raw `public_host`, or installer `external_ip`) so the client can duplicate `turn`/`turns` URLs when DNS for `public_host` fails. `ice_servers[].hostname` is the DNS/SNI name for self-signed TURNS when the URL host is a raw IP (`public_host` DNS name, or `tls_hostname` if URLs stay on an IP). Omitted when there is no DNS name.
 
 ### `POST /v1/bootstrap`
 
