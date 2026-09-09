@@ -158,6 +158,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SearchJumpRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -171,7 +172,6 @@ import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
-import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -774,8 +774,9 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = remember(state.messages, state.messageQuery) {
-        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val visible = state.messages
+    val searchHits = remember(state.messages, state.messageQuery) {
+        SearchJumpRules.hits(state.messages, state.messageQuery)
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
     val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
@@ -789,6 +790,7 @@ fun ChatPane(
     val jumpScope = rememberCoroutineScope()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
+    var searchHitId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -805,9 +807,20 @@ fun ChatPane(
     }
     BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
     LaunchedEffect(threadItems.size, state.messageQuery) {
+        if (SearchJumpRules.keepPlace(state.messageQuery)) return@LaunchedEffect
         if (threadItems.isNotEmpty() && state.scrollToMessageId == null) {
             list.animateScrollToItem(threadItems.lastIndex)
         }
+    }
+    LaunchedEffect(state.messageQuery) {
+        val hits = SearchJumpRules.hits(state.messages, state.messageQuery)
+        if (hits.isEmpty()) {
+            searchHitId = null
+            return@LaunchedEffect
+        }
+        val id = SearchJumpRules.latest(hits) ?: return@LaunchedEffect
+        searchHitId = id
+        onJump(id)
     }
     LaunchedEffect(state.scrollToMessageId) {
         val id = state.scrollToMessageId ?: return@LaunchedEffect
@@ -910,20 +923,53 @@ fun ChatPane(
             }
         }
         if (showSearch && !selecting) {
-            TextField(
-                value = state.messageQuery,
-                onValueChange = onMessageQuery,
-                modifier = Modifier
+            Row(
+                Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                placeholder = { Text("Найти в чате") },
-                singleLine = true,
-                colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                shape = RoundedCornerShape(RopeShapes.search),
-            )
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextField(
+                    value = state.messageQuery,
+                    onValueChange = onMessageQuery,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Найти в чате") },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    shape = RoundedCornerShape(RopeShapes.search),
+                )
+                if (SearchJumpRules.searching(state.messageQuery)) {
+                    Text(
+                        SearchJumpRules.label(searchHits, searchHitId),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                    IconButton(
+                        onClick = {
+                            val id = SearchJumpRules.older(searchHits, searchHitId) ?: return@IconButton
+                            searchHitId = id
+                            onJump(id)
+                        },
+                        enabled = searchHits.isNotEmpty(),
+                    ) {
+                        Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = SearchJumpRules.OLDER)
+                    }
+                    IconButton(
+                        onClick = {
+                            val id = SearchJumpRules.newer(searchHits, searchHitId) ?: return@IconButton
+                            searchHitId = id
+                            onJump(id)
+                        },
+                        enabled = searchHits.isNotEmpty(),
+                    ) {
+                        Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = SearchJumpRules.NEWER)
+                    }
+                }
+            }
         }
         pinned?.let { pin ->
             Surface(
