@@ -372,6 +372,29 @@ object ChatListRules {
         pinnedBlock(rows, query).isNotEmpty() && unpinnedBlock(rows, query).isNotEmpty()
 }
 
+enum class UnreadBadgeKind { NONE, ACCENT, MUTED }
+
+/** Telegram-like chat-list unread badge: accent when unmuted, gray when muted. */
+object UnreadBadgeRules {
+    const val CAP = 99
+
+    fun kind(unread: Int, muted: Boolean): UnreadBadgeKind = when {
+        unread <= 0 -> UnreadBadgeKind.NONE
+        muted -> UnreadBadgeKind.MUTED
+        else -> UnreadBadgeKind.ACCENT
+    }
+
+    fun visible(unread: Int): Boolean = unread > 0
+
+    fun label(unread: Int): String = when {
+        unread <= 0 -> ""
+        unread > CAP -> "$CAP+"
+        else -> unread.toString()
+    }
+
+    fun emphasizeTitle(unread: Int): Boolean = unread > 0
+}
+
 object MessageSearch {
     fun matches(msg: ChatMessage, query: String): Boolean {
         if (query.isBlank()) return true

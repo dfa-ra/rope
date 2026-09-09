@@ -124,6 +124,8 @@ import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.QueryHighlight
+import app.rope.android.data.UnreadBadgeKind
+import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerRules
@@ -445,7 +447,13 @@ internal fun ConversationRow(
                     HighlightedText(
                         text = c.title,
                         query = query,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (UnreadBadgeRules.emphasizeTitle(c.unread)) {
+                                FontWeight.SemiBold
+                            } else {
+                                FontWeight.Normal
+                            },
+                        ),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
@@ -484,17 +492,28 @@ internal fun ConversationRow(
                     color = if (c.online && !c.isGroup) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (c.unread > 0) {
+            val badge = UnreadBadgeRules.kind(c.unread, c.muted)
+            if (badge != UnreadBadgeKind.NONE) {
+                val bg = when (badge) {
+                    UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.primary
+                    UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.onSurfaceVariant
+                    UnreadBadgeKind.NONE -> Color.Transparent
+                }
+                val fg = when (badge) {
+                    UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.onPrimary
+                    UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.surface
+                    UnreadBadgeKind.NONE -> Color.Transparent
+                }
                 Box(
                     Modifier
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+                        .background(bg)
                         .padding(horizontal = 7.dp, vertical = 3.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        if (c.unread > 99) "99+" else c.unread.toString(),
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        UnreadBadgeRules.label(c.unread),
+                        color = fg,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }

@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.12 chat-list unread badge | — |
+| CG-086 | Slice: muted unread badge as 0.3.12 | PO | IN_PROGRESS | Telegram gray vs accent; bold title | CG-007 |
+| CG-087 | Android: UnreadBadgeRules MUTED vs ACCENT | AND-01 | IN_PROGRESS | D-025; no 0.3.2 tap/long-press redo | CG-086 |
+| CG-088 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-087 |
+| CG-089 | Ship **0.3.12** | PO | IN_PROGRESS | versionCode 36; do not retag v0.3.11 | CG-088 |
 | CG-082 | Slice: chat-list word-prefix search as 0.3.11 | PO | DONE | shipped v0.3.11 | CG-007 |
 | CG-083 | Android: TITLE_PREFIX on any title word | AND-01 | DONE | D-024; no 0.3.2 tap/long-press redo | CG-082 |
 | CG-084 | Independent review | REV-01 | DONE | PASS; word-prefix + İ highlight shipped in 0.3.11 | CG-083 |
