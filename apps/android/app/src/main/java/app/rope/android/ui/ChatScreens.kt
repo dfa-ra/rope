@@ -138,6 +138,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
@@ -152,6 +153,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.EmojiBubbleRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -1558,13 +1560,23 @@ private fun MessageBubble(
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                             else -> {
                                 val context = LocalContext.current
-                                MentionText(
-                                    m.text,
-                                    mentionNames,
-                                    mentionColor = if (mine) outFg else senderColor,
-                                    styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
-                                    onPlainTap = onTap,
-                                )
+                                val emojiN = EmojiBubbleRules.count(m.text)
+                                if (emojiN != null && EmojiBubbleRules.applies(m.kind, m.text)) {
+                                    val sp = EmojiBubbleRules.fontSp(emojiN)
+                                    Text(
+                                        m.text.trim(),
+                                        fontSize = sp.sp,
+                                        lineHeight = (sp + 8).sp,
+                                    )
+                                } else {
+                                    MentionText(
+                                        m.text,
+                                        mentionNames,
+                                        mentionColor = if (mine) outFg else senderColor,
+                                        styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
+                                        onPlainTap = onTap,
+                                    )
+                                }
                                 val preview = m.linkPreview
                                 if (preview != null) {
                                     LaunchedEffect(m.id, preview.objectId, preview.localPath) {
