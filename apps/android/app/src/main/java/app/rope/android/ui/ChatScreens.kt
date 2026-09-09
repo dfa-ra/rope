@@ -861,6 +861,8 @@ fun ChatPane(
                                         }
                                     },
                                     onSwipeReply = { onReply(m) },
+                                    onSeekVoice = onSeekVoice,
+                                    onCycleVoiceSpeed = onCycleVoiceSpeed,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1136,6 +1138,8 @@ private fun MessageBubble(
     onEnterSelect: () -> Unit = {},
     onTap: () -> Unit = {},
     onSwipeReply: () -> Unit = {},
+    onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
+    onCycleVoiceSpeed: () -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
