@@ -11,6 +11,30 @@ data class InviteLink(
 )
 
 object InviteCodec {
+    fun hostOK(host: String): Boolean {
+        val h = host.trim()
+        if (h.isEmpty() || h.length > 253) return false
+        return h.all { ch ->
+            ch.isLetterOrDigit() || ch == '.' || ch == '-' || ch == ':' || ch == '[' || ch == ']'
+        }
+    }
+
+    fun portOK(port: Int): Boolean = port in 1..65535
+
+    /** Bracket IPv6 so OkHttp does not treat extra colons as a port. */
+    fun hostForUrl(host: String): String {
+        val h = host.trim()
+        require(hostOK(h)) { "bad host" }
+        if (h.startsWith("[")) return h
+        return if (':' in h) "[$h]" else h
+    }
+
+    fun origin(scheme: String, host: String, port: Int): String {
+        require(scheme == "http" || scheme == "https" || scheme == "ws" || scheme == "wss") { "bad scheme" }
+        require(portOK(port)) { "bad port" }
+        return "$scheme://${hostForUrl(host)}:$port"
+    }
+
     fun parse(url: String): InviteLink {
         require(url.startsWith("rope://join")) { "scheme must be rope://join" }
         val query = url.substringAfter('?', "")
@@ -23,10 +47,14 @@ object InviteCodec {
         }
         val version = map["v"]?.toIntOrNull() ?: 1
         require(version == 1) { "unsupported protocol version $version" }
+        val host = map["host"] ?: error("missing host")
+        val port = map["port"]?.toIntOrNull() ?: error("bad port")
+        require(hostOK(host)) { "bad host" }
+        require(portOK(port)) { "bad port" }
         return InviteLink(
             version = version,
-            host = map["host"] ?: error("missing host"),
-            port = map["port"]?.toIntOrNull() ?: error("bad port"),
+            host = host,
+            port = port,
             serverId = map["sid"] ?: error("missing sid"),
             fingerprint = (map["fp"] ?: error("missing fp")).lowercase(),
             token = map["tok"] ?: error("missing tok"),

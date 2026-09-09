@@ -3,6 +3,7 @@ package app.rope.android.net
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
+import app.rope.android.protocol.InviteCodec
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -27,10 +28,10 @@ class ServerApi(
     }
 
     val baseHttp: String
-        get() = (if (profile.useTls) "https" else "http") + "://${profile.host}:${profile.port}"
+        get() = InviteCodec.origin(if (profile.useTls) "https" else "http", profile.host, profile.port)
 
     val baseWs: String
-        get() = (if (profile.useTls) "wss" else "ws") + "://${profile.host}:${profile.port}"
+        get() = InviteCodec.origin(if (profile.useTls) "wss" else "ws", profile.host, profile.port)
 
     fun info(): JSONObject = authed("GET", "/v1/info", ByteArray(0))
 
@@ -160,7 +161,7 @@ class ServerApi(
         val c = if (useTls) PinnedClient.pinned(fingerprint) else PinnedClient.http()
         val scheme = if (useTls) "https" else "http"
         val req = Request.Builder()
-            .url("$scheme://$host:$port/v1/bootstrap")
+            .url("${InviteCodec.origin(scheme, host, port)}/v1/bootstrap")
             .post(body.toRequestBody(json))
             .build()
         c.newCall(req).execute().use { resp ->
@@ -224,7 +225,7 @@ class ServerApi(
         fun fetchInfo(host: String, port: Int, useTls: Boolean, fingerprint: String): JSONObject {
             val c = if (useTls) PinnedClient.pinned(fingerprint) else PinnedClient.http()
             val scheme = if (useTls) "https" else "http"
-            val req = Request.Builder().url("$scheme://$host:$port/v1/info").get().build()
+            val req = Request.Builder().url("${InviteCodec.origin(scheme, host, port)}/v1/info").get().build()
             c.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) error("info ${resp.code}: $text")
