@@ -235,6 +235,10 @@ type bootstrapReq struct {
 	DeviceID       string `json:"device_id"`
 }
 
+// Unauthenticated bootstrap must not distinguish setup vs invite vs used vs
+// expired — that is an extra oracle on POST /v1/bootstrap.
+const bootstrapInvalidToken = "invalid token"
+
 func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	if !s.Limit.Allow("bootstrap:" + clientIP(r)) {
 		writeJSON(w, 429, map[string]string{"error": "rate_limited"})
@@ -266,12 +270,12 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	role := "member"
 	if !hasOwner {
 		if req.Token != s.setup {
-			writeJSON(w, 403, map[string]string{"error": "invalid setup token"})
+			writeJSON(w, 403, map[string]string{"error": bootstrapInvalidToken})
 			return
 		}
 		role = "owner"
 	} else if err := s.Store.PeekInvite(req.Token); err != nil {
-		writeJSON(w, 403, map[string]string{"error": err.Error()})
+		writeJSON(w, 403, map[string]string{"error": bootstrapInvalidToken})
 		return
 	}
 	taken, err := s.Store.LoginTaken(req.DisplayName)
@@ -290,7 +294,7 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	if !hasOwner {
 		s.setup = "" // one-time in-memory; config file still has it but DB owner exists
 	} else if _, err := s.Store.ConsumeToken(req.Token); err != nil {
-		writeJSON(w, 403, map[string]string{"error": err.Error()})
+		writeJSON(w, 403, map[string]string{"error": bootstrapInvalidToken})
 		return
 	}
 	memberID := uuid.NewString()

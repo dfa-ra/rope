@@ -766,8 +766,94 @@ func TestBootstrapGarbageTokenDoesNotEnumerateLogin(t *testing.T) {
 		t.Fatalf("garbage token must be 403 for taken and free login, got %d and %d",
 			respTaken.StatusCode, respFree.StatusCode)
 	}
-	respTaken.Body.Close()
-	respFree.Body.Close()
+	if got := bootstrapErr(t, respTaken); got != bootstrapInvalidToken {
+		t.Fatalf("taken-name garbage body %q", got)
+	}
+	if got := bootstrapErr(t, respFree); got != bootstrapInvalidToken {
+		t.Fatalf("free-name garbage body %q", got)
+	}
+}
+
+func TestBootstrapTokenErrorsAreOpaque(t *testing.T) {
+	_, hs, setup := testServer(t)
+	fresh := newDevice(t)
+	body, _ := json.Marshal(map[string]any{
+		"token": "nope", "display_name": "nope", "public_identity": fresh.blob, "device_id": fresh.id,
+	})
+	resp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 403 || bootstrapErr(t, resp) != bootstrapInvalidToken {
+		t.Fatalf("uninitialized setup miss must be opaque 403, got %d", resp.StatusCode)
+	}
+
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "anna")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), owner)
+	invResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(invResp.Body).Decode(&inv); err != nil {
+		t.Fatal(err)
+	}
+	invResp.Body.Close()
+
+	guest := newDevice(t)
+	bootstrap(t, hs, inv.Token, guest, "guest")
+	reuse := newDevice(t)
+	reuseBody, _ := json.Marshal(map[string]any{
+		"token": inv.Token, "display_name": "guest2", "public_identity": reuse.blob, "device_id": reuse.id,
+	})
+	reuseResp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(reuseBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reuseResp.StatusCode != 403 || bootstrapErr(t, reuseResp) != bootstrapInvalidToken {
+		t.Fatalf("used invite must be opaque 403, got %d", reuseResp.StatusCode)
+	}
+
+	ttlReq := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":1}`), owner)
+	ttlResp, err := http.DefaultClient.Do(ttlReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.NewDecoder(ttlResp.Body).Decode(&inv); err != nil {
+		t.Fatal(err)
+	}
+	ttlResp.Body.Close()
+	time.Sleep(2 * time.Second)
+	late := newDevice(t)
+	lateBody, _ := json.Marshal(map[string]any{
+		"token": inv.Token, "display_name": "late", "public_identity": late.blob, "device_id": late.id,
+	})
+	lateResp, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(lateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lateResp.StatusCode != 403 || bootstrapErr(t, lateResp) != bootstrapInvalidToken {
+		t.Fatalf("expired invite must be opaque 403, got %d", lateResp.StatusCode)
+	}
+}
+
+func bootstrapErr(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("body %s: %v", raw, err)
+	}
+	return out.Error
 }
 
 func TestPresenceBroadcast(t *testing.T) {
