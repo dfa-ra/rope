@@ -49,10 +49,9 @@ object ScheduleRules {
     fun canEnqueue(pendingCount: Int): Boolean = pendingCount < MAX_PENDING
 
     /** TTL at fire is always the live preference, never a stored exp snapshot. */
-    fun ttlAtFire(currentTtlSec: Int, storedExpMs: Long? = null): Int {
-        storedExpMs // ignored — expiry is not frozen at schedule tap
-        return currentTtlSec.coerceAtLeast(0)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun ttlAtFire(currentTtlSec: Int, storedExpMs: Long? = null): Int =
+        currentTtlSec.coerceAtLeast(0)
 
     fun isDue(nowMs: Long, fireAtMs: Long): Boolean = nowMs >= fireAtMs
 
