@@ -221,6 +221,10 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         writableDatabase.execSQL("UPDATE messages SET local_path = ? WHERE id = ?", arrayOf(path, id))
     }
 
+    fun clearLocalPaths() {
+        writableDatabase.execSQL("UPDATE messages SET local_path = NULL")
+    }
+
     fun editMessage(id: String, text: String): Boolean {
         val msg = message(id) ?: return false
         val oldUrl = LinkPreviewRules.firstHttps(msg.text)

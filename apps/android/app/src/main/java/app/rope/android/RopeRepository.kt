@@ -16,6 +16,7 @@ import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.CallInfo
+import app.rope.android.data.CacheRules
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMedia
@@ -185,6 +186,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val mediaCacheBytes: Long = 0L,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -258,6 +260,7 @@ class RopeRepository(private val app: Application) {
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
                 store.rehomeMisroutedMedia()
+                refreshMediaCacheBytes()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
                     vault.save(it.toBytes())
                 }
@@ -578,6 +581,21 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun clearMediaCache() {
+        CacheRules.deleteTree(CacheRules.dir(app.filesDir))
+        store.clearLocalPaths()
+        mediaAttempts.clear()
+        refreshMediaCacheBytes()
+        refreshOpenChat()
+        notice(CacheRules.DONE)
+    }
+
+    private fun refreshMediaCacheBytes() {
+        _state.value = _state.value.copy(
+            mediaCacheBytes = CacheRules.bytesOf(CacheRules.dir(app.filesDir)),
+        )
     }
 
     fun toggleNotificationsMuted() {
