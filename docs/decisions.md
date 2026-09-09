@@ -120,3 +120,26 @@ Context: User ordered observe → inventory → reconstruct → install control 
 Decision: Treat this checkout as ADOPTED_EXISTING_WORKSPACE. Refresh `.cryptogalera/` from code evidence. Install a small `.cursor/agents/` set. Record baseline tests. Convert in-tree unfinished work (Settings stub, revoke UI) to BACKLOG tasks, not new products. Do not merge Stage-2. Do not unfreeze coding.
 Consequences: Company memory must list CONFIRMED vs INFERRED vs UNKNOWN. Reconstructed stack decisions stay labeled reconstructed. Next product implementation still needs D-005 or explicit CG-007.
 Alternatives considered: Rebuild Rope under CryptoGalera (rejected). Promote v0.2.15 as part of adoption (rejected — D-005).
+
+---
+
+Product ships **D-010 through D-030** (stack reconstruction, calls/notify, Telegram chrome slices 0.3.2–0.3.17, and D-015 PO-of-Rope delivery law) are recorded in [`.cryptogalera/DECISIONS.md`](../.cryptogalera/DECISIONS.md). Formal session log continues with process law D-031.
+
+---
+
+### D-031: Expanded delivery org (leads + research)
+
+Date: 2026-09-09
+Status: accepted
+Decider: User (instruction: expand the Cursor PO team — larger slices, domain leads, standing research). Recorded by Product Owner / ORG-01.
+Context: Delivery law D-015 already makes this Cursor agent Product Owner of Rope and requires PR → review → merge → tagged release. Sprint cadence had collapsed into one-string / version-bump slices staffed as a single AND-01 under the PO. The user ordered larger Telegram-gap epics, domain leads who spawn subordinates, and a standing research subteam that scans the internet for Telegram-like features. After this law was drafted as D-030 against older `main`, v0.3.17 landed as product **D-030** (CG-109). Org law therefore takes the next free ID **D-031**. Do not drop the 0.3.17 product decision.
+Decision:
+- **D-015 is unchanged.** The Cursor agent on this run remains Product Owner of Rope.
+- Default unit of work is an **epic slice**: a user-visible Telegram gap that may span Android + Go + Rust. Tiny copy nits are a hotfix after FAIL / PASS_WITH_CONCERNS leftover, not the sprint cadence.
+- PO assigns **domain leads** per slice: Android UI lead; Go relay lead if server/API/storage; Rust core lead if crypto/protocol/UniFFI. Leads may spawn `AND-n` / `GO-n` / `CORE-n` subordinates for files/tests they own. Leads integrate on **one** feature branch. Leads do **not** self-review.
+- Standing **Research subteam**: internet + Telegram Android UX + Rope gap analysis → ranked epics. Research does **not** merge product code. PO picks the next epic from their brief.
+- **REV-01 remains independent** of every implementer and every lead on that slice. PASS_WITH_CONCERNS may ship; FAIL blocks tag.
+- Cadence unchanged: PR → REV-01 → CI green → ff-merge `main` → tag `vX.Y.Z` → GitHub Release → record on `main` → next epic. Do not leave PRs open. Do not retag published releases. No FCM. Kotlin never implements crypto. Name/logo colors stay.
+- Last ship remains **v0.3.17** (product D-030). Next product slice is **0.3.18** grouped photo albums.
+Consequences: Org size grows inside the existing User → PO → Lead → Specialist depth. Domain leads are the Lead layer. Research is a standing subteam under PO, not a fourth management layer and not a merge path. Overlapping extra feature agents on the same paths remain forbidden (D-006 / T-003). This decision is org law; it does not bump Android/Go/Rust versions. Org docs do not block the next product epic; Research staffing can proceed in parallel.
+Alternatives considered: Keep one-string hotfixes as the cadence (rejected — user asked for larger slices). Let leads self-review ordinary UI (rejected — REV-01 stays independent of leads). Let research merge product code (rejected). Add managers of agents / extra departments (rejected — D-031 expands leads + research only). Keep org as D-030 after v0.3.17 shipped (rejected — would collide with the 0.3.17 product decision).

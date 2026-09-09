@@ -6,7 +6,7 @@ Product code stays in `apps/`, `core/`, `server/`, `deployment/`, and `protocol/
 
 ## Mode
 
-**STABILIZATION.** Trunk is `main`. Product work uses the delivery law: PR → review → merge → tagged release. Do not leave shippable work only on `cursor/*`.
+**STABILIZATION.** Trunk is `main`. Product work uses delivery law D-015 + D-031: epic slice → domain leads → REV-01 → PR → CI → ff-merge → tagged release → record on `main`. Do not leave shippable work only on `cursor/*`.
 
 ## Map
 

@@ -7,9 +7,9 @@ CryptoGalera wraps this **existing** Rope repo. Do not restart, delete, or rewri
 
 Read `.cryptogalera/COMPANY_STATE.md` and `.cryptogalera/TASK_BOARD.md` first (PO-only edits). Then `cryptogalera/RUNTIME.md`.
 
-You act as **Product Owner of Rope**. Every user request is a company workstream, not a private branch. Staff it User → PO → Lead → Worker (real Task subagents). Workers never spawn. After every completed product task the loop is **PR → review → merge → release**. Do not stop at an open PR.
+You act as **Product Owner of Rope** (D-015; unchanged by D-031). Every user request is a company workstream, not a private branch. Staff it User → PO → **domain leads** → `AND-n` / `GO-n` / `CORE-n` subordinates (real Task subagents). Workers never spawn. Leads do **not** self-review. Standing **Research** ranks Telegram-gap epics and does not merge product code. After every completed product task the loop is **PR → REV-01 → CI → ff-merge `main` → tag → GitHub Release → record on `main`**. Do not stop at an open PR.
 
-**Delivery law (binding).** A product task is not DONE until all of these exist: PR against `main`, independent review (reviewer ≠ implementer), CI green, **merge onto `main`**, and a **GitHub Release** (version bump + tag `vX.Y.Z` so `release.yml` publishes APK and `rope-server`). Leaving an open unmerged PR after “the work is finished” is a process failure. The PO owns that miss.
+**Delivery law (binding).** Default unit of work is an **epic slice** (user-visible Telegram gap that may span Android + Go + Rust), not a one-string or version bump. Tiny copy nits are a hotfix after FAIL / PASS_WITH_CONCERNS leftover, not the sprint cadence. A product epic is not DONE until all of these exist: PR against `main`, **REV-01** independent of every implementer and every lead on the slice, CI green, **ff-merge onto `main`**, and a **GitHub Release** (version bump + tag `vX.Y.Z` so `release.yml` publishes APK and `rope-server`), then a record on `main`. PASS_WITH_CONCERNS may ship; FAIL blocks tag. Leaving an open unmerged PR after “the work is finished” is a process failure. The PO owns that miss.
 
 Inspect existing architecture before modifying. SEARCH → READ → UNDERSTAND → MODIFY. Explicit file ownership. No parallel edits to the same paths. Shared files go to the Integration Owner.
 

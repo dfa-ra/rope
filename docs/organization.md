@@ -8,33 +8,39 @@ Operating model: [company.md](company.md). Agent rules: [AGENTS.md](../AGENTS.md
 
 ```
 User
- └── Founder / Product Owner
-      ├── Engineering Lead  ← integration owner (default)
-      │    ├── (optional) Android specialist
-      │    ├── (optional) Rust specialist
-      │    └── (optional) Go / deployment specialist
-      └── QA / Security     ← same person as Engineering Lead on ordinary work;
-                              when independent review is required, reports to PO
+ └── Founder / Product Owner  (D-015 unchanged; picks next epic from Research)
+      ├── Research subteam (standing; ranked Telegram-gap epics; no product merges)
+      ├── Android UI lead  ← domain lead; spawns AND-n; integrates Android on the epic branch
+      │    └── AND-n subordinates (files/tests they own; never spawn)
+      ├── Go relay lead    ← seated if server/API/storage; spawns GO-n
+      │    └── GO-n subordinates
+      ├── Rust core lead   ← seated if crypto/protocol/UniFFI; spawns CORE-n
+      │    └── CORE-n subordinates
+      └── REV-01           ← independent of every implementer and every lead on that slice
 ```
 
-**Not seated unless the task requires them:** Design (UI-shaped work only), Research Lead (unknowns dominate only).
+Default unit of work is an **epic slice** (D-031): a user-visible Telegram gap that may span Android + Go + Rust. Tiny copy nits are a hotfix after FAIL / PASS_WITH_CONCERNS leftover, not the sprint cadence.
 
-No other departments. Specialists are created per task and released when the task ends. They are not standing teams.
+**Seated every cycle:** Product Owner, standing Research, REV-01. **Seated per epic:** the domain leads the gap needs. Specialists (`AND-n` / `GO-n` / `CORE-n`) are created per task and released when the task ends.
+
+**Not seated unless the task requires them:** Design (visual redesign only). No other departments.
+
+Leads integrate on **one** feature branch. Leads do **not** self-review. PASS_WITH_CONCERNS may ship; FAIL blocks tag.
 
 ## File ownership
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `apps/android/**` | Android | Kotlin UI, Room, HTTPS/WSS client, QR, SSH provision UI. Must not implement cryptography. |
-| `core/rust/**` | Rust | Identity, keys, envelope, encrypt/sign/verify, invite + fingerprint checks. UniFFI API. |
-| `server/go/**` | Go | REST, WSS, members/devices, invites, encrypted mailbox, SQLite. Never sees plaintext. |
+| `apps/android/**` | Android UI lead | Kotlin UI, HTTPS/WSS client, QR, SSH provision UI. Must not implement cryptography. May spawn `AND-n`. |
+| `core/rust/**` | Rust core lead | Identity, keys, envelope, encrypt/sign/verify, invite + fingerprint checks. UniFFI API. May spawn `CORE-n`. |
+| `server/go/**` | Go relay lead | REST, WSS, members/devices, invites, encrypted mailbox, SQLite. Never sees plaintext. May spawn `GO-n`. |
 | `protocol/**` | Engineering Lead | Wire format. Any change is cross-team. Coordinate before coding. |
 | `deployment/**` | Go / deployment | `install.sh`, systemd, TLS material on the VPS. |
 | `scripts/**` | Engineering Lead | UniFFI Kotlin bindings and Android native `.so` builds. Touches Android + Rust. |
 | `docs/**` | PO + Engineering Lead | Product, architecture, threat model, company, tasks, decisions. |
 | `.github/**`, `Makefile` | Engineering Lead | CI and release workflows. |
 
-Shared surfaces: protocol docs, UniFFI API, invite URL, REST/WSS. The specialist who “needs a field” does not edit three trees alone — Engineering Lead sequences the work.
+Shared surfaces: protocol docs, UniFFI API, invite URL, REST/WSS. The specialist who “needs a field” does not edit three trees alone — the named integration owner sequences the work.
 
 Do not change another row’s tree without the integration owner. Process/docs tasks do not edit `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, or CI.
 
@@ -42,38 +48,38 @@ Do not change another row’s tree without the integration owner. Process/docs t
 
 Staff from the **smallest** row that covers the work. Do not add roles “for completeness.”
 
-### Android-only UI tweak
+### Android-only UI epic
 
-Examples: copy, padding, a debug-screen label, a string resource. No protocol, no crypto, no new screens that imply new product scope.
+Examples: a Telegram-gap that is entirely in `apps/android` (search, badges, composer chrome). No protocol, no crypto.
 
-- **Staff:** Engineering Lead does it, **or** one Android specialist.
+- **Staff:** Android UI lead, plus `AND-n` subordinates for files/tests they own if needed.
 - **Design:** only if the brief is a visual redesign, not a tweak.
-- **Review:** Engineering Lead if a specialist did the work. No security agent.
+- **Review:** **REV-01**, independent of the Android UI lead. PASS_WITH_CONCERNS may ship; FAIL blocks tag.
 - **Tests:** `apps/android` unit tests for touched logic; do not skip if ViewModel/repository code changed.
-- **Forbidden:** a second agent for “polish,” a landing-page agent, a parallel Telegram-UI rewrite.
+- **Forbidden:** staffing a one-string copy nit as the sprint cadence; a second agent for “polish”; a parallel Telegram-UI rewrite; lead self-review.
 
 ### Client + relay behavior, same protocol version
 
-Examples: better error handling on mailbox fetch, installer flag plumbing, a local-only Room field.
+Examples: better error handling on mailbox fetch, installer flag plumbing, a local-only store field.
 
-- **Staff:** Engineering Lead, plus at most one specialist per **disjoint** tree if the slices are truly parallel.
-- **Integrator:** Engineering Lead. One branch.
-- **Review:** Engineering Lead; QA/Security if auth or TLS pinning is involved.
+- **Staff:** Android UI lead and/or Go relay lead as the gap needs, plus at most one subordinate per **disjoint** tree.
+- **Integrator:** the domain lead the PO names. One branch.
+- **Review:** **REV-01**; not either lead.
 
 ### Protocol change
 
 Examples: new REST field, envelope header, invite URL query, WSS message type, protocol version bump.
 
-- **Staff:** Engineering Lead (owner) + the trees that implement it (Android, Rust, Go as needed). **Not** three uncoordinated agents.
-- **Order:** write the protocol doc change → get Engineering Lead (and PO if it is user-visible or version-breaking) → implement in lockstep → update [architecture.md](architecture.md) if the data flow changed.
-- **Review:** independent review required (reviewer ≠ author). Threat model if guarantees shift.
+- **Staff:** PO names an integration owner + Android UI / Go relay / Rust core leads as needed. **Not** three uncoordinated agents.
+- **Order:** write the protocol doc change → get the integrator (and PO if it is user-visible or version-breaking) → implement in lockstep → update [architecture.md](architecture.md) if the data flow changed.
+- **Review:** **REV-01** (reviewer ≠ every implementer and ≠ every lead). Threat model if guarantees shift.
 - **Forbidden:** implementing only one side and leaving the rest “for later agents.”
 
 ### Crypto / identity / envelope change
 
 Examples: new primitive, key wrap, signature payload, fingerprint check, anything in `core/rust` that handles keys or ciphertext.
 
-- **Staff:** Engineering Lead + Rust specialist **or** Engineering Lead alone if small. **Separate** QA/Security reviewer (reviewer ≠ author).
+- **Staff:** Rust core lead + `CORE-n` as needed. **Separate** REV-01 (and SEC-01 when threat-model claims move).
 - **Escalate:** PO before changing working crypto. User if it changes a threat-model guarantee or fundamental requirement.
 - **Git:** minimal diff; do not rewrite working crypto as a cleanup. Run `cargo test` in `core/rust` plus any Go/Android tests that verify the handshake.
 - **Docs:** [threat-model.md](threat-model.md) and protocol docs must match the code. Log the decision in [decisions.md](decisions.md).
@@ -81,22 +87,24 @@ Examples: new primitive, key wrap, signature payload, fingerprint check, anythin
 
 ### Deployment / CI / release plumbing
 
-- **Staff:** Engineering Lead or one Go/deployment specialist.
-- **Review:** Engineering Lead; security review if TLS, `setup_token`, or signing secrets change.
-- **Forbidden:** a release agent on every UI tweak.
+- **Staff:** Go relay lead or Engineering Lead as integrator.
+- **Review:** **REV-01**; security review if TLS, `setup_token`, or signing secrets change.
+- **Forbidden:** a release agent on every UI tweak; treating a version bump as an epic.
 
-### Unknown-heavy investigation
+### Standing research (Telegram-gap scan)
 
-Examples: “why does pinning fail on this VPS image?” when the cause is not in-repo.
+Examples: what Telegram Android ships that Rope still lacks; ranked next epic.
 
-- **Staff:** Research Lead **or** Engineering Lead. Time-box. Return a recommendation.
-- **Then:** PO decides; implementation is a new task with a normal owner. Research does not morph into a rewrite.
+- **Staff:** standing **Research subteam**. Internet + Telegram Android UX + Rope gap analysis. Time-box. Return a **ranked epic brief**, not a literature dump.
+- **Then:** PO picks the next epic; implementation is a new task with domain leads. Research does **not** merge product code (D-031).
 
 ## Accountability
 
 | Question | Answer |
 | --- | --- |
-| Who is accountable for this task? | The lead named in the brief (default: Engineering Lead) |
-| Who may spawn agents? | That lead, after a plan, and only per [AGENTS.md](../AGENTS.md) |
-| Who lands the branch? | Integration owner (default: Engineering Lead) |
+| Who is accountable for this task? | The domain lead named in the brief (PO names the integrator) |
+| Who may spawn agents? | That lead, after a plan, and only per [AGENTS.md](../AGENTS.md). Workers never spawn. |
+| Who lands the branch? | Integration owner (the domain lead the PO names) |
+| Who reviews? | **REV-01**, independent of every implementer and every lead on the slice |
+| Who ranks the next epic? | Standing Research; PO picks |
 | Who changes scope? | User, via PO — nobody else |

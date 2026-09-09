@@ -11,35 +11,42 @@ Roles are functions, not headcount. One person (or one agent) may hold several. 
 | Role | Decides | Does |
 | --- | --- | --- |
 | **User** | Product, business model, scope, fundamental requirements | Approves irreversible direction |
-| **Founder / Product Owner (PO)** | Priorities, what ships, merge, release | Acts as Product Owner of Rope; staffs every request as a company workstream; owns PR → review → merge → tagged release |
-| **Engineering Lead** | Technical plan, integration, file-ownership conflicts | Studies, plans, implements small work, creates specialists only when needed, lands the branch |
-| **QA / Security Lead** | Whether a change is safe to ship against the threat model | Test plan, review of crypto/auth/protocol; **same person as Engineering Lead** unless the change is security-critical and needs an independent reviewer |
-| **Specialist** | Nothing outside the brief | Executes one concrete brief in one ownership area |
-| **Design** | Visual/UX choices **inside** an assigned UI task | Only when the task is UI. Not a standing department |
-| **Research Lead** | How to close a stated unknown | Only when unknowns dominate. Must return a recommendation, not a literature dump |
+| **Founder / Product Owner (PO)** | Priorities, what ships, merge, release; which epic is next | Acts as Product Owner of Rope (D-015; unchanged by D-031); assigns domain leads; picks the next epic from the Research brief; owns PR → REV-01 → ff-merge → tagged release → record |
+| **Android UI lead** | Android plan and integration inside `apps/android` | Domain lead for UI/UX slices; may spawn `AND-n` subordinates; integrates on the epic branch; does **not** self-review |
+| **Go relay lead** | Server/API/storage plan inside `server/go` (and deployment when tasked) | Domain lead when the epic touches relay; may spawn `GO-n`; does **not** self-review |
+| **Rust core lead** | Crypto/protocol/UniFFI plan inside `core/rust` | Domain lead when the epic touches the core; may spawn `CORE-n`; does **not** self-review |
+| **Engineering Lead** | Technical plan and shared-surface conflicts when PO names them integrator | Default integration owner if only one tree, or when PO does not name a domain lead |
+| **REV-01 / QA / Security** | Whether a change is safe to ship | Independent of every implementer **and every lead** on that slice. PASS_WITH_CONCERNS may ship; FAIL blocks tag |
+| **Specialist (`AND-n` / `GO-n` / `CORE-n`)** | Nothing outside the brief | Executes one concrete brief in one ownership area. Never spawns |
+| **Design** | Visual/UX choices **inside** an assigned UI task | Only when the task is a visual redesign. Not a standing department |
+| **Research subteam** | How to rank the next Telegram-gap epics | **Standing** (D-031). Internet + Telegram Android UX + Rope gap analysis → ranked brief. Does **not** merge product code |
 
-Company hierarchy is 2–3 levels: Product Owner → Lead → Specialist. The user sits above the PO. There is no layer of “managers of agents.”
+Company hierarchy is 2–3 levels: Product Owner → Domain Lead → Specialist. The user sits above the PO. There is no layer of “managers of agents.” Research reports to PO and is not a merge path.
 
 ## Current default org for Rope
 
-Until PO says otherwise, staff **this** and nothing more:
+Until PO says otherwise, staff **this** (D-031):
 
-1. **Product Owner**
-2. **Engineering Lead** (integration owner by default)
-3. **QA / Security Lead** — same person as Engineering Lead on ordinary work; a separate reviewer when the change is crypto, auth, protocol, or threat-model
+1. **Product Owner** (this Cursor agent; D-015 unchanged)
+2. **Domain leads** the epic needs: Android UI lead always for UI-visible gaps; Go relay lead if server/API/storage; Rust core lead if crypto/protocol/UniFFI
+3. **Subordinates** (`AND-n`, `GO-n`, `CORE-n`) only for files/tests those leads own
+4. **Standing Research subteam** — ranked Telegram-gap epics; no product merges
+5. **REV-01** — independent of every implementer and every lead on that slice
 
-Add **Design** only for a UI-shaped task. Add **Research Lead** only when the work is blocked on a real unknown (not “we might want calls someday”). Do not add marketing, growth, platform, data, or “AI ops” departments.
+Default unit of work is an **epic slice**, not a one-string or version bump. Tiny copy nits are a hotfix after FAIL / PASS_WITH_CONCERNS leftover, not the sprint cadence.
+
+Add **Design** only for a visual-redesign task. Do not add marketing, growth, platform, data, or “AI ops” departments. Leads integrate on **one** feature branch. Leads do **not** self-review.
 
 ## Lead rules
 
 A lead’s job is to finish the outcome, not to populate an org.
 
 1. **Study** the brief, [product.md](product.md), [architecture.md](architecture.md), [threat-model.md](threat-model.md), and the owned code.
-2. **Plan** in a short written decomposition: slices, owners, sequence, risks, what will *not* be done.
-3. **Do it yourself** if the work fits in one ownership area and one context window.
-4. **Create workers** only for specialization, true parallelism on disjoint paths, independent review, or context isolation. Each worker gets a complete task brief (template in [AGENTS.md](../AGENTS.md)).
-5. **Name the integration owner** before any parallel work. Default: Engineering Lead.
-6. **Integrate, review, validate, report.** Recheck whether further agents are needed after each worker returns. Do not pre-spawn a tree.
+2. **Plan** in a short written decomposition: epic slice, owners, sequence, risks, what will *not* be done.
+3. **Do it yourself** if the work fits in one ownership area and one context window (hotfix leftovers included).
+4. **Create subordinates** only for specialization, true parallelism on disjoint paths they own, or context isolation. Each worker gets a complete task brief (template in [AGENTS.md](../AGENTS.md)). Independent review is always **REV-01**, not the lead.
+5. **Name the integration owner** before any parallel work. Default: the domain lead the PO names.
+6. **Integrate on one feature branch**, validate, report. Recheck whether further agents are needed after each worker returns. Do not pre-spawn a tree. Do **not** self-review.
 7. **Escalate** irreversible or high-impact calls; do not silently assume.
 
 Leads do not exist to relay status to the PO. If the PO is doing the lead’s job, delegation has failed.
@@ -89,12 +96,12 @@ Escalate with: the decision needed, options, a recommendation, blast radius, and
 
 There are no standing meetings. Sync is:
 
-- **Before coding a shared surface:** Engineering Lead coordinates Android / Rust / Go / protocol owners. Protocol and UniFFI changes are never “drive-by.”
-- **During parallel work:** each specialist stays in their tree; integration owner merges and resolves conflicts.
+- **Before coding a shared surface:** the named integration owner coordinates Android / Rust / Go / protocol owners. Protocol and UniFFI changes are never “drive-by.”
+- **During parallel work:** each specialist stays in their tree; integration owner merges and resolves conflicts on **one** feature branch.
 - **When blocked on another tree:** write it in the report and on [tasks.md](tasks.md). Do not start a second agent on the same files.
 - **After landing:** update architecture, protocol docs, threat model, and decisions if behavior changed.
 
-The integration owner is the Engineering Lead unless the PO names someone else. Parallel work without an integrator is forbidden.
+The integration owner is the domain lead the PO names unless the PO names Engineering Lead. Parallel work without an integrator is forbidden.
 
 ## Decision log format
 
@@ -115,30 +122,37 @@ Do not log reversible local choices. Do log protocol, crypto, auth, architecture
 
 ## Review policy
 
-Reviewer ≠ author. Required **before merge** for:
+Reviewer ≠ author. **REV-01** is independent of every implementer and every lead on that slice (D-031). Required **before merge**. Leads do not self-review.
+
+Verdicts:
+
+- **PASS** — may ship
+- **PASS_WITH_CONCERNS** — may ship; leftover is a hotfix, not a new epic cadence
+- **FAIL** — blocks the tag
+
+Required surfaces include:
 
 - Security and threat-model claims
 - Architecture and protocol
 - Cryptography
 - Auth (bootstrap, invites, device signatures, TLS pinning)
 - Migrations and anything that can drop or rewrite mailbox / member data
+- Ordinary product UI on an epic (no longer “Engineering Lead review is enough”)
 
-Ordinary UI copy or layout inside `apps/android` with no protocol or crypto change: Engineering Lead review is enough; do not spawn a review agent unless Design was part of the task.
-
-QA/Security Lead uses [threat-model.md](threat-model.md) as the checklist. A change that weakens a stated guarantee is not done.
+QA/Security uses [threat-model.md](threat-model.md) as the checklist. A change that weakens a stated guarantee is not done.
 
 ## Cost awareness
 
 Cloud agents, reviews, and context windows are scarce.
 
-- Prefer one capable worker over three overlapping ones.
+- Prefer one capable worker per owned tree over three overlapping ones.
 - Do not spawn an agent to write a status report.
-- Do not explore out-of-scope features (calls, groups, iOS, web, landing sites) “while we are here.”
+- Do not staff a one-string copy nit as the sprint cadence (D-031). Hotfix leftovers are allowed.
 - Stop when the brief’s Definition of Done is met. Extra polish is new scope.
 - If a prompt asks to fork a second product line off `main`, that is a PO/user decision, not a staffing exercise.
 
 ## Product development loop
 
-**Understand** the user request against product and architecture. **Decompose** into slices with one owner each. **Organize** the minimum roles. **Delegate** only with full briefs. **Execute** in owned trees. **Review** with a different person when the policy requires it. **PR** against `main`. **Validate** with the tests in [dev-setup.md](dev-setup.md) and CI. **Merge** onto `main`. **Release** with a version bump and tag `vX.Y.Z` so GitHub publishes APK and server binaries. **Deliver** with the report template and updated source of truth. An open PR is not delivery.
+**Understand** the user request against product and architecture. **Decompose** into **epic slices** (Telegram gaps that may span Android + Go + Rust). **Organize** the domain leads the slice needs. **Delegate** only with full briefs. **Execute** in owned trees on one feature branch. **REV-01** with a different person than every implementer and every lead. **PR** against `main`. **Validate** with the tests in [dev-setup.md](dev-setup.md) and CI. **Fast-forward merge** onto `main`. **Release** with a version bump and tag `vX.Y.Z` so GitHub publishes APK and server binaries. **Record** on `main`. **Deliver** with the report template and updated source of truth. An open PR is not delivery.
 
-Skip steps only when the task is truly small (one owner, one tree, no review trigger). Never skip integration or DoD.
+Skip spawn steps only for a hotfix leftover from FAIL / PASS_WITH_CONCERNS. Never skip REV-01, integration, or DoD.

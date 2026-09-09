@@ -17,4 +17,4 @@ Matches [docs/organization.md](../../docs/organization.md), plus CryptoGalera ru
 | `.cryptogalera/**` | PO | Company memory. Only the root agent edits. Leads return facts; they do not write these files. |
 | `.cursor/rules/` | Process | Cursor always-on rules. Process Lead. |
 
-Shared surfaces (protocol docs, UniFFI, invite URL, REST/WSS) are sequenced by the Engineering Lead. Process/docs tasks do not edit `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/`.
+Shared surfaces (protocol docs, UniFFI, invite URL, REST/WSS) are sequenced by the named integration owner (domain lead the PO names; Engineering Lead if only one tree). Process/docs tasks do not edit `apps/`, `core/`, `server/`, `deployment/`, `protocol/`, `scripts/`, `Makefile`, or `.github/`.

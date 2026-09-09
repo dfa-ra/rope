@@ -4,6 +4,8 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
+| CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
+| CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.18 grouped photo albums (in flight; not 0.3.17) | — |
 | CG-106 | Slice: chat-list last-message preview as 0.3.17 | PO | DONE | shipped v0.3.17 | CG-007 |
 | CG-107 | Android: ChatListPreviewRules + row chrome | AND-01 | DONE | D-030; no 0.3.2 tap/long-press redo | CG-106 |
