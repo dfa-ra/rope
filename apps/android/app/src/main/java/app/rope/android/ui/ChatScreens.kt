@@ -447,13 +447,11 @@ internal fun ConversationRow(
                     HighlightedText(
                         text = c.title,
                         query = query,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = if (UnreadBadgeRules.emphasizeTitle(c.unread)) {
-                                FontWeight.SemiBold
-                            } else {
-                                FontWeight.Normal
-                            },
-                        ),
+                        style = if (UnreadBadgeRules.emphasizeTitle(c.unread)) {
+                            MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        } else {
+                            MaterialTheme.typography.titleMedium
+                        },
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
