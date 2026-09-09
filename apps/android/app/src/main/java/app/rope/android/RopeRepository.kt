@@ -151,7 +151,7 @@ data class UiState(
     val sessionReady: Boolean = false,
 )
 
-enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo }
+enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
 
 class RopeRepository(private val app: Application) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

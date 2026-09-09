@@ -67,7 +67,7 @@ object BackStack {
 
     fun listForForward(stack: List<Screen>): List<Screen> {
         val trimmed = stack.dropLastWhile {
-            it == Screen.Chat || it == Screen.GroupInfo || it == Screen.NewGroup
+            it == Screen.Chat || it == Screen.GroupInfo || it == Screen.NewGroup || it == Screen.PeerProfile
         }
         return when (trimmed.lastOrNull()) {
             Screen.Chats, Screen.Groups, Screen.People, Screen.Calls -> trimmed

@@ -10,11 +10,11 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.19**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, and `v0.3.18` remain published history.
+The product trunk is **`main`**, shipping **0.3.20**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, and `v0.3.19` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.19` / `versionCode=43`, plus CryptoGalera operating layer |
+| **`main`** | Shipped tree: Android `versionName=0.3.20` / `versionCode=44`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
 | **GitHub Release `v0.3.0`** | Previous line. Do not retag `v0.3.0`. |
 | **GitHub Release `v0.3.1`** | Previous line. Do not retag `v0.3.1`. |
@@ -34,7 +34,8 @@ The product trunk is **`main`**, shipping **0.3.19**. GitHub Releases `v0.2.15`,
 | **GitHub Release `v0.3.15`** | Previous line. Do not retag `v0.3.15`. |
 | **GitHub Release `v0.3.16`** | Previous line. Do not retag `v0.3.16`. |
 | **GitHub Release `v0.3.17`** | Previous line. Do not retag `v0.3.17`. |
-| **GitHub Release `v0.3.18`** | Previous Latest until `v0.3.19` publishes. Do not retag `v0.3.18`. |
+| **GitHub Release `v0.3.18`** | Previous line. Do not retag `v0.3.18`. |
+| **GitHub Release `v0.3.19`** | Previous Latest until `v0.3.20` publishes. Do not retag `v0.3.19`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -44,7 +45,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.19`).
+1. Install the Android app (this cycle ships `v0.3.20`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).

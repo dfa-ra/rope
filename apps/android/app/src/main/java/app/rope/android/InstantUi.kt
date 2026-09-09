@@ -5,9 +5,9 @@ package app.rope.android
  * Tabs and chats paint from cache immediately; the network may catch up later.
  */
 object InstantUi {
-    /** Global Rope AppBar. Chat / group info own their single header. */
+    /** Global Rope AppBar. Chat / group info / peer profile own their single header. */
     fun showsAppBar(screen: Screen): Boolean = when (screen) {
-        Screen.Chat, Screen.GroupInfo, Screen.NewGroup -> false
+        Screen.Chat, Screen.GroupInfo, Screen.NewGroup, Screen.PeerProfile -> false
         else -> true
     }
 
@@ -26,8 +26,8 @@ object InstantUi {
     fun instantTransition(from: Screen, to: Screen): Boolean {
         if (from == to) return true
         val messengerHop =
-            (NavRules.isMessengerTab(from) || from == Screen.Chat || from == Screen.GroupInfo || from == Screen.NewGroup) &&
-                (NavRules.isMessengerTab(to) || to == Screen.Chat || to == Screen.GroupInfo || to == Screen.NewGroup)
+            (NavRules.isMessengerTab(from) || from == Screen.Chat || from == Screen.GroupInfo || from == Screen.NewGroup || from == Screen.PeerProfile) &&
+                (NavRules.isMessengerTab(to) || to == Screen.Chat || to == Screen.GroupInfo || to == Screen.NewGroup || to == Screen.PeerProfile)
         return messengerHop
     }
 }

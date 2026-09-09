@@ -132,6 +132,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.UnreadBadgeKind
@@ -562,6 +563,7 @@ fun ChatPane(
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
     onGroupInfo: () -> Unit,
+    onPeerProfile: () -> Unit = {},
     onBack: () -> Unit = {},
     onReply: (ChatMessage) -> Unit = {},
     onEdit: (ChatMessage) -> Unit = {},
@@ -680,7 +682,23 @@ fun ChatPane(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = state.group != null, onClick = onGroupInfo)
+                    .clickable(
+                        enabled = PeerProfileRules.headerClickable(
+                            isGroup = state.group != null,
+                            hasPeer = state.peer != null,
+                        ),
+                        onClick = {
+                            if (PeerProfileRules.opensPeerProfile(
+                                    isGroup = state.group != null,
+                                    hasPeer = state.peer != null,
+                                )
+                            ) {
+                                onPeerProfile()
+                            } else {
+                                onGroupInfo()
+                            }
+                        },
+                    )
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),

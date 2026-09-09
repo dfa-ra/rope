@@ -194,8 +194,19 @@ class BackStackTest {
     fun listForForwardPopsChat() {
         assertEquals(listOf(Screen.Chats), BackStack.listForForward(listOf(Screen.Chats, Screen.Chat)))
         assertEquals(listOf(Screen.Groups), BackStack.listForForward(listOf(Screen.Groups, Screen.Chat, Screen.GroupInfo)))
+        assertEquals(listOf(Screen.Chats), BackStack.listForForward(listOf(Screen.Chats, Screen.Chat, Screen.PeerProfile)))
         assertEquals(listOf(Screen.Home, Screen.Chats), BackStack.listForForward(listOf(Screen.Home)))
         assertEquals(listOf(Screen.Chats), BackStack.listForForward(emptyList()))
+    }
+
+    @Test
+    fun peerProfilePopsToChat() {
+        var stack = BackStack.push(listOf(Screen.Chats), Screen.Chat)
+        stack = BackStack.push(stack, Screen.PeerProfile)
+        assertEquals(listOf(Screen.Chats, Screen.Chat, Screen.PeerProfile), stack)
+        stack = BackStack.pop(stack)
+        assertEquals(listOf(Screen.Chats, Screen.Chat), stack)
+        assertEquals(Screen.Chat, BackStack.current(stack))
     }
 
     private fun ringingCall() = CallInfo(
