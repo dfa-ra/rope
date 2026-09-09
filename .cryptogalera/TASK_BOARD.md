@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.25 1:1 video calls (not 0.3.24) | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.26 media send editor (not 0.3.25) | — |
+| CG-140 | Slice: 1:1 video calls as 0.3.25 | PO | DONE | shipped v0.3.25; D-039; D-031 stays org law | CG-007 |
+| CG-141 | Android: VideoCallRules + camera/tracks | AND-01 | DONE | D-039; OfferToReceiveVideo; Kotlin never crypto | CG-140 |
+| CG-142 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; camera deny no audio fallback; no group video; 640×480@24; oversized live offer dropped without teardown; audio WebRtcSession always inits EGL | CG-141 |
+| CG-143 | Ship **0.3.25** | PO | DONE | tag v0.3.25 = 9c7fe2b; versionCode 49; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 unchanged | CG-142 |
 | CG-136 | Slice: swipe-to-reply / Replies 2.0 as 0.3.24 | PO | DONE | shipped v0.3.24; D-038; D-031 stays org law | CG-007 |
 | CG-137 | Android: SwipeToReplyRules + quote-span qt/qo | AND-01 | DONE | D-038; reuse startReply; Kotlin never crypto | CG-136 |
 | CG-138 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; gesture tuning; no quote on media-only | CG-137 |
@@ -112,4 +116,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, or `v0.3.24`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, or `v0.3.25`.**
