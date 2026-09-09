@@ -65,6 +65,7 @@ import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
+import app.rope.android.data.PinnedBarRules
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
@@ -182,6 +183,7 @@ data class UiState(
     val scrollToMessageId: String? = null,
     val notice: String? = null,
     val pinnedMessageId: String? = null,
+    val hiddenPinnedMessageId: String? = null,
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
@@ -783,8 +785,9 @@ class RopeRepository(private val app: Application) {
         val chatId = openChatId() ?: msg.peerDeviceId
         val cur = store.chatPrefs(chatId)
         val nextId = if (cur.pinnedMessageId == msg.id) null else msg.id
-        store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = nextId))
-        _state.value = _state.value.copy(pinnedMessageId = nextId)
+        val hidden = PinnedBarRules.hiddenAfterPinChange(nextId, cur.hiddenPinnedMessageId)
+        store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = nextId, hiddenPinnedMessageId = hidden))
+        _state.value = _state.value.copy(pinnedMessageId = nextId, hiddenPinnedMessageId = hidden)
         sendControl(
             EnvelopeTypes.RECEIPT,
             ChatControl(
@@ -793,6 +796,14 @@ class RopeRepository(private val app: Application) {
                 op = if (nextId == null) ReactionPayload.CLEAR else ReactionPayload.SET,
             ).toJson().toByteArray(),
         )
+    }
+
+    fun hidePinnedBar() {
+        val chatId = openChatId() ?: return
+        val hidden = PinnedBarRules.hide(_state.value.pinnedMessageId) ?: return
+        val cur = store.chatPrefs(chatId)
+        store.saveChatPrefs(chatId, cur.copy(hiddenPinnedMessageId = hidden))
+        _state.value = _state.value.copy(hiddenPinnedMessageId = hidden)
     }
 
     fun jumpToMessage(id: String?) {
@@ -2142,6 +2153,7 @@ class RopeRepository(private val app: Application) {
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
+            hiddenPinnedMessageId = prefs.hiddenPinnedMessageId,
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
@@ -2788,9 +2800,10 @@ class RopeRepository(private val app: Application) {
                             val chatId = target.peerDeviceId
                             val cur = store.chatPrefs(chatId)
                             val next = if (control.op == ReactionPayload.CLEAR) null else control.targetId
-                            store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = next))
+                            val hidden = PinnedBarRules.hiddenAfterPinChange(next, cur.hiddenPinnedMessageId)
+                            store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = next, hiddenPinnedMessageId = hidden))
                             if (openChatId() == chatId) {
-                                _state.value = _state.value.copy(pinnedMessageId = next)
+                                _state.value = _state.value.copy(pinnedMessageId = next, hiddenPinnedMessageId = hidden)
                             }
                         }
                     }

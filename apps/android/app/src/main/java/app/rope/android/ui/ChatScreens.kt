@@ -138,6 +138,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.core.content.ContextCompat
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
@@ -156,6 +158,8 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.PinnedBarCopy
+import app.rope.android.data.PinnedBarRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
@@ -741,6 +745,7 @@ fun ChatPane(
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
+    onHidePinned: () -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
@@ -818,7 +823,8 @@ fun ChatPane(
         delay(700)
         if (flashId == id) flashId = null
     }
-    val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
+    val pinned = PinnedBarRules.message(state.messages, state.pinnedMessageId)
+    val showPinned = PinnedBarRules.visible(pinned, state.hiddenPinnedMessageId)
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
@@ -925,26 +931,12 @@ fun ChatPane(
                 shape = RoundedCornerShape(RopeShapes.search),
             )
         }
-        pinned?.let { pin ->
-            Surface(
-                tonalElevation = 2.dp,
-                shape = RoundedCornerShape(bottomStart = RopeShapes.quote, bottomEnd = RopeShapes.quote),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onJump(pin.id) },
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(Icons.Outlined.PushPin, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                    Column(Modifier.weight(1f)) {
-                        Text("Закреплено", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text(pin.preview(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
+        if (showPinned && pinned != null) {
+            PinnedMessageBar(
+                copy = PinnedBarRules.copy(pinned),
+                onJump = { onJump(PinnedBarRules.jumpId(pinned)) },
+                onHide = onHidePinned,
+            )
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
@@ -2608,6 +2600,67 @@ private fun UnreadChip() {
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+@Composable
+private fun PinnedMessageBar(
+    copy: PinnedBarCopy,
+    onJump: () -> Unit,
+    onHide: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(bottomStart = RopeShapes.quote, bottomEnd = RopeShapes.quote),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clickable(onClick = onJump)
+                    .semantics { contentDescription = copy.jumpContentDescription },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.PushPin,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        copy.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        copy.body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            IconButton(onClick = onHide) {
+                Icon(Icons.Outlined.Close, contentDescription = copy.dismissContentDescription)
+            }
+        }
     }
 }
 

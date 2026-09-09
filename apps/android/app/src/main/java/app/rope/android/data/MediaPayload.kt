@@ -410,6 +410,7 @@ data class ChatPrefs(
     val lastReadMs: Long = 0,
     val draft: String = "",
     val pinnedMessageId: String? = null,
+    val hiddenPinnedMessageId: String? = null,
     val archived: Boolean = false,
 ) {
     fun toJson(): String = JSONObject()
@@ -419,6 +420,7 @@ data class ChatPrefs(
         .put("last_read_ms", lastReadMs)
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
+        .put("hidden_pinned_message", hiddenPinnedMessageId ?: JSONObject.NULL)
         .put("archived", archived)
         .toString()
 
@@ -434,6 +436,7 @@ data class ChatPrefs(
                     lastReadMs = o.optLong("last_read_ms"),
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
+                    hiddenPinnedMessageId = JsonIds.optional(o.optString("hidden_pinned_message")),
                     archived = o.optBoolean("archived"),
                 )
             } catch (_: Exception) {
