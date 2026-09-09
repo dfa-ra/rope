@@ -37,6 +37,7 @@
 - Bootstrap rate limits key on `RemoteAddr`, not `X-Forwarded-For`.
 - The GitHub token in local kv is wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
 - Cached TURN HMAC credentials in local profile kv are wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
+- Mailbox rows are insert-once by `message_id` while pending; a later send does not replace the first blob.
 - PeerConnection ICE URLs are allowlisted to `stun:`, `turn:`, and `turns:` schemes.
 
 ## Non-guarantees (honest limitations)
@@ -46,7 +47,7 @@
 - A compromised organizer device or a leaked SSH credential can take over the VPS.
 - Self-signed TLS plus fingerprint pinning does not replace a public CA after a user ignores a mismatch warning.
 - There is no forward-secrecy ratchet (Signal/X3DH) in MVP. Compromise of a device ECDH key exposes future messages to that device until keys are rotated (out of scope).
-- Offline mailbox blobs live on disk until delivery ack or TTL expiry. They remain encrypted, but metadata remains.
+- Offline mailbox blobs live on disk until delivery ack or TTL expiry. They remain encrypted, but metadata remains. A later `send` with the same `message_id` does not replace the first pending blob.
 - WSS connect still puts `sig` on the query string (proxy logs). Phase A also accepts `X-Rope-Ws-Auth`; dropping the query is Phase B after every VPS is upgraded.
 - `DeviceBackup.toBytes()` still emits clear JSON (identity + `github_token`). It must not be written to shared storage. `toSealedBytes` is tests-only until an export writer exists.
 

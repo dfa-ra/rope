@@ -696,11 +696,16 @@ func (s *Server) handleSend(ctx context.Context, from *clientConn, raw []byte) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "unknown recipient"})
 		return
 	}
-	if err := s.Store.PutMailbox(parsed.Meta.MessageID, recip.ID, sender.ID, raw, s.Cfg.MailboxTTL()); err != nil {
+	err = s.Store.PutMailbox(parsed.Meta.MessageID, recip.ID, sender.ID, raw, s.Cfg.MailboxTTL())
+	if err != nil && !errors.Is(err, db.ErrMailboxExists) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "mailbox"})
 		return
 	}
 	_ = from.write(ctx, wsOut{Type: "queued", MessageID: parsed.Meta.MessageID})
+	if err != nil {
+		// First pending blob for this message_id stays. Do not deliver a replacement.
+		return
+	}
 	if dest, ok := s.Hub.Get(recip.ID); ok {
 		_ = dest.write(ctx, wsOut{Type: "deliver", Envelope: raw, MessageID: parsed.Meta.MessageID})
 	}

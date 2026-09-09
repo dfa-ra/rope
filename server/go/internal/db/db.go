@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	ErrNotFound  = errors.New("not found")
-	ErrLastOwner = errors.New("last owner")
+	ErrNotFound      = errors.New("not found")
+	ErrLastOwner     = errors.New("last owner")
+	ErrMailboxExists = errors.New("mailbox exists")
 )
 
 const liveOwnerDevicesSQL = `
@@ -494,12 +495,23 @@ type MailboxRow struct {
 }
 
 func (s *Store) PutMailbox(messageID, recipient, sender string, blob []byte, ttl time.Duration) error {
-	_, err := s.SQL.Exec(
-		`INSERT OR REPLACE INTO mailbox(message_id, recipient_device_id, sender_device_id, encrypted_blob, created_at, expires_at, delivery_state)
-		 VALUES(?,?,?,?,?,?, 'pending')`,
+	res, err := s.SQL.Exec(
+		`INSERT INTO mailbox(message_id, recipient_device_id, sender_device_id, encrypted_blob, created_at, expires_at, delivery_state)
+		 VALUES(?,?,?,?,?,?, 'pending')
+		 ON CONFLICT(message_id) DO NOTHING`,
 		messageID, recipient, sender, blob, nowRFC(), time.Now().Add(ttl).UTC().Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrMailboxExists
+	}
+	return nil
 }
 
 func (s *Store) PendingMailbox(recipient string) ([]MailboxRow, error) {
