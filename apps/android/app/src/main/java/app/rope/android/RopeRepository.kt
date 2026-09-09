@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SendTypingRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -168,6 +169,8 @@ data class UiState(
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
+    val sendTypingEnabled: Boolean = true,
+    val composerPreviewDismissedUrl: String? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
     val latestAppVersion: String = "",
@@ -256,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    sendTypingEnabled = store.sendTypingEnabled(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -584,6 +588,12 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleSendTyping() {
+        val next = !_state.value.sendTypingEnabled
+        store.saveSendTyping(next)
+        _state.value = _state.value.copy(sendTypingEnabled = next)
     }
 
     fun toggleLinkPreviews() {
@@ -2163,7 +2173,7 @@ class RopeRepository(private val app: Application) {
 
     private fun maybeSendTyping(text: String) {
         val now = System.currentTimeMillis()
-        if (!TypingRules.shouldSend(lastTypingSentAt, now, text)) return
+        if (!SendTypingRules.shouldSend(_state.value.sendTypingEnabled, lastTypingSentAt, now, text)) return
         lastTypingSentAt = now
         val target = openChatId() ?: return
         if (SavedMessagesRules.skipNetwork(target)) return

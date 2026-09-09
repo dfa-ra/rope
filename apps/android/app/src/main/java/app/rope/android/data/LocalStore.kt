@@ -378,6 +378,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         )
     }
 
+    fun saveSendTyping(enabled: Boolean) {
+        put("send_typing", if (enabled) "1" else "0")
+    }
+
+    fun sendTypingEnabled(): Boolean = get("send_typing") != "0"
+
     fun saveTheme(mode: ThemeMode) {
         put("theme", mode.name)
     }

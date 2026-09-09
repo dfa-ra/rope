@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
+import app.rope.android.data.SendTypingRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleSendTyping: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -147,6 +149,32 @@ fun SettingsPane(
             }
         }
         if (profile != null) {
+            FadeIn(195) {
+                SectionCard {
+                    Text(SendTypingRules.SECTION, style = MaterialTheme.typography.titleMedium)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(SendTypingRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                SendTypingRules.hint(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.sendTypingEnabled,
+                            onCheckedChange = { checked ->
+                                if (checked != state.sendTypingEnabled) onToggleSendTyping()
+                            },
+                            modifier = Modifier.semantics { contentDescription = SendTypingRules.TITLE },
+                        )
+                    }
+                }
+            }
             FadeIn(200) {
                 val endpoint = SettingsRules.formatEndpoint(profile.host, profile.port, profile.useTls)
                 val fp = SettingsRules.formatHexGroups(profile.fingerprint)
