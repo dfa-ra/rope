@@ -91,12 +91,16 @@ object ExpireRules {
         return chatId
     }
 
+    /**
+     * 1:1 LocalStore is keyed by the open peer, which is [fallbackPeer] (the sender)
+     * — same as TYPING/PIN. Using [target] would write Bob's timer onto Bob's
+     * own device id when Alice sent `ttlTarget(bob)`.
+     */
     fun chatIdFromTtlTarget(target: String, fallbackPeer: String): String {
         val t = target.trim()
         return when {
             t.startsWith("group:") -> ChatIds.group(t.removePrefix("group:"))
             ChatIds.isGroup(t) || SavedMessagesRules.isSaved(t) -> t
-            t.isNotBlank() -> t
             else -> fallbackPeer
         }
     }

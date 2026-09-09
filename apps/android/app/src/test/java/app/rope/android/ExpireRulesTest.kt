@@ -244,6 +244,17 @@ class ExpireRulesTest {
     }
 
     @Test
+    fun oneToOneTtlChatIdIsSenderNotPeerTarget() {
+        val sender = "alice"
+        val peer = "bob"
+        assertEquals(sender, ExpireRules.chatIdFromTtlTarget(peer, sender))
+        assertEquals(sender, ExpireRules.chatIdFromTtlTarget("", sender))
+        assertEquals(peer, ExpireRules.ttlTarget(peer))
+        assertEquals(ChatIds.group("abc"), ExpireRules.chatIdFromTtlTarget("group:abc", sender))
+        assertEquals(ChatIds.group("abc"), ExpireRules.chatIdFromTtlTarget(ChatIds.group("abc"), sender))
+    }
+
+    @Test
     fun remainingCopyAndDurations() {
         val now = 1_000_000L
         assertEquals("исчезнет через 3 ч", ExpireRules.remainingCopy(now + 3 * 3_600_000L, now))
