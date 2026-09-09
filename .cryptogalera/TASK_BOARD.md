@@ -6,7 +6,7 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; SSH PEM overwrite-unlink tagged v0.3.45; do not merge disappear / silent / polls / attach-cam #64 / folders / chat-archive #75 / global-search #77 / sec-pat-host #78 / sec-health #79 / sec-info-ip #80 / sec-flag #81 / media-hub #82 in this record | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; SSH PEM overwrite-unlink tagged v0.3.45; do not merge disappear / silent / polls / attach-cam #64 / folders / chat-archive #75 / global-search #77 / sec-pat-host #78 / sec-health #79 / sec-info-ip #80 / sec-flag #81 / media-hub #82 / mention-picker #83 in this record | — |
 | CG-230 | Slice: wipe SSH PEM after install auth as 0.3.45 | PO | DONE | shipped v0.3.45; D-059; overwrite-unlink temp PEM after authPublickey; D-058 stays 0.3.44; D-031 stays org law | CG-007 |
 | CG-231 | Android: CacheSecret wipe + stale ssh-key.pem | AND-01 | DONE | D-059; Kotlin never crypto; FileProvider stays off this path | CG-230 |
 | CG-232 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS on be1c0cc (bc-c788c346); CI 6/6; PO accepts PWC | CG-231 |
