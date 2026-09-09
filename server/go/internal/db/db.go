@@ -250,7 +250,7 @@ func (s *Store) InsertInvite(id, token, createdBy string, expires time.Time) err
 	return err
 }
 
-func (s *Store) ConsumeToken(token string) (string, error) {
+func (s *Store) lookupUnusedInvite(token string) (string, error) {
 	sum := sha256.Sum256([]byte(token))
 	hash := hex.EncodeToString(sum[:])
 	var id, expires string
@@ -273,6 +273,20 @@ func (s *Store) ConsumeToken(token string) (string, error) {
 	}
 	if time.Now().After(exp) {
 		return "", fmt.Errorf("invite expired")
+	}
+	return id, nil
+}
+
+// PeekInvite reports whether token is a live unused invite without consuming it.
+func (s *Store) PeekInvite(token string) error {
+	_, err := s.lookupUnusedInvite(token)
+	return err
+}
+
+func (s *Store) ConsumeToken(token string) (string, error) {
+	id, err := s.lookupUnusedInvite(token)
+	if err != nil {
+		return "", err
 	}
 	res, err := s.SQL.Exec(`UPDATE invites SET used_at = ? WHERE invite_id = ? AND used_at IS NULL`, nowRFC(), id)
 	if err != nil {

@@ -234,15 +234,6 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "login must be 2-24 letters, digits, _ . -"})
 		return
 	}
-	taken, err := s.Store.LoginTaken(req.DisplayName)
-	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "db"})
-		return
-	}
-	if taken {
-		writeJSON(w, 409, map[string]string{"error": "login taken"})
-		return
-	}
 	if len(req.PublicIdentity) < 38 || hex.EncodeToString(req.PublicIdentity[6:38]) != strings.ToLower(req.DeviceID) {
 		writeJSON(w, 400, map[string]string{"error": "device_id mismatch"})
 		return
@@ -259,15 +250,27 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		role = "owner"
-		s.setup = "" // one-time in-memory; config file still has it but DB owner exists
-	} else {
-		if _, err := s.Store.ConsumeToken(req.Token); err != nil {
-			writeJSON(w, 403, map[string]string{"error": err.Error()})
-			return
-		}
+	} else if err := s.Store.PeekInvite(req.Token); err != nil {
+		writeJSON(w, 403, map[string]string{"error": err.Error()})
+		return
+	}
+	taken, err := s.Store.LoginTaken(req.DisplayName)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "db"})
+		return
+	}
+	if taken {
+		writeJSON(w, 409, map[string]string{"error": "login taken"})
+		return
 	}
 	if _, err := s.Store.Device(req.DeviceID); err == nil {
 		writeJSON(w, 409, map[string]string{"error": "device exists"})
+		return
+	}
+	if !hasOwner {
+		s.setup = "" // one-time in-memory; config file still has it but DB owner exists
+	} else if _, err := s.Store.ConsumeToken(req.Token); err != nil {
+		writeJSON(w, 403, map[string]string{"error": err.Error()})
 		return
 	}
 	memberID := uuid.NewString()

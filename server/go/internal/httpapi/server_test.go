@@ -678,6 +678,37 @@ func TestUniqueLoginRequired(t *testing.T) {
 		t.Fatalf("duplicate login wanted 409 got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
+
+	ok := newDevice(t)
+	bootstrap(t, hs, inv.Token, ok, "boris")
+}
+
+func TestBootstrapGarbageTokenDoesNotEnumerateLogin(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "anna")
+	taken := newDevice(t)
+	free := newDevice(t)
+	bodyTaken, _ := json.Marshal(map[string]any{
+		"token": "nope", "display_name": "anna", "public_identity": taken.blob, "device_id": taken.id,
+	})
+	bodyFree, _ := json.Marshal(map[string]any{
+		"token": "nope", "display_name": "zoya", "public_identity": free.blob, "device_id": free.id,
+	})
+	respTaken, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(bodyTaken))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respFree, err := http.Post(hs.URL+"/v1/bootstrap", "application/json", bytes.NewReader(bodyFree))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if respTaken.StatusCode != 403 || respFree.StatusCode != 403 {
+		t.Fatalf("garbage token must be 403 for taken and free login, got %d and %d",
+			respTaken.StatusCode, respFree.StatusCode)
+	}
+	respTaken.Body.Close()
+	respFree.Body.Close()
 }
 
 func TestPresenceBroadcast(t *testing.T) {
