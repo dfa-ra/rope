@@ -26,6 +26,7 @@ data class CallMachineState(
     val viaRelay: Boolean = false,
     val relayFellBack: Boolean = false,
     val wssMedia: Boolean = false,
+    val video: Boolean = false,
 ) {
     val live: Boolean get() = !ended && callId.isNotBlank()
 }
@@ -38,7 +39,7 @@ sealed class CallEffect {
         val payload: String = "",
     ) : CallEffect()
 
-    data class StartRtc(val asCaller: Boolean) : CallEffect()
+    data class StartRtc(val asCaller: Boolean, val video: Boolean = false) : CallEffect()
     data class DeliverRemote(val signals: List<CallSignal>) : CallEffect()
     object StartWssMedia : CallEffect()
     data class DeliverAudio(val signals: List<CallSignal>) : CallEffect()
@@ -86,12 +87,18 @@ class CallMachine {
             iceReady = s.iceReady,
             lastIce = s.lastIce,
             startedAtMs = s.startedAtMs,
+            video = s.video,
         )
     }
 
     fun reset() = synchronized(lock) { state = CallMachineState() }
 
-    fun localStart(callId: String, peerId: String, myId: String): List<CallEffect> = synchronized(lock) {
+    fun localStart(
+        callId: String,
+        peerId: String,
+        myId: String,
+        video: Boolean = false,
+    ): List<CallEffect> = synchronized(lock) {
         val id = callId.trim()
         val peer = PeerIds.normalize(peerId)
         if (id.isBlank() || peer.isBlank() || ChatIds.isGroup(peerId)) return emptyList()
@@ -105,12 +112,13 @@ class CallMachine {
             outgoing = true,
             phase = CallPhase.RINGING_OUT,
             link = CallLinkState.RINGING,
-            media = "ожидаем ответа",
+            media = if (video) "видеовызов" else "ожидаем ответа",
             ended = false,
             startedAtMs = System.currentTimeMillis(),
+            video = video,
         )
         return listOf(
-            CallEffect.Send(id, peer, CallSignal.RING),
+            CallEffect.Send(id, peer, CallSignal.RING, VideoCallRules.ringPayload(video)),
             CallEffect.Record(peer, true),
             CallEffect.PrefetchIce,
             CallEffect.RingOut,
@@ -132,7 +140,7 @@ class CallMachine {
             if (fromId.isBlank() || id.isBlank()) return emptyList()
             val mine = PeerIds.normalize(myId)
             when (ev) {
-                CallSignal.RING -> onRingLocked(fromId, id, mine)
+                CallSignal.RING -> onRingLocked(fromId, id, mine, payload)
                 CallSignal.ACCEPT -> onAcceptLocked(fromId, id)
                 CallSignal.REJECT, CallSignal.HANGUP -> onRemoteEndLocked(fromId, id)
                 in CallSignal.EVENTS -> onMediaLocked(fromId, id, ev, payload)
@@ -314,7 +322,7 @@ class CallMachine {
             CallEffect.Send(state.callId, state.peerDeviceId, CallSignal.ACCEPT),
             CallEffect.StopTone,
             CallEffect.ClearNotify,
-            CallEffect.StartRtc(false),
+            CallEffect.StartRtc(false, state.video),
             CallEffect.WatchConnect,
         ) + drainLocked()
     }
@@ -326,9 +334,10 @@ class CallMachine {
         return listOf(send, CallEffect.TearDown)
     }
 
-    private fun onRingLocked(from: String, callId: String, myId: String): List<CallEffect> {
+    private fun onRingLocked(from: String, callId: String, myId: String, payload: Any?): List<CallEffect> {
+        val incomingVideo = VideoCallRules.parseRingVideo(payload)
         if (state.live && PeerIds.same(state.peerDeviceId, from) && state.outgoing && state.phase == CallPhase.RINGING_OUT) {
-            return resolveGlareLocked(from, callId, myId)
+            return resolveGlareLocked(from, callId, myId, incomingVideo)
         }
         if (state.live && matchesLocked(from, callId)) return emptyList()
         if (state.live) return emptyList()
@@ -338,23 +347,30 @@ class CallMachine {
             outgoing = false,
             phase = CallPhase.RINGING_IN,
             link = CallLinkState.RINGING,
-            media = "один тап — ответить",
+            media = if (incomingVideo) "один тап — ответить · видео" else "один тап — ответить",
             ended = false,
             startedAtMs = System.currentTimeMillis(),
+            video = incomingVideo,
         )
         return incomingRingEffects()
     }
 
-    private fun resolveGlareLocked(from: String, theirCallId: String, myId: String): List<CallEffect> {
+    private fun resolveGlareLocked(
+        from: String,
+        theirCallId: String,
+        myId: String,
+        incomingVideo: Boolean,
+    ): List<CallEffect> {
         val mine = state.callId
         val canon = CallLink.canonicalCallId(mine, theirCallId)
         val alt = if (canon == mine) theirCallId else mine
         val weOffer = CallLink.weCreateOffer(myId, from)
+        val video = state.video || incomingVideo
         enterNegotiating(asCaller = weOffer)
-        state = state.copy(callId = canon, altCallId = alt)
+        state = state.copy(callId = canon, altCallId = alt, video = video)
         return listOf(
             CallEffect.StopTone,
-            CallEffect.StartRtc(weOffer),
+            CallEffect.StartRtc(weOffer, video),
             CallEffect.WatchConnect,
         ) + drainLocked()
     }
@@ -366,7 +382,7 @@ class CallMachine {
         enterNegotiating(asCaller = true)
         return listOf(
             CallEffect.StopTone,
-            CallEffect.StartRtc(true),
+            CallEffect.StartRtc(true, state.video),
             CallEffect.WatchConnect,
         ) + drainLocked()
     }
@@ -427,16 +443,18 @@ class CallMachine {
         val sig = CallSignal.parseMedia(event, payload)
         if (!state.live) {
             if (event != CallSignal.OFFER) return emptyList()
+            val video = sig != null && VideoCallRules.sdpHasVideo(sig.sdp)
             state = CallMachineState(
                 callId = callId,
                 peerDeviceId = from,
                 outgoing = false,
                 phase = CallPhase.RINGING_IN,
                 link = CallLinkState.RINGING,
-                media = "один тап — ответить",
+                media = if (video) "один тап — ответить · видео" else "один тап — ответить",
                 ended = false,
                 queue = listOfNotNull(sig),
                 startedAtMs = System.currentTimeMillis(),
+                video = video,
             )
             return incomingRingEffects()
         }
@@ -454,6 +472,9 @@ class CallMachine {
     )
 
     private fun enqueueLocked(sig: CallSignal): List<CallEffect> {
+        if (sig.kind == CallSignal.OFFER && VideoCallRules.sdpHasVideo(sig.sdp)) {
+            state = state.copy(video = true)
+        }
         if (CallLink.shouldQueueSignal(
                 sig.kind,
                 state.sessionReady,

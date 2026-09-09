@@ -66,6 +66,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -149,6 +150,7 @@ import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
+import app.rope.android.data.VideoCallRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -578,6 +580,7 @@ fun ChatPane(
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
+    onVideoCall: () -> Unit = {},
     onPlay: (ChatMessage) -> Unit,
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
@@ -744,9 +747,12 @@ fun ChatPane(
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
-                if (state.peer != null && state.group == null && SavedMessagesRules.canCall(state.peer.deviceId)) {
+                if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
                     IconButton(onClick = onCall) {
                         Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
+                    }
+                    IconButton(onClick = onVideoCall) {
+                        Icon(Icons.Outlined.Videocam, contentDescription = "Видеозвонок")
                     }
                 }
             }

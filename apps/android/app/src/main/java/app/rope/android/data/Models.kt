@@ -116,6 +116,7 @@ data class CallInfo(
     val iceReady: Boolean = false,
     val lastIce: String = "",
     val startedAtMs: Long = 0L,
+    val video: Boolean = false,
 )
 
 object ChatIds {

@@ -122,6 +122,7 @@ fun RopeScaffold(
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
+    onVideoCall: () -> Unit = {},
     onPlay: (app.rope.android.data.ChatMessage) -> Unit,
     onReact: (app.rope.android.data.ChatMessage, String) -> Unit,
     onEnsureMedia: (app.rope.android.data.ChatMessage) -> Unit,
@@ -137,6 +138,11 @@ fun RopeScaffold(
     onHangup: () -> Unit,
     onToggleCallMute: () -> Unit = {},
     onToggleCallSpeaker: () -> Unit = {},
+    onToggleCallCamera: () -> Unit = {},
+    onFlipCallCamera: () -> Unit = {},
+    callEgl: () -> org.webrtc.EglBase.Context? = { null },
+    onBindCallRemote: (org.webrtc.SurfaceViewRenderer) -> Unit = {},
+    onBindCallLocal: (org.webrtc.SurfaceViewRenderer) -> Unit = {},
     onToggleTheme: () -> Unit,
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
@@ -284,7 +290,7 @@ fun RopeScaffold(
                         Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)
                         Screen.People -> PeoplePane(state, onOpenConversation, onInvite, onRevokeMember)
                         Screen.Chat -> app.rope.android.ui.ChatPane(
-                            state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onPlay,
+                            state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onVideoCall, onPlay,
                             onReact, onEnsureMedia,
                             onGroupInfo = { onGo(Screen.GroupInfo) },
                             onPeerProfile = { onGo(Screen.PeerProfile) },
@@ -342,6 +348,12 @@ fun RopeScaffold(
             speakerOn = state.callSpeakerOn,
             onToggleMute = onToggleCallMute,
             onToggleSpeaker = onToggleCallSpeaker,
+            camMuted = state.callCamMuted,
+            onToggleCamera = onToggleCallCamera,
+            onFlipCamera = onFlipCallCamera,
+            eglContext = callEgl,
+            onBindRemote = onBindCallRemote,
+            onBindLocal = onBindCallLocal,
         )
     }
     state.viewingImage?.let { img ->

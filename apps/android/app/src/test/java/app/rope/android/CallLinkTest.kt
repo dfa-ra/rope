@@ -18,9 +18,12 @@ class CallLinkTest {
     @Test
     fun headingMapsConnectingInsteadOfFakeTalk() {
         assertEquals("Входящий вызов", CallLink.heading(CallPhase.RINGING_IN, CallLinkState.RINGING))
+        assertEquals("Входящий видеовызов", CallLink.heading(CallPhase.RINGING_IN, CallLinkState.RINGING, video = true))
         assertEquals("Вызов…", CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.RINGING))
+        assertEquals("Видеовызов…", CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.RINGING, video = true))
         assertEquals("Соединение…", CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTING))
         assertEquals("Разговор", CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTED))
+        assertEquals("Видеозвонок", CallLink.heading(CallPhase.ACTIVE, CallLinkState.CONNECTED, video = true))
         assertEquals("Нет соединения", CallLink.heading(CallPhase.ACTIVE, CallLinkState.FAILED))
         assertEquals("Завершён", CallLink.heading(CallPhase.ENDED, CallLinkState.FAILED))
         assertEquals("Нет ответа", CallLink.heading(CallPhase.RINGING_OUT, CallLinkState.FAILED))

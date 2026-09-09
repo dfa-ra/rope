@@ -26,7 +26,7 @@ On connect the server:
 
 `call` is live when `to` is on the hub. If `to` is offline, `audio` still returns `not_found` (realtime frames are not queued). Other events (`ring`, `accept`, `offer`, `answer`, `ice`, `relay`, …) sit in a short-TTL (~60s) **in-memory** pending slot keyed by `call_id`; the sender gets `{ "type": "queued", "call_id": "..." }` instead of `not_found`. `hangup`/`reject` drop the slot. Nothing is written to SQLite — never `PutMailbox` for calls, no SDP/audio on disk. Payload is opaque ciphertext (or opaque SDP/ICE JSON); the relay does not decrypt or inspect plaintext.
 
-Decoded `payload` is capped at 16384 bytes (`too_large` if larger). Empty payload is allowed for control events (`ring`, `accept`, `reject`, `hangup`, `relay`, …). `audio` is rate-limited per sender at ~40 frames/sec (`rate_limited`, key `ws-call-audio:<device_id>`). Signaling events (`ring`, `accept`, `reject`, `hangup`, `offer`, `answer`, `ice`, `relay`) are not throttled at that cap.
+Decoded `payload` is capped at 16384 bytes (`too_large` if larger). Empty payload is allowed for control events (`ring`, `accept`, `reject`, `hangup`, `relay`, …). `audio` is rate-limited per sender at ~40 frames/sec (`rate_limited`, key `ws-call-audio:<device_id>`). Signaling events (`ring`, `accept`, `reject`, `hangup`, `offer`, `answer`, `ice`, `relay`) are not throttled at that cap. **0.3.25 1:1 video** still uses this cap: Android `VideoCallRules.fitsWss` refuses oversized offer/answer JSON. Do **not** raise the Go cap unless a measured video SDP exceeds 16384 — typical Unified Plan VP8+opus offers stay well under 8 KiB. `ring` payload may include tiny `{"v":1,"video":true}` so the callee can show a video ring before SDP.
 
 Call events:
 

@@ -60,8 +60,26 @@ class MainActivity : AppCompatActivity() {
         val repo = (application as RopeApp).repo
         when (next) {
             "call" -> repo.startCall()
+            "video" -> repo.startVideoCall()
             "accept" -> repo.acceptCall()
             else -> repo.startVoice()
+        }
+    }
+
+    private val callMediaPerm = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        val next = afterAudio
+        afterAudio = null
+        val repo = (application as RopeApp).repo
+        if (granted[Manifest.permission.RECORD_AUDIO] != true) return@registerForActivityResult
+        if (granted[Manifest.permission.CAMERA] != true) {
+            repo.cameraDenied()
+            return@registerForActivityResult
+        }
+        when (next) {
+            "video" -> repo.startVideoCall()
+            "accept" -> repo.acceptCall()
         }
     }
 
@@ -133,6 +151,7 @@ class MainActivity : AppCompatActivity() {
                     onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
                     onCall = { withMic("call") { repo.startCall() } },
+                    onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,
                     onReact = repo::react,
                     onEnsureMedia = repo::ensureMedia,
@@ -143,11 +162,20 @@ class MainActivity : AppCompatActivity() {
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,
                     onRevokeMember = repo::revokeMember,
-                    onAcceptCall = { withMic("accept") { repo.acceptCall() } },
+                    onAcceptCall = {
+                        val video = (application as RopeApp).repo.state.value.call?.video == true
+                        if (video) withCallMedia("accept") { repo.acceptCall() }
+                        else withMic("accept") { repo.acceptCall() }
+                    },
                     onRejectCall = repo::rejectCall,
                     onHangup = repo::hangup,
                     onToggleCallMute = repo::toggleCallMute,
                     onToggleCallSpeaker = repo::toggleCallSpeaker,
+                    onToggleCallCamera = repo::toggleCallCamera,
+                    onFlipCallCamera = repo::flipCallCamera,
+                    callEgl = { (application as RopeApp).repo.callEglContext() },
+                    onBindCallRemote = { (application as RopeApp).repo.bindCallRemote(it) },
+                    onBindCallLocal = { (application as RopeApp).repo.bindCallLocal(it) },
                     onToggleTheme = repo::toggleTheme,
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
@@ -242,6 +270,22 @@ class MainActivity : AppCompatActivity() {
         } else {
             afterAudio = action
             audioPerm.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun withCallMedia(action: String, granted: () -> Unit) {
+        val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        val cam = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        when {
+            mic && cam -> granted()
+            else -> {
+                afterAudio = action
+                callMediaPerm.launch(
+                    arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA),
+                )
+            }
         }
     }
 

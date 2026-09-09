@@ -12,13 +12,20 @@ import app.rope.android.data.IceRtcPlan
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.IceServers
 import app.rope.android.data.IceUnstick
+import app.rope.android.data.VideoCallRules
 import app.rope.android.net.PinnedClient
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.BuiltinAudioDecoderFactoryFactory
 import org.webrtc.BuiltinAudioEncoderFactoryFactory
+import org.webrtc.Camera1Enumerator
+import org.webrtc.Camera2Enumerator
+import org.webrtc.CameraVideoCapturer
 import org.webrtc.CandidatePairChangeEvent
 import org.webrtc.DataChannel
+import org.webrtc.DefaultVideoDecoderFactory
+import org.webrtc.DefaultVideoEncoderFactory
+import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.IceCandidateErrorEvent
 import org.webrtc.MediaConstraints
@@ -31,6 +38,11 @@ import org.webrtc.RtpTransceiver
 import org.webrtc.SSLCertificateVerifier
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.SurfaceTextureHelper
+import org.webrtc.VideoCapturer
+import org.webrtc.VideoSink
+import org.webrtc.VideoSource
+import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
 
 class WebRtcSession(
@@ -40,8 +52,10 @@ class WebRtcSession(
     hintHost: String? = null,
     publicIp: String? = null,
     private val polite: Boolean = false,
+    private val wantVideo: Boolean = false,
     private val onLocalSignal: (CallSignal) -> Unit,
     private val onIce: (state: String, viaRelay: Boolean) -> Unit,
+    private val onCameraFailed: () -> Unit = {},
 ) {
     private val app = context.applicationContext
     private val plan = IceServers.plan(iceServers, hintHost, publicIp)
@@ -50,6 +64,15 @@ class WebRtcSession(
     private var pc: PeerConnection? = null
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
+    private val eglBase: EglBase
+    private var videoSource: VideoSource? = null
+    private var videoTrack: VideoTrack? = null
+    private var capturer: VideoCapturer? = null
+    private var surfaceHelper: SurfaceTextureHelper? = null
+    private var remoteVideo: VideoTrack? = null
+    private var localSink: VideoSink? = null
+    private var remoteSink: VideoSink? = null
+    private var videoWanted = wantVideo
     private var callee = polite
     private val pendingIce = mutableListOf<IceCandidate>()
     private var remoteSet = false
@@ -131,6 +154,7 @@ class WebRtcSession(
     init {
         CallAudio.apply(app, true)
         ensureInit(app)
+        eglBase = EglBase.create()
         audioDevice = JavaAudioDeviceModule.builder(app)
             .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
             .setUseHardwareAcousticEchoCanceler(true)
@@ -146,6 +170,8 @@ class WebRtcSession(
             .setAudioDeviceModule(audioDevice)
             .setAudioEncoderFactoryFactory(BuiltinAudioEncoderFactoryFactory())
             .setAudioDecoderFactoryFactory(BuiltinAudioDecoderFactoryFactory())
+            .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, false))
+            .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
             .createPeerConnectionFactory()
         val deps = PeerConnectionDependencies.builder(observer).apply {
             // TURNS uses the VPS self-signed cert. Default WebRTC TLS rejects it.
@@ -184,6 +210,10 @@ class WebRtcSession(
             if (t.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO) {
                 runCatching { t.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
             }
+        }
+        if (wantVideo) {
+            val ok = startCameraLocked()
+            if (!ok) onCameraFailed()
         }
         Log.i(
             "rope-webrtc",
@@ -224,7 +254,7 @@ class WebRtcSession(
                     onIce("FAILED", viaRelay)
                 }
             }, desc)
-        }, audioConstraints(iceRestart))
+        }, offerConstraints(videoWanted, iceRestart))
     }
 
     fun prepareCallee() {
@@ -245,6 +275,46 @@ class WebRtcSession(
         micEnabled = on
         audioTrack?.setEnabled(on)
         runCatching { pc?.setAudioRecording(on) }
+    }
+
+    fun eglContext(): EglBase.Context = eglBase.eglBaseContext
+
+    fun attachLocalSink(sink: VideoSink) {
+        if (closed) return
+        localSink?.let { videoTrack?.removeSink(it) }
+        localSink = sink
+        videoTrack?.addSink(sink)
+    }
+
+    fun attachRemoteSink(sink: VideoSink) {
+        if (closed) return
+        remoteSink?.let { remoteVideo?.removeSink(it) }
+        remoteSink = sink
+        remoteVideo?.addSink(sink)
+    }
+
+    fun detachSinks() {
+        localSink?.let { videoTrack?.removeSink(it) }
+        remoteSink?.let { remoteVideo?.removeSink(it) }
+        localSink = null
+        remoteSink = null
+    }
+
+    fun flipCamera() {
+        if (closed) return
+        (capturer as? CameraVideoCapturer)?.switchCamera(null)
+    }
+
+    fun setCameraEnabled(on: Boolean) {
+        if (closed) return
+        videoTrack?.setEnabled(on)
+        if (on) {
+            runCatching {
+                capturer?.startCapture(VideoCallRules.WIDTH, VideoCallRules.HEIGHT, VideoCallRules.FPS)
+            }
+        } else {
+            runCatching { capturer?.stopCapture() }
+        }
     }
 
     fun restartIce() {
@@ -289,6 +359,13 @@ class WebRtcSession(
         closed = true
         mainHandler.removeCallbacks(fallbackDirect)
         try {
+            detachSinks()
+            runCatching { capturer?.stopCapture() }
+            capturer?.dispose()
+            videoTrack?.setEnabled(false)
+            videoTrack?.dispose()
+            videoSource?.dispose()
+            surfaceHelper?.dispose()
             audioTrack?.setEnabled(false)
             audioTrack?.dispose()
             audioSource?.dispose()
@@ -296,11 +373,17 @@ class WebRtcSession(
             pc?.dispose()
             factory.dispose()
             audioDevice.release()
+            eglBase.release()
         } catch (e: Exception) {
             Log.w("rope-webrtc", e)
         }
         audioTrack = null
         audioSource = null
+        videoTrack = null
+        videoSource = null
+        capturer = null
+        surfaceHelper = null
+        remoteVideo = null
         pc = null
         CallAudio.apply(app, false)
     }
@@ -312,6 +395,10 @@ class WebRtcSession(
             SessionDescription.Type.ANSWER
         }
         val desc = SessionDescription(type, signal.sdp)
+        if (signal.kind == CallSignal.OFFER && VideoCallRules.sdpHasVideo(signal.sdp)) {
+            videoWanted = true
+            if (videoTrack == null && !startCameraLocked()) onCameraFailed()
+        }
         pc?.setRemoteDescription(object : SdpObserver by noopSdp {
             override fun onSetSuccess() {
                 remoteSet = true
@@ -330,7 +417,7 @@ class WebRtcSession(
                                 onIce("FAILED", viaRelay)
                             }
                         }, answer)
-                    }, audioConstraints())
+                    }, offerConstraints(videoWanted || VideoCallRules.sdpHasVideo(signal.sdp)))
                 }
             }
             override fun onSetFailure(err: String) {
@@ -351,6 +438,60 @@ class WebRtcSession(
         if (track is AudioTrack || track.kind() == MediaStreamTrack.AUDIO_TRACK_KIND) {
             attachRemoteAudio()
             Log.i("rope-webrtc", "remote ${track.kind()} ${track.id()} enabled")
+        }
+        if (track is VideoTrack || track.kind() == MediaStreamTrack.VIDEO_TRACK_KIND) {
+            val vt = track as? VideoTrack ?: return
+            remoteVideo = vt
+            remoteSink?.let { vt.addSink(it) }
+            Log.i("rope-webrtc", "remote video ${vt.id()} enabled")
+        }
+    }
+
+    private fun startCameraLocked(): Boolean {
+        if (closed || videoTrack != null) return videoTrack != null
+        return try {
+            val enumerator = if (Camera2Enumerator.isSupported(app)) {
+                Camera2Enumerator(app)
+            } else {
+                Camera1Enumerator(false)
+            }
+            val names = enumerator.deviceNames
+            val chosen = names.firstOrNull { enumerator.isFrontFacing(it) }
+                ?: names.firstOrNull()
+                ?: return false
+            val cap = enumerator.createCapturer(chosen, null) ?: return false
+            val helper = SurfaceTextureHelper.create("rope-capture", eglBase.eglBaseContext)
+            val source = factory.createVideoSource(cap.isScreencast)
+            cap.initialize(helper, app, source.capturerObserver)
+            cap.startCapture(VideoCallRules.WIDTH, VideoCallRules.HEIGHT, VideoCallRules.FPS)
+            val track = factory.createVideoTrack(VideoCallRules.TRACK_ID, source)
+            track.setEnabled(true)
+            val added = runCatching { pc?.addTrack(track, listOf(VideoCallRules.STREAM_ID)) }.getOrNull()
+            if (added == null) {
+                pc?.addTransceiver(
+                    track,
+                    RtpTransceiver.RtpTransceiverInit(
+                        RtpTransceiver.RtpTransceiverDirection.SEND_RECV,
+                        listOf(VideoCallRules.STREAM_ID),
+                    ),
+                )
+            }
+            pc?.transceivers?.forEach { t ->
+                if (t.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO) {
+                    runCatching { t.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV }
+                }
+            }
+            localSink?.let { track.addSink(it) }
+            capturer = cap
+            surfaceHelper = helper
+            videoSource = source
+            videoTrack = track
+            videoWanted = true
+            Log.i("rope-webrtc", "camera $chosen ${VideoCallRules.WIDTH}x${VideoCallRules.HEIGHT}")
+            true
+        } catch (e: Exception) {
+            Log.w("rope-webrtc", "camera", e)
+            false
         }
     }
 
@@ -418,9 +559,11 @@ class WebRtcSession(
             optional.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
         }
 
-        private fun audioConstraints(iceRestart: Boolean = false) = MediaConstraints().apply {
+        private fun audioConstraints(iceRestart: Boolean = false) = offerConstraints(false, iceRestart)
+
+        private fun offerConstraints(video: Boolean, iceRestart: Boolean = false) = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", if (video) "true" else "false"))
             if (iceRestart) {
                 mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
             }

@@ -8,6 +8,7 @@ import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.CallRtcRole
 import app.rope.android.data.CallSignal
+import app.rope.android.data.VideoCallRules
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -408,5 +409,39 @@ class CallSignalingTest {
         val again = m.onConnectTimeout()
         assertFalse(again.contains(CallEffect.StopTone))
         assertFalse(again.contains(CallEffect.StartWssMedia))
+    }
+
+    @Test
+    fun videoRingMarksStateAndStartRtc() {
+        val m = CallMachine()
+        val start = m.localStart("c1", "bob", "alice", video = true)
+        assertTrue(m.state.video)
+        val ring = start.filterIsInstance<CallEffect.Send>().single { it.event == CallSignal.RING }
+        assertTrue(VideoCallRules.parseRingVideo(ring.payload))
+        val accept = m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        val rtc = accept.filterIsInstance<CallEffect.StartRtc>().single()
+        assertTrue(rtc.asCaller)
+        assertTrue(rtc.video)
+    }
+
+    @Test
+    fun incomingVideoRingFromPayload() {
+        val m = CallMachine()
+        m.onWire("bob", CallSignal.RING, "c1", VideoCallRules.ringPayload(true), "alice")
+        assertTrue(m.state.video)
+        assertEquals(CallPhase.RINGING_IN, m.state.phase)
+        val accept = m.localAccept()
+        assertTrue(accept.filterIsInstance<CallEffect.StartRtc>().single().video)
+    }
+
+    @Test
+    fun offerSdpCanUpgradeToVideo() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice", video = false)
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        m.onSessionAttached()
+        val sdp = "v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\nm=video 9 UDP/TLS/RTP/SAVPF 96\n"
+        m.media("bob", CallSignal.OFFER, "c1", CallSignal(CallSignal.OFFER, sdp = sdp), "alice")
+        assertTrue(m.state.video)
     }
 }

@@ -12,15 +12,20 @@ object CallLink {
     const val CONNECT_TIMEOUT_MS = 25_000L
     const val RING_TIMEOUT_MS = 45_000L
 
-    fun heading(phase: CallPhase, link: CallLinkState, detail: String = ""): String = when (phase) {
-        CallPhase.RINGING_IN -> "Входящий вызов"
+    fun heading(
+        phase: CallPhase,
+        link: CallLinkState,
+        detail: String = "",
+        video: Boolean = false,
+    ): String = when (phase) {
+        CallPhase.RINGING_IN -> VideoCallRules.incomingHeading(video)
         CallPhase.RINGING_OUT -> when (link) {
             CallLinkState.FAILED -> if (isOffline(detail)) "Не в сети" else "Нет ответа"
-            else -> "Вызов…"
+            else -> VideoCallRules.outgoingHeading(video)
         }
         CallPhase.ENDED -> "Завершён"
         CallPhase.ACTIVE -> when (link) {
-            CallLinkState.CONNECTED -> "Разговор"
+            CallLinkState.CONNECTED -> VideoCallRules.activeHeading(video)
             CallLinkState.FAILED -> "Нет соединения"
             else -> "Соединение…"
         }

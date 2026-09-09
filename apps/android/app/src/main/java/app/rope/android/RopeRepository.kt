@@ -47,6 +47,7 @@ import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
+import app.rope.android.data.VideoCallRules
 import app.rope.android.data.VideoRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
@@ -138,6 +139,7 @@ data class UiState(
     val call: CallInfo? = null,
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
+    val callCamMuted: Boolean = false,
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
@@ -1011,9 +1013,18 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startCall() {
+        startCall(video = false)
+    }
+
+    fun startVideoCall() {
+        startCall(video = true)
+    }
+
+    private fun startCall(video: Boolean) {
         if (_state.value.group != null) return
         val hint = _state.value.peer ?: return
         if (ChatIds.isGroup(hint.deviceId) || ChatIds.isSaved(hint.deviceId)) return
+        if (!VideoCallRules.showHeader(hint.deviceId, isGroup = false)) return
         val peer = resolveCallPeer(hint.deviceId, hint, fetch = true) ?: return
         callPeerName = peer.displayName.ifBlank { hint.displayName }
         applyCallEffects(
@@ -1021,6 +1032,7 @@ class RopeRepository(private val app: Application) {
                 UUID.randomUUID().toString(),
                 peer.deviceId,
                 identity?.deviceId().orEmpty(),
+                video = video,
             ),
         )
     }
@@ -1048,6 +1060,30 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.callSpeakerOn
         _state.value = _state.value.copy(callSpeakerOn = next)
         CallAudio.setSpeaker(app, next)
+    }
+
+    fun toggleCallCamera() {
+        val next = !_state.value.callCamMuted
+        _state.value = _state.value.copy(callCamMuted = next)
+        rtc?.setCameraEnabled(!next)
+    }
+
+    fun flipCallCamera() {
+        rtc?.flipCamera()
+    }
+
+    fun cameraDenied() {
+        notice(VideoCallRules.cameraDeniedNotice())
+    }
+
+    fun callEglContext(): org.webrtc.EglBase.Context? = rtc?.eglContext()
+
+    fun bindCallRemote(renderer: org.webrtc.SurfaceViewRenderer) {
+        rtc?.attachRemoteSink(renderer)
+    }
+
+    fun bindCallLocal(renderer: org.webrtc.SurfaceViewRenderer) {
+        rtc?.attachLocalSink(renderer)
     }
 
     fun revokeMember(memberId: String) {
@@ -2286,7 +2322,11 @@ class RopeRepository(private val app: Application) {
                     stopTone()
                     if (!callMachine.state.wssMedia) {
                         audioMode(true)
-                        scope.launch { startRtc(effect.asCaller) }
+                        if (effect.video) {
+                            _state.value = _state.value.copy(callSpeakerOn = true)
+                            CallAudio.setSpeaker(app, true)
+                        }
+                        scope.launch { startRtc(effect.asCaller, effect.video) }
                     }
                 }
                 is CallEffect.DeliverRemote -> {
@@ -2327,7 +2367,7 @@ class RopeRepository(private val app: Application) {
                 CallEffect.ClearNotify -> notifier.clearCall()
                 is CallEffect.Record -> recordCall(
                     effect.peerId,
-                    if (effect.outgoing) "Исходящий звонок" else "Входящий звонок",
+                    VideoCallRules.recordLabel(callMachine.state.video, effect.outgoing),
                     effect.outgoing,
                 )
                 CallEffect.NotifyIncoming -> {
@@ -2367,14 +2407,14 @@ class RopeRepository(private val app: Application) {
         return sent
     }
 
-    private suspend fun startRtc(asCaller: Boolean) {
+    private suspend fun startRtc(asCaller: Boolean, video: Boolean) {
         val ice = awaitIce()
         if (!callMachine.state.live || !callMachine.state.rtcWanted) return
         if (callMachine.state.wssMedia) return
         val hasTurn = !CallLink.missingTurn(ice)
         applyCallEffects(callMachine.onHasTurn(hasTurn, CallLink.missingTurnDetail()))
         if (!callMachine.state.live) return
-        attachRtc(asCaller, ice)
+        attachRtc(asCaller, ice, video || callMachine.state.video)
         applyCallEffects(callMachine.onSessionAttached())
     }
 
@@ -2481,7 +2521,7 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    private fun attachRtc(asCaller: Boolean, ice: List<IceServerSpec>) {
+    private fun attachRtc(asCaller: Boolean, ice: List<IceServerSpec>, video: Boolean) {
         synchronized(rtcLock) {
             val existing = rtc
             if (existing != null) {
@@ -2502,16 +2542,22 @@ class RopeRepository(private val app: Application) {
                     hintHost = IceServers.parseHostname(profile?.iceServersJson) ?: profile?.host,
                     publicIp = IceServers.parsePublicIp(profile?.iceServersJson),
                     polite = !asCaller,
+                    wantVideo = video,
                     onLocalSignal = { sig ->
                         val callId = callMachine.state.callId
                         val peerId = callMachine.state.peerDeviceId
                         if (callId.isBlank() || peerId.isBlank()) return@WebRtcSession
+                        val json = sig.toJson()
+                        if (!VideoCallRules.fitsWss(json)) {
+                            notice(VideoCallRules.sdpTooLargeNotice())
+                            return@WebRtcSession
+                        }
                         val peer = resolveCallPeer(peerId, _state.value.peer)
                         val to = PeerIds.wireId(peer, peerId)
                         if (to.isBlank()) return@WebRtcSession
-                        sendCall(callId, to, sig.kind, sig.toJson())
+                        sendCall(callId, to, sig.kind, json)
                         if (peer != null && peer.publicIdentity.isNotEmpty()) {
-                            sendCallEnvelope(peer, callId, sig.kind, sig.toJson())
+                            sendCallEnvelope(peer, callId, sig.kind, json)
                         }
                         if (sig.kind == CallSignal.OFFER) {
                             applyCallEffects(callMachine.onLocalOfferSent())
@@ -2522,6 +2568,9 @@ class RopeRepository(private val app: Application) {
                     },
                     onIce = { name, viaRelay ->
                         applyCallEffects(callMachine.onIce(name, viaRelay))
+                    },
+                    onCameraFailed = {
+                        notice(VideoCallRules.cameraFailedNotice())
                     },
                 )
             } catch (e: Exception) {
@@ -2598,6 +2647,10 @@ class RopeRepository(private val app: Application) {
     private fun sendCall(callId: String, to: String, event: String, payload: String): Boolean {
         val dest = PeerIds.normalize(to)
         if (dest.isBlank() || ChatIds.isGroup(to)) return false
+        if (payload.isNotEmpty() && !VideoCallRules.fitsWss(payload)) {
+            notice(VideoCallRules.sdpTooLargeNotice())
+            return false
+        }
         return socket?.send(
             JSONObject()
                 .put("type", "call")
@@ -2652,7 +2705,12 @@ class RopeRepository(private val app: Application) {
             }
             wssAudio = null
         }
-        _state.value = _state.value.copy(call = null, callMicMuted = false, callSpeakerOn = false)
+        _state.value = _state.value.copy(
+            call = null,
+            callMicMuted = false,
+            callSpeakerOn = false,
+            callCamMuted = false,
+        )
     }
 
     private fun startTone(outgoing: Boolean) {
