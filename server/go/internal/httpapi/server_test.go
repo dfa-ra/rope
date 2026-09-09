@@ -144,6 +144,12 @@ func TestHealthAndInfo(t *testing.T) {
 	if health["turn_running"] != false {
 		t.Fatalf("debug server must not claim coturn is listening: %+v", health)
 	}
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("health nosniff %q", resp.Header.Get("X-Content-Type-Options"))
+	}
+	if resp.Header.Get("Strict-Transport-Security") != "" {
+		t.Fatalf("debug HTTP must not send HSTS %q", resp.Header.Get("Strict-Transport-Security"))
+	}
 	resp, err = http.Get(hs.URL + "/v1/info")
 	if err != nil {
 		t.Fatal(err)
@@ -1205,6 +1211,21 @@ func drainHello(t *testing.T, ctx context.Context, c *websocket.Conn) {
 		default:
 			t.Fatalf("unexpected hello frame %+v", msg)
 		}
+	}
+}
+
+func TestSecurityHeadersHSTSWhenTLS(t *testing.T) {
+	s := &Server{Cfg: config.Config{AllowHTTP: false}}
+	h := s.securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(204)
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("nosniff %q", rec.Header().Get("X-Content-Type-Options"))
+	}
+	if rec.Header().Get("Strict-Transport-Security") != "max-age=31536000; includeSubDomains" {
+		t.Fatalf("hsts %q", rec.Header().Get("Strict-Transport-Security"))
 	}
 }
 

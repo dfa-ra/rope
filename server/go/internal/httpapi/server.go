@@ -70,6 +70,7 @@ func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(s.recoverer)
+	r.Use(s.securityHeaders)
 	r.Get("/health", s.health)
 	r.Get("/version", s.version)
 	r.Get("/v1/info", s.info)
@@ -133,6 +134,16 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 				http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
 			}
 		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if !s.Cfg.AllowHTTP {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
