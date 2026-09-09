@@ -131,6 +131,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.ForwardRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.UnreadBadgeKind
@@ -1036,14 +1037,11 @@ private fun MessageBubble(
                                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
                             )
                         }
-                        if (!m.replyToId.isNullOrBlank()) {
-                            ReplyQuote(
-                                name = GroupChatUx.replyQuoteName(m.replyName, m.outgoing),
-                                preview = m.replyPreview.ifBlank { "Сообщение" },
-                                accent = senderColor,
-                                onClick = { onJump(m.replyToId) },
-                            )
-                        }
+                        AttributionChrome(
+                            msg = m,
+                            accent = senderColor,
+                            onJump = onJump,
+                        )
                         ImageBubble(m, onEnsureMedia, overlayMeta = true)
                     }
                     Box(
@@ -1078,14 +1076,11 @@ private fun MessageBubble(
                     if (showName) {
                         Text(senderLabel, style = MaterialTheme.typography.labelMedium, color = senderColor)
                     }
-                    if (!m.deleted && !m.replyToId.isNullOrBlank()) {
-                        ReplyQuote(
-                            name = GroupChatUx.replyQuoteName(m.replyName, m.outgoing),
-                            preview = m.replyPreview.ifBlank { "Сообщение" },
-                            accent = if (mine) outFg else senderColor,
-                            onClick = { onJump(m.replyToId) },
-                        )
-                    }
+                    AttributionChrome(
+                        msg = m,
+                        accent = if (mine) outFg else senderColor,
+                        onJump = onJump,
+                    )
                     if (m.deleted) {
                         Text(
                             "Сообщение удалено",
@@ -1136,6 +1131,35 @@ private fun MessageBubble(
             ReactionRow(m, me, mine, onReact)
         }
     }
+}
+
+@Composable
+private fun AttributionChrome(msg: ChatMessage, accent: Color, onJump: (String) -> Unit) {
+    val from = ForwardRules.attributedName(msg)
+    if (from != null) {
+        ForwardedHeader(from)
+    }
+    val replyId = msg.replyToId
+    if (!msg.deleted && !replyId.isNullOrBlank() && !ForwardRules.hidesReplyQuote(msg)) {
+        ReplyQuote(
+            name = GroupChatUx.replyQuoteName(msg.replyName, msg.outgoing),
+            preview = msg.replyPreview.ifBlank { "Сообщение" },
+            accent = accent,
+            onClick = { onJump(replyId) },
+        )
+    }
+}
+
+@Composable
+private fun ForwardedHeader(name: String) {
+    Text(
+        ForwardRules.headerLabel(name),
+        style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(bottom = 4.dp),
+    )
 }
 
 @Composable
@@ -1416,14 +1440,11 @@ private fun AlbumBubble(
                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
             )
         }
-        if (!first.replyToId.isNullOrBlank()) {
-            ReplyQuote(
-                name = GroupChatUx.replyQuoteName(first.replyName, first.outgoing),
-                preview = first.replyPreview.ifBlank { "Сообщение" },
-                accent = senderColor,
-                onClick = { onJump(first.replyToId) },
-            )
-        }
+        AttributionChrome(
+            msg = first,
+            accent = senderColor,
+            onJump = onJump,
+        )
         Box(
             Modifier
                 .width(PhotoLayout.MOSAIC_WIDTH_DP.dp)

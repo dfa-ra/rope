@@ -27,6 +27,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
+import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
@@ -1213,14 +1214,21 @@ class RopeRepository(private val app: Application) {
         pushEnvelope(env.bytes)
     }
 
-    private fun sendGroupText(group: RopeGroup, text: String, reply: ChatMessage? = null) {
+    private fun sendGroupText(
+        group: RopeGroup,
+        text: String,
+        reply: ChatMessage? = null,
+        forwardedFrom: String? = null,
+    ) {
+        val attributed = JsonIds.optional(forwardedFrom)
         val body = GroupTextPayload(
             group.groupId,
             text,
             group.epoch,
-            reply?.id,
-            reply?.preview().orEmpty(),
-            replyName(reply),
+            if (attributed == null) reply?.id else null,
+            if (attributed == null) reply?.preview().orEmpty() else "",
+            if (attributed == null) replyName(reply) else "",
+            forwardedFrom = attributed,
         ).toJson().toByteArray()
         sendGroupPayload(
             group,
@@ -1230,7 +1238,8 @@ class RopeRepository(private val app: Application) {
             MessageKind.GROUP_TEXT,
             "",
             null,
-            reply,
+            if (attributed == null) reply else null,
+            attributed,
         )
     }
 
@@ -1243,6 +1252,7 @@ class RopeRepository(private val app: Application) {
         extra: String,
         localFile: File?,
         reply: ChatMessage? = null,
+        forwardedFrom: String? = null,
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -1286,9 +1296,10 @@ class RopeRepository(private val app: Application) {
                     localPath = localFile?.absolutePath,
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
-                    replyToId = reply?.id,
-                    replyPreview = reply?.preview().orEmpty(),
-                    replyName = replyName(reply),
+                    replyToId = if (forwardedFrom == null) reply?.id else null,
+                    replyPreview = if (forwardedFrom == null) reply?.preview().orEmpty() else "",
+                    replyName = if (forwardedFrom == null) replyName(reply) else "",
+                    forwardedFrom = forwardedFrom,
                 )
                 store.insertMessage(local)
                 refreshMessages(chatId)
@@ -1514,8 +1525,9 @@ class RopeRepository(private val app: Application) {
 
     private fun forwardToPeer(peer: DirectoryDevice, src: ChatMessage) {
         val id = identity ?: return
+        val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            val packed = TextBody.encode(src.text, src.id, src.preview(), "Переслано · ${replyName(src)}")
+            val packed = TextBody.encode(src.text, null, "", "", forwardedFrom = from)
             val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
             store.insertMessage(
                 ChatMessage(
@@ -1529,33 +1541,38 @@ class RopeRepository(private val app: Application) {
                     kind = MessageKind.TEXT,
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
-                    replyToId = src.id,
-                    replyPreview = src.preview(),
-                    replyName = "Переслано · ${replyName(src)}",
+                    forwardedFrom = from,
                 ),
             )
             refreshMessages(peer.deviceId)
             pushEnvelope(env.bytes)
             return
         }
-        if (src.extra.isBlank()) {
-            notice("это вложение уже нельзя переслать")
-            return
-        }
-        val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.MEDIA, src.extra.toByteArray())
+        val payload = attributedMediaPayload(src, from, groupId = null) ?: return
+        val env = id.encryptTyped(
+            publicIdentityFromBlob(peer.publicIdentity),
+            EnvelopeTypes.MEDIA,
+            payload.toJson().toByteArray(),
+        )
+        val cache = src.localPath?.let { File(it) }?.takeIf { it.isFile }
         store.insertMessage(
             src.copy(
                 id = env.messageId,
                 peerDeviceId = peer.deviceId,
                 outgoing = true,
+                text = payload.preview(),
                 status = MessageStatus.CREATED,
                 timestampMs = env.timestampMs.toLong(),
                 envelope = env.bytes,
+                extra = payload.toJson(),
+                groupId = null,
+                localPath = cache?.absolutePath,
                 senderId = id.deviceId(),
                 senderName = _state.value.profile?.displayName.orEmpty(),
-                replyToId = src.id,
-                replyPreview = src.preview(),
-                replyName = "Переслано · ${replyName(src)}",
+                replyToId = null,
+                replyPreview = "",
+                replyName = "",
+                forwardedFrom = from,
                 reactions = emptyList(),
             ),
         )
@@ -1564,24 +1581,66 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun forwardToGroup(group: RopeGroup, src: ChatMessage) {
+        val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            sendGroupText(group, src.text, src.copy(senderName = "Переслано · ${replyName(src)}"))
+            sendGroupText(group, src.text, forwardedFrom = from)
             return
         }
-        if (src.extra.isBlank()) {
-            notice("это вложение уже нельзя переслать")
-            return
-        }
+        val payload = attributedMediaPayload(src, from, groupId = group.groupId) ?: return
         sendGroupPayload(
             group,
             EnvelopeTypes.MEDIA,
-            src.extra.toByteArray(),
-            src.preview(),
-            src.kind,
-            src.extra,
-            src.localPath?.let { File(it) },
-            src,
+            payload.toJson().toByteArray(),
+            payload.preview(),
+            payload.messageKind(),
+            payload.toJson(),
+            src.localPath?.let { File(it) }?.takeIf { it.isFile },
+            forwardedFrom = from,
         )
+    }
+
+    private fun attributedMediaPayload(
+        src: ChatMessage,
+        forwardedFrom: String,
+        groupId: String?,
+    ): MediaPayload? {
+        val file = src.localPath?.let { File(it) }?.takeIf { it.isFile }
+        if (src.extra.isBlank() && file == null) {
+            notice("это вложение уже нельзя переслать")
+            return null
+        }
+        val base = if (src.extra.isNotBlank()) {
+            MediaPayload.parse(src.extra)
+        } else {
+            MediaPayload(
+                kind = when (src.kind) {
+                    MessageKind.VOICE -> "voice"
+                    MessageKind.IMAGE -> "image"
+                    else -> "file"
+                },
+                objectId = "",
+                sha256 = "",
+                keyB64 = "",
+                mime = "application/octet-stream",
+                name = file?.name.orEmpty(),
+                size = file?.length() ?: 0,
+            )
+        }
+        if (file != null) {
+            val bytes = file.readBytes()
+            val enc = encryptObject(bytes)
+            val uploaded = (api ?: throw IllegalStateException("нет сети")).uploadObject(enc.ciphertext, enc.sha256)
+            persistPlain(uploaded.getString("object_id"), base.name.ifBlank { file.name }, base.mime, bytes)
+            return base.copy(
+                objectId = uploaded.getString("object_id"),
+                sha256 = enc.sha256,
+                keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
+                size = bytes.size.toLong(),
+                groupId = groupId,
+                forwardedFrom = forwardedFrom,
+            )
+        }
+        return base.copy(groupId = groupId, forwardedFrom = forwardedFrom)
     }
 
     private fun refreshDirectory() {
@@ -1800,24 +1859,25 @@ class RopeRepository(private val app: Application) {
         when (meta.msgType) {
             EnvelopeTypes.TEXT -> {
                 val plain = id.decryptMessage(publicIdentityFromBlob(sender.publicIdentity), env)
-                val (body, replyId, replyPair) = TextBody.decode(plain.text)
+                val packed = TextBody.decode(plain.text)
                 val msg = ChatMessage(
                     id = plain.messageId,
                     peerDeviceId = sender.deviceId,
                     outgoing = false,
-                    text = body,
+                    text = packed.text,
                     status = MessageStatus.DELIVERED_TO_DEVICE,
                     timestampMs = plain.timestampMs.toLong(),
                     kind = MessageKind.TEXT,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
-                    replyToId = replyId,
-                    replyPreview = replyPair.first,
-                    replyName = replyPair.second,
+                    replyToId = packed.replyTo,
+                    replyPreview = packed.replyPreview,
+                    replyName = packed.replyName,
+                    forwardedFrom = packed.forwardedFrom,
                 )
                 store.insertMessage(msg)
                 ack(plain.messageId)
-                notifyIfHidden(sender.displayName, body, sender.deviceId)
+                notifyIfHidden(sender.displayName, packed.text, sender.deviceId)
             }
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -1842,6 +1902,7 @@ class RopeRepository(private val app: Application) {
                     replyToId = payload.replyTo,
                     replyPreview = payload.replyPreview,
                     replyName = payload.replyName,
+                    forwardedFrom = payload.forwardedFrom,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
@@ -1865,6 +1926,7 @@ class RopeRepository(private val app: Application) {
                     groupId = routedGroup,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
+                    forwardedFrom = payload.forwardedFrom,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)

@@ -16,6 +16,7 @@ data class MediaPayload(
     val albumId: String? = null,
     val albumIndex: Int = 0,
     val albumCount: Int = 1,
+    val forwardedFrom: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("kind", kind)
@@ -34,6 +35,7 @@ data class MediaPayload(
                 put("album_index", albumIndex.coerceAtLeast(0))
                 put("album_count", albumCount)
             }
+            JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
         }
         .toString()
 
@@ -71,6 +73,7 @@ data class MediaPayload(
                 albumId = JsonIds.optional(o.optString("album_id")),
                 albumIndex = o.optInt("album_index", 0).coerceAtLeast(0),
                 albumCount = o.optInt("album_count", 1).let { if (it <= 0) 1 else it },
+                forwardedFrom = JsonIds.optional(o.optString("ff")),
             )
         }
 
@@ -88,6 +91,7 @@ data class GroupTextPayload(
     val replyTo: String? = null,
     val replyPreview: String = "",
     val replyName: String = "",
+    val forwardedFrom: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
@@ -97,6 +101,7 @@ data class GroupTextPayload(
             JsonIds.optional(replyTo)?.let { put("r", it) }
             if (replyPreview.isNotBlank()) put("rp", replyPreview)
             if (replyName.isNotBlank()) put("rn", replyName)
+            JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
         }
         .toString()
 
@@ -110,6 +115,7 @@ data class GroupTextPayload(
                 replyTo = JsonIds.optional(o.optString("r")),
                 replyPreview = o.optString("rp"),
                 replyName = o.optString("rn"),
+                forwardedFrom = JsonIds.optional(o.optString("ff")),
             )
         }
     }
@@ -119,6 +125,7 @@ data class MessageMeta(
     val replyToId: String? = null,
     val replyPreview: String = "",
     val replyName: String = "",
+    val forwardedFrom: String? = null,
     val edited: Boolean = false,
     val deleted: Boolean = false,
 ) {
@@ -126,6 +133,7 @@ data class MessageMeta(
         .put("reply_to", replyToId ?: JSONObject.NULL)
         .put("reply_preview", replyPreview)
         .put("reply_name", replyName)
+        .put("forwarded_from", forwardedFrom ?: JSONObject.NULL)
         .put("edited", edited)
         .put("deleted", deleted)
         .toString()
@@ -139,6 +147,7 @@ data class MessageMeta(
                     replyToId = JsonIds.optional(o.optString("reply_to")),
                     replyPreview = o.optString("reply_preview"),
                     replyName = o.optString("reply_name"),
+                    forwardedFrom = JsonIds.optional(o.optString("forwarded_from")),
                     edited = o.optBoolean("edited"),
                     deleted = o.optBoolean("deleted"),
                 )
@@ -151,6 +160,7 @@ data class MessageMeta(
             replyToId = msg.replyToId,
             replyPreview = msg.replyPreview,
             replyName = msg.replyName,
+            forwardedFrom = msg.forwardedFrom,
             edited = msg.edited,
             deleted = msg.deleted,
         )
@@ -202,8 +212,26 @@ data class ChatControl(
     }
 }
 
+data class PackedText(
+    val text: String,
+    val replyTo: String? = null,
+    val replyPreview: String = "",
+    val replyName: String = "",
+    val forwardedFrom: String? = null,
+)
+
 object TextBody {
-    fun encode(text: String, replyTo: String?, replyPreview: String, replyName: String): String {
+    fun encode(
+        text: String,
+        replyTo: String?,
+        replyPreview: String,
+        replyName: String,
+        forwardedFrom: String? = null,
+    ): String {
+        val from = JsonIds.optional(forwardedFrom)
+        if (from != null) {
+            return JSONObject().put("t", text).put("ff", from).toString()
+        }
         if (replyTo.isNullOrBlank()) return text
         return JSONObject()
             .put("t", text)
@@ -213,19 +241,21 @@ object TextBody {
             .toString()
     }
 
-    fun decode(raw: String): Triple<String, String?, Pair<String, String>> {
+    fun decode(raw: String): PackedText {
         val trimmed = raw.trim()
-        if (!trimmed.startsWith("{")) return Triple(raw, null, "" to "")
+        if (!trimmed.startsWith("{")) return PackedText(raw)
         return try {
             val o = JSONObject(trimmed)
-            if (!o.has("t")) return Triple(raw, null, "" to "")
-            Triple(
-                o.optString("t"),
-                JsonIds.optional(o.optString("r")),
-                o.optString("rp") to o.optString("rn"),
+            if (!o.has("t")) return PackedText(raw)
+            PackedText(
+                text = o.optString("t"),
+                replyTo = JsonIds.optional(o.optString("r")),
+                replyPreview = o.optString("rp"),
+                replyName = o.optString("rn"),
+                forwardedFrom = JsonIds.optional(o.optString("ff")),
             )
         } catch (_: Exception) {
-            Triple(raw, null, "" to "")
+            PackedText(raw)
         }
     }
 }

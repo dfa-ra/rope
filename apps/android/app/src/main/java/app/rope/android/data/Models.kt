@@ -64,6 +64,7 @@ data class ChatMessage(
     val replyToId: String? = null,
     val replyPreview: String = "",
     val replyName: String = "",
+    val forwardedFrom: String? = null,
     val edited: Boolean = false,
     val deleted: Boolean = false,
 ) {

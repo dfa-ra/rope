@@ -418,6 +418,24 @@ mod tests {
     }
 
     #[test]
+    fn typed_text_forwarded_from_json_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let body = br#"{"t":"hi","ff":"Anna"}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_TEXT, body).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_TEXT);
+        assert_eq!(got.body, body);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"ff\":\"Anna\""));
+        assert!(!json.contains("\"rn\""));
+        let media = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1,"ff":"Anna"}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, media).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, media);
+    }
+
+    #[test]
     fn v1_text_still_works_after_typed_api() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();
