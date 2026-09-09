@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.9 atomic revoke-member | — |
+| CG-073 | Slice: atomic revoke-member last-owner 409 as 0.3.9 | PO | IN_PROGRESS | REV-01: concurrent two-owner revoke-member | CG-007 |
+| CG-074 | Go: RevokeMemberGuarded BEGIN IMMEDIATE | GO-01 | IN_PROGRESS | same txn as RevokeDeviceGuarded | CG-073 |
+| CG-075 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-074 |
+| CG-076 | Ship **0.3.9** | PO | IN_PROGRESS | versionCode 33; do not retag v0.3.8 | CG-075 |
 | CG-068 | Slice: revoke-device 409 on owner devices as 0.3.8 | PO | DONE | shipped v0.3.8 | CG-007 |
 | CG-069 | Go: OwnerDeviceCount gate on POST /v1/admin/revoke-device | GO-01 | DONE | not OwnerCount members | CG-068 |
 | CG-070 | Android: canRevokeDevice uses ownerDeviceCount | AND-01 | DONE | unused API; People stays revoke-member | CG-068 |

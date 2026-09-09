@@ -452,24 +452,20 @@ func (s *Server) revokeMember(w http.ResponseWriter, _ *http.Request, a authed, 
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
-	target, err := s.Store.Member(req.MemberID)
-	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "not found"})
-		return
-	}
-	if target.Role == "owner" {
-		remaining, err := s.Store.OwnerDeviceCountExceptMember(target.ID)
-		if err != nil || remaining == 0 {
-			writeJSON(w, 409, map[string]string{"error": "last owner"})
-			return
-		}
-	}
 	devices, err := s.Store.ListDevices()
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}
-	if err := s.Store.RevokeMember(req.MemberID); err != nil {
+	if err := s.Store.RevokeMemberGuarded(req.MemberID); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, 404, map[string]string{"error": "not found"})
+			return
+		}
+		if errors.Is(err, db.ErrLastOwner) {
+			writeJSON(w, 409, map[string]string{"error": "last owner"})
+			return
+		}
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}

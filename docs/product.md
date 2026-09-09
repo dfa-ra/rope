@@ -10,11 +10,11 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.8**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, and `v0.3.7` remain published history.
+The product trunk is **`main`**, shipping **0.3.9**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, and `v0.3.8` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.8` / `versionCode=32`, plus CryptoGalera operating layer |
+| **`main`** | Shipped tree: Android `versionName=0.3.9` / `versionCode=33`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
 | **GitHub Release `v0.3.0`** | Previous line. Do not retag `v0.3.0`. |
 | **GitHub Release `v0.3.1`** | Previous line. Do not retag `v0.3.1`. |
@@ -23,7 +23,8 @@ The product trunk is **`main`**, shipping **0.3.8**. GitHub Releases `v0.2.15`, 
 | **GitHub Release `v0.3.4`** | Previous line. Do not retag `v0.3.4`. |
 | **GitHub Release `v0.3.5`** | Previous line. Do not retag `v0.3.5`. |
 | **GitHub Release `v0.3.6`** | Previous line. Do not retag `v0.3.6`. |
-| **GitHub Release `v0.3.7`** | Previous Latest until `v0.3.8` publishes. Do not retag `v0.3.7`. |
+| **GitHub Release `v0.3.7`** | Previous line. Do not retag `v0.3.7`. |
+| **GitHub Release `v0.3.8`** | Previous Latest until `v0.3.9` publishes. Do not retag `v0.3.8`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -33,7 +34,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.8`).
+1. Install the Android app (this cycle ships `v0.3.9`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).

@@ -8,7 +8,7 @@ PO-owned live snapshot. Not a changelog.
 
 ## Current Phase
 
-**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-072 landed. Next: **0.3.9** atomic revoke-member 409 (D-022).
+**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-072 landed. Slice **0.3.9** is last-owner `POST /v1/admin/revoke-member` 409 in one `BEGIN IMMEDIATE` transaction (D-022).
 
 ## Staffing this cycle
 
