@@ -1530,7 +1530,7 @@ class RopeRepository(private val app: Application) {
     fun restoreFromFile(bytes: ByteArray) {
         scope.launch {
             try {
-                applyDeviceBackup(DeviceBackup.parse(bytes))
+                applyDeviceBackup(DeviceBackup.open(bytes, vault::unwrap))
                 identity = DeviceIdentity.fromBytes(vault.load())
                 val profile = store.profile()
                 if (profile != null) {

@@ -29,6 +29,7 @@
 - Invite tokens are stored as SHA-256 hashes and are single-use with TTL.
 - Private device keys are not uploaded during ordinary messaging, bootstrap, or mailbox sync.
 - Private device keys are not written to public Downloads. An empty identity vault is not auto-restored from shared storage.
+- Identity export (`rope-device.backup`) is wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto). Cleartext v1 JSON is not auto-applied.
 - Default logs omit payload bytes, invite tokens, and SSH secrets.
 - Live call offer/answer/ICE apply only from sealed `EnvelopeTypes.CALL` blobs. Plain WSS `type=call` may carry RING/ACCEPT/REJECT/HANGUP/RELAY and ciphertext audio frames, not SDP/ICE.
 - TURNS/TLS pin comparison fails closed when the expected fingerprint is blank.

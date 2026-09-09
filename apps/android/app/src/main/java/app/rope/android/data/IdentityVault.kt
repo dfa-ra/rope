@@ -16,19 +16,24 @@ class IdentityVault(private val context: Context) {
     fun exists(): Boolean = file.exists()
 
     fun save(plain: ByteArray) {
-        val key = getOrCreateKey()
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key)
-        val iv = cipher.iv
-        val ct = cipher.doFinal(plain)
-        file.writeBytes(byteArrayOf(iv.size.toByte()) + iv + ct)
+        file.writeBytes(wrap(plain))
     }
 
-    fun load(): ByteArray {
-        val raw = file.readBytes()
-        val ivLen = raw[0].toInt() and 0xff
-        val iv = raw.copyOfRange(1, 1 + ivLen)
-        val ct = raw.copyOfRange(1 + ivLen, raw.size)
+    fun load(): ByteArray = unwrap(file.readBytes())
+
+    /** Keystore AES-GCM wrap. At-rest only — not envelope crypto. */
+    fun wrap(plain: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        val iv = cipher.iv
+        val ct = cipher.doFinal(plain)
+        return byteArrayOf(iv.size.toByte()) + iv + ct
+    }
+
+    fun unwrap(blob: ByteArray): ByteArray {
+        val ivLen = blob[0].toInt() and 0xff
+        val iv = blob.copyOfRange(1, 1 + ivLen)
+        val ct = blob.copyOfRange(1 + ivLen, blob.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
         return cipher.doFinal(ct)
