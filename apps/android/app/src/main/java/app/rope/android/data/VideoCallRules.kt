@@ -16,7 +16,7 @@ object VideoCallRules {
     const val STREAM_ID = "rope"
 
     fun showHeader(peerId: String?, isGroup: Boolean): Boolean =
-        !isGroup && SavedMessagesRules.canCall(peerId)
+        !isGroup && !peerId.isNullOrBlank() && SavedMessagesRules.canCall(peerId)
 
     fun ringPayload(video: Boolean): String =
         if (video) JSONObject().put("v", 1).put("video", true).toString() else ""
