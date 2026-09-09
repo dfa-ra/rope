@@ -2,6 +2,12 @@ package app.rope.android.data
 
 import org.json.JSONObject
 
+enum class CallMediaStart {
+    ABORT,
+    AUDIO,
+    VIDEO,
+}
+
 /**
  * Telegram-like 1:1 video calls on the existing WebRTC + WSS `type=call` path.
  * Live media stays DTLS-SRTP. Do not put camera frames on WSS `audio` or mailbox.
@@ -46,6 +52,23 @@ object VideoCallRules {
     fun cameraDeniedNotice(): String = "Нет доступа к камере"
 
     fun cameraFailedNotice(): String = "Камера недоступна · только звук"
+
+    fun cameraDenyFallbackNotice(): String = cameraFailedNotice()
+
+    /**
+     * Mic is required. Camera deny on an outgoing video request starts an
+     * audio call instead of aborting. Incoming accept still proceeds without camera.
+     */
+    fun afterOutgoingVideoPermission(micGranted: Boolean, cameraGranted: Boolean): CallMediaStart = when {
+        !micGranted -> CallMediaStart.ABORT
+        cameraGranted -> CallMediaStart.VIDEO
+        else -> CallMediaStart.AUDIO
+    }
+
+    fun proceedIncoming(micGranted: Boolean): Boolean = micGranted
+
+    fun noticeCameraDenyFallback(wantVideo: Boolean, cameraGranted: Boolean): String? =
+        if (wantVideo && !cameraGranted) cameraDenyFallbackNotice() else null
 
     fun sdpTooLargeNotice(): String =
         "SDP слишком большой для релея · кап 16 КиБ без повышения"

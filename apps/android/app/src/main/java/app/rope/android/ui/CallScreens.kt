@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,6 +54,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.NavRules
 import app.rope.android.UiState
 import app.rope.android.data.RoleRules
+import app.rope.android.data.CallChromeRules
+import app.rope.android.data.CallControlKind
+import app.rope.android.data.CallControlSpec
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
@@ -286,40 +290,51 @@ fun CallOverlay(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                     ) {
-                        CircleAction("Отклонить", Color(0xFFE53935), Icons.Outlined.CallEnd, onReject)
-                        CircleAction("Ответить", Color(0xFF43A047), Icons.Outlined.Call, onAccept)
+                        for (spec in CallChromeRules.ringingControls()) {
+                            CircleAction(
+                                spec,
+                                micMuted,
+                                speakerOn,
+                                camMuted,
+                                onClick = callControlClick(
+                                    spec.kind,
+                                    onAccept,
+                                    onReject,
+                                    onHangup,
+                                    onToggleMute,
+                                    onToggleSpeaker,
+                                    onToggleCamera,
+                                    onFlipCamera,
+                                ),
+                            )
+                        }
                     }
                     else -> Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircleAction(
-                            if (micMuted) "Микрофон выкл" else "Микрофон",
-                            if (micMuted) Color(0xFF616161) else Color(0xFF3F3F46),
-                            if (micMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic,
-                            onToggleMute,
-                        )
-                        CircleAction("Завершить", Color(0xFFE53935), Icons.Outlined.CallEnd, onHangup)
-                        if (call.video) {
+                        for (spec in CallChromeRules.inCallControls(
+                            video = call.video,
+                            micMuted = micMuted,
+                            speakerOn = speakerOn,
+                            camMuted = camMuted,
+                        )) {
                             CircleAction(
-                                if (camMuted) "Камера выкл" else "Камера",
-                                if (camMuted) Color(0xFF616161) else Color(0xFF3F3F46),
-                                if (camMuted) Icons.Outlined.VideocamOff else Icons.Outlined.Videocam,
-                                onToggleCamera,
-                            )
-                            CircleAction(
-                                "Сменить",
-                                Color(0xFF3F3F46),
-                                Icons.Outlined.Cameraswitch,
-                                onFlipCamera,
-                            )
-                        } else {
-                            CircleAction(
-                                if (speakerOn) "Громкая связь вкл" else "Громкая связь",
-                                if (speakerOn) Color(0xFF1565C0) else Color(0xFF3F3F46),
-                                Icons.Outlined.SpeakerPhone,
-                                onToggleSpeaker,
+                                spec,
+                                micMuted,
+                                speakerOn,
+                                camMuted,
+                                onClick = callControlClick(
+                                    spec.kind,
+                                    onAccept,
+                                    onReject,
+                                    onHangup,
+                                    onToggleMute,
+                                    onToggleSpeaker,
+                                    onToggleCamera,
+                                    onFlipCamera,
+                                ),
                             )
                         }
                     }
@@ -362,19 +377,69 @@ private fun CallVideoView(
 }
 
 @Composable
-private fun CircleAction(label: String, color: Color, icon: ImageVector, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Button(
-            onClick = onClick,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = color,
-                contentColor = Color.White,
-            ),
-            modifier = Modifier.size(72.dp),
-            shape = CircleShape,
-        ) {
-            Icon(icon, contentDescription = label)
-        }
-        Text(label, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(top = 8.dp))
+private fun CircleAction(
+    spec: CallControlSpec,
+    micMuted: Boolean,
+    speakerOn: Boolean,
+    camMuted: Boolean,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = callControlColor(spec.kind, micMuted, speakerOn, camMuted),
+            contentColor = Color.White,
+        ),
+        modifier = Modifier.size(64.dp),
+        shape = CircleShape,
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Icon(callControlIcon(spec.kind, micMuted, camMuted), contentDescription = spec.a11y)
     }
+}
+
+private fun callControlClick(
+    kind: CallControlKind,
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+    onHangup: () -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onToggleCamera: () -> Unit,
+    onFlipCamera: () -> Unit,
+): () -> Unit = when (kind) {
+    CallControlKind.ACCEPT -> onAccept
+    CallControlKind.REJECT -> onReject
+    CallControlKind.HANGUP -> onHangup
+    CallControlKind.MUTE -> onToggleMute
+    CallControlKind.SPEAKER -> onToggleSpeaker
+    CallControlKind.CAMERA -> onToggleCamera
+    CallControlKind.FLIP -> onFlipCamera
+}
+
+private fun callControlColor(
+    kind: CallControlKind,
+    micMuted: Boolean,
+    speakerOn: Boolean,
+    camMuted: Boolean,
+): Color = when (kind) {
+    CallControlKind.REJECT, CallControlKind.HANGUP -> Color(0xFFE53935)
+    CallControlKind.ACCEPT -> Color(0xFF43A047)
+    CallControlKind.MUTE -> if (micMuted) Color(0xFF616161) else Color(0xFF3F3F46)
+    CallControlKind.CAMERA -> if (camMuted) Color(0xFF616161) else Color(0xFF3F3F46)
+    CallControlKind.SPEAKER -> if (speakerOn) Color(0xFF1565C0) else Color(0xFF3F3F46)
+    CallControlKind.FLIP -> Color(0xFF3F3F46)
+}
+
+private fun callControlIcon(
+    kind: CallControlKind,
+    micMuted: Boolean,
+    camMuted: Boolean,
+): ImageVector = when (kind) {
+    CallControlKind.REJECT, CallControlKind.HANGUP -> Icons.Outlined.CallEnd
+    CallControlKind.ACCEPT -> Icons.Outlined.Call
+    CallControlKind.MUTE -> if (micMuted) Icons.Outlined.MicOff else Icons.Outlined.Mic
+    CallControlKind.CAMERA -> if (camMuted) Icons.Outlined.VideocamOff else Icons.Outlined.Videocam
+    CallControlKind.FLIP -> Icons.Outlined.Cameraswitch
+    CallControlKind.SPEAKER -> Icons.Outlined.SpeakerPhone
 }

@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.data.CallMediaStart
 import app.rope.android.data.CallSignal
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.VideoCallRules
@@ -58,7 +59,25 @@ class VideoCallRulesTest {
         assertEquals("Входящий видеозвонок", VideoCallRules.recordLabel(true, outgoing = false))
         assertEquals("Исходящий звонок", VideoCallRules.recordLabel(false, outgoing = true))
         assertEquals("Нет доступа к камере", VideoCallRules.cameraDeniedNotice())
+        assertEquals("Камера недоступна · только звук", VideoCallRules.cameraFailedNotice())
+        assertEquals(VideoCallRules.cameraFailedNotice(), VideoCallRules.cameraDenyFallbackNotice())
         assertTrue(VideoCallRules.sdpTooLargeNotice().contains("16 КиБ"))
+    }
+
+    @Test
+    fun cameraDenyFallsBackToAudioNotAbort() {
+        assertEquals(CallMediaStart.ABORT, VideoCallRules.afterOutgoingVideoPermission(false, false))
+        assertEquals(CallMediaStart.ABORT, VideoCallRules.afterOutgoingVideoPermission(false, true))
+        assertEquals(CallMediaStart.VIDEO, VideoCallRules.afterOutgoingVideoPermission(true, true))
+        assertEquals(CallMediaStart.AUDIO, VideoCallRules.afterOutgoingVideoPermission(true, false))
+        assertTrue(VideoCallRules.proceedIncoming(true))
+        assertFalse(VideoCallRules.proceedIncoming(false))
+        assertEquals(
+            VideoCallRules.cameraFailedNotice(),
+            VideoCallRules.noticeCameraDenyFallback(wantVideo = true, cameraGranted = false),
+        )
+        assertEquals(null, VideoCallRules.noticeCameraDenyFallback(wantVideo = true, cameraGranted = true))
+        assertEquals(null, VideoCallRules.noticeCameraDenyFallback(wantVideo = false, cameraGranted = false))
     }
 
     /**

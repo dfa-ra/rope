@@ -1106,7 +1106,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cameraDenied() {
-        notice(VideoCallRules.cameraDeniedNotice())
+        notice(VideoCallRules.cameraDenyFallbackNotice())
     }
 
     fun callEglContext(): org.webrtc.EglBase.Context? = rtc?.eglContext()

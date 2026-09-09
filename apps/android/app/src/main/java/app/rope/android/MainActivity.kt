@@ -20,6 +20,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import app.rope.android.data.CallMediaStart
+import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
 import app.rope.android.update.DeviceBackup
 import com.journeyapps.barcodescanner.ScanContract
@@ -72,14 +74,22 @@ class MainActivity : AppCompatActivity() {
         val next = afterAudio
         afterAudio = null
         val repo = (application as RopeApp).repo
-        if (granted[Manifest.permission.RECORD_AUDIO] != true) return@registerForActivityResult
-        if (granted[Manifest.permission.CAMERA] != true) {
-            repo.cameraDenied()
-            return@registerForActivityResult
-        }
+        val mic = granted[Manifest.permission.RECORD_AUDIO] == true
+        val cam = granted[Manifest.permission.CAMERA] == true
         when (next) {
-            "video" -> repo.startVideoCall()
-            "accept" -> repo.acceptCall()
+            "video" -> when (VideoCallRules.afterOutgoingVideoPermission(mic, cam)) {
+                CallMediaStart.ABORT -> Unit
+                CallMediaStart.VIDEO -> repo.startVideoCall()
+                CallMediaStart.AUDIO -> {
+                    repo.cameraDenied()
+                    repo.startCall()
+                }
+            }
+            "accept" -> {
+                if (!VideoCallRules.proceedIncoming(mic)) return@registerForActivityResult
+                if (!cam) repo.cameraDenied()
+                repo.acceptCall()
+            }
         }
     }
 
