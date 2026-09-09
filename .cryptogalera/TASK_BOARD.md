@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.19 attributed forwards (not 0.3.18) | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.20 peer profile + shared media (not 0.3.19) | — |
+| CG-116 | Slice: attributed forwards as 0.3.19 | PO | DONE | shipped v0.3.19; D-033; D-031 stays org law | CG-007 |
+| CG-117 | Android: ForwardRules + «Переслано от» header | AND-01 | DONE | D-033; origin in encrypted JSON ff; Kotlin never crypto | CG-116 |
+| CG-118 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; re-forward uses last senderName; no hide-sender; re-seal only with localPath; forwarding one album photo can keep album_id | CG-117 |
+| CG-119 | Ship **0.3.19** | PO | DONE | tag v0.3.19 = 39628f0; versionCode 43; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 unchanged | CG-118 |
 | CG-112 | Slice: grouped photo albums as 0.3.18 | PO | DONE | shipped v0.3.18; D-032; D-031 stays org law | CG-007 |
 | CG-113 | Android: AlbumRules mosaic/viewer/multi-select | AND-01 | DONE | D-032; keep 0.3.17 chat-list preview; Kotlin never crypto | CG-112 |
 | CG-114 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; insert-order mosaic split; incomplete album looks like single; quota=N singles | CG-113 |
@@ -88,4 +92,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, or `v0.3.18`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, or `v0.3.19`.**
