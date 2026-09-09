@@ -4,11 +4,11 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.13 chat date separators | — |
-| CG-090 | Slice: chat date separators as 0.3.13 | PO | IN_PROGRESS | Telegram Сегодня/Вчера/weekday/date | CG-007 |
-| CG-091 | Android: DateSeparatorRules + day chips | AND-01 | IN_PROGRESS | D-026; no 0.3.2 tap/long-press redo | CG-090 |
-| CG-092 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-091 |
-| CG-093 | Ship **0.3.13** | PO | IN_PROGRESS | versionCode 37; do not retag v0.3.12 | CG-092 |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.14 chat-list empty-search | — |
+| CG-090 | Slice: chat date separators as 0.3.13 | PO | DONE | shipped v0.3.13 | CG-007 |
+| CG-091 | Android: DateSeparatorRules + day chips | AND-01 | DONE | D-026; DST daysAgo YEAR/DAY_OF_YEAR | CG-090 |
+| CG-092 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; idle midnight chip freeze acceptable; DST calendar-day math fixed | CG-091 |
+| CG-093 | Ship **0.3.13** | PO | DONE | tag v0.3.13 = dc19da1; versionCode 37; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 unchanged | CG-092 |
 | CG-086 | Slice: muted unread badge as 0.3.12 | PO | DONE | shipped v0.3.12 | CG-007 |
 | CG-087 | Android: UnreadBadgeRules MUTED vs ACCENT | AND-01 | DONE | D-025; no 0.3.2 tap/long-press redo | CG-086 |
 | CG-088 | Independent review | REV-01 | DONE | PASS; muted vs accent unread badge shipped in 0.3.12 | CG-087 |
@@ -66,4 +66,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, or `v0.3.12`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, or `v0.3.13`.**
