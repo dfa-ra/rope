@@ -1211,3 +1211,38 @@ func drainHello(t *testing.T, ctx context.Context, c *websocket.Conn) {
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
+
+func TestWsSendParseErrorIsUniform(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	ctx := context.Background()
+	c := dialWS(t, ctx, hs, alice)
+	defer c.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, c)
+
+	cases := []struct {
+		name string
+		raw  []byte
+	}{
+		{"short", []byte("ROPE")},
+		{"magic", make([]byte, 200)},
+	}
+	for _, tc := range cases {
+		if err := wsjson.Write(ctx, c, map[string]any{"type": "send", "envelope": tc.raw}); err != nil {
+			t.Fatal(err)
+		}
+		got := readSkipPresence(t, ctx, c)
+		if got.Type != "error" || got.Code != "protocol" {
+			t.Fatalf("%s want protocol error got %+v", tc.name, got)
+		}
+		if got.Message != "bad envelope" {
+			t.Fatalf("%s leaked parse error %q", tc.name, got.Message)
+		}
+		for _, leak := range []string{"too short", "bad magic", "ciphertext"} {
+			if strings.Contains(got.Message, leak) {
+				t.Fatalf("%s leaked %q", tc.name, leak)
+			}
+		}
+	}
+}

@@ -671,7 +671,7 @@ func (s *Server) handleSend(ctx context.Context, from *clientConn, raw []byte) {
 	}
 	parsed, err := envelope.Parse(raw)
 	if err != nil {
-		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: err.Error()})
+		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "bad envelope"})
 		return
 	}
 	if parsed.Meta.Version != envelope.ProtocolVersion {
