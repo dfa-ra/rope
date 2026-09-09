@@ -454,10 +454,21 @@ func TestConcurrentTwoOwnerRevokeDevice(t *testing.T) {
 	}
 	t.Cleanup(func() { db.AfterOwnerDeviceCount = nil })
 
+	// Each owner revokes the other's device. Signing both requests as the
+	// same device is not a two-actor race: if that device is revoked first,
+	// the second HTTP call is 401 at authenticate, not 409.
+	type pair struct {
+		target string
+		actor  testDevice
+	}
+	pairs := []pair{
+		{peer.id, owner},
+		{owner.id, peer},
+	}
 	reqs := make([]*http.Request, 0, 2)
-	for _, id := range []string{owner.id, peer.id} {
-		body := []byte(`{"device_id":"` + id + `"}`)
-		reqs = append(reqs, authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", body, owner))
+	for _, p := range pairs {
+		body := []byte(`{"device_id":"` + p.target + `"}`)
+		reqs = append(reqs, authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", body, p.actor))
 	}
 
 	type result struct {
@@ -485,7 +496,9 @@ func TestConcurrentTwoOwnerRevokeDevice(t *testing.T) {
 	got := []result{<-codes, <-codes}
 	db.AfterOwnerDeviceCount = nil
 
-	ok, conflict := 0, 0
+	// Safety: never both 200. The loser is 409 when both passed
+	// authenticate, or 401 if the winner revoked the other actor first.
+	ok, loser := 0, 0
 	for _, r := range got {
 		if r.err != nil {
 			t.Fatal(r.err)
@@ -493,14 +506,17 @@ func TestConcurrentTwoOwnerRevokeDevice(t *testing.T) {
 		switch r.code {
 		case 200:
 			ok++
-		case 409:
-			conflict++
+		case 409, 401:
+			loser++
 		default:
 			t.Fatalf("concurrent revoke-device statuses %v %v", got[0], got[1])
 		}
 	}
-	if ok != 1 || conflict != 1 {
-		t.Fatalf("concurrent two-owner revoke-device wanted one 200 and one 409, got %d and %d", got[0].code, got[1].code)
+	if ok == 2 {
+		t.Fatalf("both 200 — last-owner device invariant broken: %d and %d", got[0].code, got[1].code)
+	}
+	if ok != 1 || loser != 1 {
+		t.Fatalf("concurrent two-owner revoke-device wanted one 200 and one 401/409, got %d and %d", got[0].code, got[1].code)
 	}
 	n, err := s.Store.OwnerDeviceCount()
 	if err != nil || n != 1 {
