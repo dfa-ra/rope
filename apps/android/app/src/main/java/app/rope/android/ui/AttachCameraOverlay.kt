@@ -347,7 +347,7 @@ fun AttachSheetCameraCell(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(72.dp)
-            .clip(RoundedCornerShape(RopeShapes.media))
+            .clip(RoundedCornerShape(12.dp))
             .clickable {
                 camera.release()
                 onClick()

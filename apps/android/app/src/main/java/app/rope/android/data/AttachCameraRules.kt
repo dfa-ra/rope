@@ -84,11 +84,8 @@ object AttachCameraRules {
     fun isPreferredAspect(width: Int, height: Int): Boolean {
         if (width <= 0 || height <= 0) return false
         val r = width.toFloat() / height.toFloat()
-        val a = kotlin.math.abs
-        return a(r - 16f / 9f) < 0.08f ||
-            a(r - 4f / 3f) < 0.08f ||
-            a(r - 9f / 16f) < 0.08f ||
-            a(r - 3f / 4f) < 0.08f
+        fun near(target: Float) = kotlin.math.abs(r - target) < 0.08f
+        return near(16f / 9f) || near(4f / 3f) || near(9f / 16f) || near(3f / 4f)
     }
 
     fun pickPreview(sizes: List<Size>, maxEdge: Int = MAX_PREVIEW_EDGE): Size? {

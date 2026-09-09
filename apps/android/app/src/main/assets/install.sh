@@ -586,11 +586,11 @@ turns_bound() {
 }
 
 install_coturn() {
-  if ! command -v turnserver >/dev/null 2>&1; then
+  if ! command -v turnserver >/dev/null 2>&1 || ! command -v ip >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     if command -v apt-get >/dev/null 2>&1; then
       apt-get update -qq
-      apt-get install -y -qq coturn
+      apt-get install -y -qq coturn iproute2
     else
       echo "ROPE_TURN_SKIPPED=no-apt" >&2
       write_turn_status 0 "нет apt, coturn не установлен" "" ""
