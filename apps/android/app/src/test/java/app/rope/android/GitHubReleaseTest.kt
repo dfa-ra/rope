@@ -1,8 +1,11 @@
 package app.rope.android
 
+import app.rope.android.provision.GitHubAssetRef
 import app.rope.android.provision.GitHubRelease
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GitHubReleaseTest {
@@ -37,5 +40,34 @@ class GitHubReleaseTest {
     @Test
     fun rejectNonGithub() {
         assertNull(GitHubRelease.parseBrowserUrl("https://example.com/rope-server"))
+    }
+
+    @Test
+    fun rejectPathMetacharacters() {
+        assertNull(
+            GitHubRelease.parseBrowserUrl(
+                "https://github.com/dfa-ra/rope/releases/download/../rope-server-linux-amd64",
+            ),
+        )
+        assertNull(
+            GitHubRelease.parseBrowserUrl(
+                "https://github.com/dfa-ra/rope/releases/download/v0.1.0%3Ffoo/rope-server-linux-amd64",
+            ),
+        )
+        assertNull(
+            GitHubRelease.parseBrowserUrl(
+                "https://github.com/evil.com%2F..%2Fdfa-ra/rope/releases/latest/download/rope-server-linux-amd64",
+            ),
+        )
+        assertFalse(GitHubRelease.pathToken(".."))
+        assertFalse(GitHubRelease.pathToken("v0.1.0?x=1"))
+        assertFalse(GitHubRelease.pathToken("dfa-ra/../other"))
+        assertTrue(GitHubRelease.pathToken("dfa-ra"))
+        assertTrue(GitHubRelease.pathToken("v0.3.48"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun apiReleaseUrlRejectsDotDotTag() {
+        GitHubRelease.apiReleaseUrl(GitHubAssetRef("dfa-ra", "rope", "asset", ".."))
     }
 }
