@@ -161,23 +161,43 @@ func (s *Server) logTurn() {
 	}
 }
 
-func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	out := map[string]any{"ok": true, "turn_running": false, "turn_allocate_ok": false}
-	if s.Cfg.IceEnabled() {
-		turn := s.Cfg.ProbeTurn(800 * time.Millisecond)
-		out["turn_running"] = turn.Running
-		out["turn_allocate_ok"] = turn.AllocateOK
-		out["turns_listening"] = turn.TurnsListening
-		out["turn_port"] = turn.TurnPort
-		out["turns_port"] = turn.TurnsPort
-		if turn.RelayedIP != "" {
-			out["turn_relayed_ip"] = turn.RelayedIP
-		}
-		if turn.Error != "" {
-			out["turn_error"] = turn.Error
-		}
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	var turn config.TurnReport
+	ice := s.Cfg.IceEnabled()
+	if ice {
+		turn = s.Cfg.ProbeTurn(800 * time.Millisecond)
 	}
-	writeJSON(w, 200, out)
+	writeJSON(w, 200, healthJSON(ice, addrIsLoopback(r.RemoteAddr), turn))
+}
+
+// healthJSON is the unauthenticated /health body.
+// TURN ports, relayed IP, and error strings stay on loopback so install.sh
+// can self-test; the public internet only gets booleans.
+func healthJSON(ice, loopback bool, turn config.TurnReport) map[string]any {
+	out := map[string]any{"ok": true, "turn_running": false, "turn_allocate_ok": false}
+	if !ice {
+		return out
+	}
+	out["turn_running"] = turn.Running
+	out["turn_allocate_ok"] = turn.AllocateOK
+	if !loopback {
+		return out
+	}
+	out["turns_listening"] = turn.TurnsListening
+	out["turn_port"] = turn.TurnPort
+	out["turns_port"] = turn.TurnsPort
+	if turn.RelayedIP != "" {
+		out["turn_relayed_ip"] = turn.RelayedIP
+	}
+	if turn.Error != "" {
+		out["turn_error"] = turn.Error
+	}
+	return out
+}
+
+func addrIsLoopback(remoteAddr string) bool {
+	ip := net.ParseIP(clientIP(&http.Request{RemoteAddr: remoteAddr}))
+	return ip != nil && ip.IsLoopback()
 }
 
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {

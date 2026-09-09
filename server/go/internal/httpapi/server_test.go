@@ -402,6 +402,49 @@ func TestClientIPIgnoresXForwardedFor(t *testing.T) {
 	}
 }
 
+func TestHealthHidesTurnAddressOffLoopback(t *testing.T) {
+	turn := config.TurnReport{
+		Running:        true,
+		AllocateOK:     true,
+		TurnsListening: true,
+		RelayedIP:      "203.0.113.9",
+		TurnPort:       3478,
+		TurnsPort:      443,
+		Error:          "should stay local",
+	}
+	pub := healthJSON(true, false, turn)
+	if pub["ok"] != true || pub["turn_running"] != true || pub["turn_allocate_ok"] != true {
+		t.Fatalf("public health %+v", pub)
+	}
+	for _, k := range []string{"turn_relayed_ip", "turn_port", "turns_port", "turns_listening", "turn_error"} {
+		if _, ok := pub[k]; ok {
+			t.Fatalf("public health leaked %s: %+v", k, pub)
+		}
+	}
+	loc := healthJSON(true, true, turn)
+	if loc["turn_relayed_ip"] != "203.0.113.9" {
+		t.Fatalf("loopback health missing relayed ip: %+v", loc)
+	}
+	if loc["turn_port"] != 3478 || loc["turns_port"] != 443 {
+		t.Fatalf("loopback health missing ports: %+v", loc)
+	}
+	if loc["turn_error"] != "should stay local" {
+		t.Fatalf("loopback health missing error: %+v", loc)
+	}
+	if !addrIsLoopback("127.0.0.1:9") || !addrIsLoopback("[::1]:9") {
+		t.Fatal("loopback RemoteAddr must be local")
+	}
+	if addrIsLoopback("203.0.113.9:4321") {
+		t.Fatal("public RemoteAddr must not be local")
+	}
+	r := httptest.NewRequest(http.MethodGet, "/health", nil)
+	r.RemoteAddr = "203.0.113.9:4321"
+	r.Header.Set("X-Forwarded-For", "127.0.0.1")
+	if addrIsLoopback(r.RemoteAddr) {
+		t.Fatal("X-Forwarded-For must not make health loopback")
+	}
+}
+
 func TestInfoBadAuthDoesNotLeakIce(t *testing.T) {
 	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "198.51.100.20"
