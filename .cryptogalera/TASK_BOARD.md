@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; Voice notes 2.0 tagged v0.3.33; do not merge 0.3.34 in this record | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; peer-bound signaling tagged v0.3.34; do not merge 0.3.35 in this record | — |
+| CG-176 | Slice: peer-bound call signaling + install-status as 0.3.34 | PO | DONE | shipped v0.3.34; D-048; CallLink peer bind + non-exported install receiver; D-031 stays org law | CG-007 |
+| CG-177 | Android: peer-bound SDP/ICE + InstallStatusReceiver | AND-01 | DONE | D-048; Kotlin never crypto | CG-176 |
+| CG-178 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; peer-bound signaling tagged; do not merge 0.3.35 in this record | CG-177 |
+| CG-179 | Ship **0.3.34** | PO | DONE | tag v0.3.34 = 1f1b81b; versionCode 58; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32 / v0.3.33 unchanged | CG-178 |
 | CG-172 | Slice: Voice notes 2.0 as 0.3.33 | PO | DONE | shipped v0.3.33; D-047; 1.5x/2x, seekable waveform, кружок; D-031 stays org law | CG-007 |
 | CG-173 | Android: Voice notes 2.0 + round video notes | AND-01 | DONE | D-047; Kotlin never crypto; in-call camera untouched | CG-172 |
 | CG-174 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; Voice notes 2.0 tagged; do not merge 0.3.34 in this record | CG-173 |
@@ -148,4 +152,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, or `v0.3.33`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, `v0.3.33`, or `v0.3.34`.**
