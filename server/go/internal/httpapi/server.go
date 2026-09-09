@@ -367,7 +367,7 @@ func (s *Server) withAuthLimit(limit int64, fn func(http.ResponseWriter, *http.R
 	}
 }
 
-func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ []byte) {
+func (s *Server) directory(w http.ResponseWriter, _ *http.Request, a authed, _ []byte) {
 	members, err := s.Store.ListMembers()
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
@@ -392,8 +392,12 @@ func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ [
 		Online         bool   `json:"online"`
 		Revoked        bool   `json:"revoked"`
 	}
+	owner := a.Member.Role == "owner"
 	outM := []mJSON{}
 	for _, m := range members {
+		if m.Revoked && !owner {
+			continue
+		}
 		outM = append(outM, mJSON{m.ID, m.DisplayName, m.Role, m.Revoked})
 	}
 	outD := []dJSON{}

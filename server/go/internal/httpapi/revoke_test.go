@@ -121,6 +121,98 @@ func TestOwnerRevokeMemberDropsFromDirectory(t *testing.T) {
 	}
 }
 
+func TestDirectoryOmitsRevokedMembersForGuests(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	gone := newDevice(t)
+	live := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+	invite := func() string {
+		req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), owner)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var inv struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&inv); err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return inv.Token
+	}
+	bootstrap(t, hs, invite(), gone, "gone")
+	bootstrap(t, hs, invite(), live, "live")
+
+	type dirJSON struct {
+		Members []struct {
+			MemberID    string `json:"member_id"`
+			DisplayName string `json:"display_name"`
+			Revoked     bool   `json:"revoked"`
+		} `json:"members"`
+		Devices []struct {
+			DeviceID string `json:"device_id"`
+			MemberID string `json:"member_id"`
+		} `json:"devices"`
+	}
+	readDir := func(d testDevice) dirJSON {
+		req := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, d)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			b, _ := io.ReadAll(resp.Body)
+			t.Fatalf("directory %d %s", resp.StatusCode, b)
+		}
+		var out dirJSON
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+
+	var goneMember string
+	for _, d := range readDir(owner).Devices {
+		if d.DeviceID == gone.id {
+			goneMember = d.MemberID
+		}
+	}
+	if goneMember == "" {
+		t.Fatal("gone missing")
+	}
+	rev := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-member", "/v1/admin/revoke-member", []byte(`{"member_id":"`+goneMember+`"}`), owner)
+	resp, err := http.DefaultClient.Do(rev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("revoke %d", resp.StatusCode)
+	}
+
+	ownerDir := readDir(owner)
+	var ownerSawRevoked bool
+	for _, m := range ownerDir.Members {
+		if m.MemberID == goneMember {
+			ownerSawRevoked = m.Revoked
+		}
+	}
+	if !ownerSawRevoked {
+		t.Fatal("owner should still see revoked member")
+	}
+
+	liveDir := readDir(live)
+	for _, m := range liveDir.Members {
+		if m.MemberID == goneMember || m.DisplayName == "gone" {
+			t.Fatalf("guest directory leaked revoked member %+v", m)
+		}
+	}
+}
+
 func TestLastOwnerCannotRevokeSelf(t *testing.T) {
 	_, hs, setup := testServer(t)
 	owner := newDevice(t)
