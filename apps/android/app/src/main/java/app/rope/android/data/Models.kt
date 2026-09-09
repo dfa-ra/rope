@@ -102,6 +102,7 @@ data class Conversation(
     val muted: Boolean = false,
     val unread: Int = 0,
     val archived: Boolean = false,
+    val mentioned: Boolean = false,
 )
 
 enum class CallPhase { RINGING_IN, RINGING_OUT, ACTIVE, ENDED }

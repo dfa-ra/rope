@@ -47,6 +47,7 @@ class SavedMessagesRulesTest {
         assertEquals("Избранное", conv.title)
         assertTrue(conv.pinned)
         assertEquals(0, conv.unread)
+        assertFalse(conv.mentioned)
         assertFalse(conv.isGroup)
         assertFalse(conv.online)
         assertEquals(SavedMessagesRules.ID, conv.peer?.deviceId)

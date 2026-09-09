@@ -127,6 +127,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
@@ -154,6 +156,7 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.MentionBadgeRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -657,6 +660,23 @@ internal fun ConversationRow(
                         modifier = Modifier.weight(1f),
                     )
                     val badge = UnreadBadgeRules.kind(c.unread, c.muted)
+                    if (MentionBadgeRules.showMark(c.mentioned)) {
+                        Box(
+                            Modifier
+                                .padding(start = 8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .semantics { contentDescription = MentionBadgeRules.LABEL },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                MentionBadgeRules.MARK,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
                     if (badge != UnreadBadgeKind.NONE) {
                         val badgeBg = when (badge) {
                             UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.primary
@@ -670,7 +690,7 @@ internal fun ConversationRow(
                         }
                         Box(
                             Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = if (c.mentioned) 4.dp else 8.dp)
                                 .clip(CircleShape)
                                 .background(badgeBg)
                                 .padding(horizontal = 7.dp, vertical = 3.dp),

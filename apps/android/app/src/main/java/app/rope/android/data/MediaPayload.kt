@@ -411,6 +411,7 @@ data class ChatPrefs(
     val draft: String = "",
     val pinnedMessageId: String? = null,
     val archived: Boolean = false,
+    val unreadMentions: Int = 0,
 ) {
     fun toJson(): String = JSONObject()
         .put("pinned", pinned)
@@ -420,6 +421,7 @@ data class ChatPrefs(
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
         .put("archived", archived)
+        .put("unread_mentions", unreadMentions)
         .toString()
 
     companion object {
@@ -435,6 +437,7 @@ data class ChatPrefs(
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
                     archived = o.optBoolean("archived"),
+                    unreadMentions = o.optInt("unread_mentions"),
                 )
             } catch (_: Exception) {
                 ChatPrefs()

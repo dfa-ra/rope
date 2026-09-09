@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.MentionBadgeRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -2131,7 +2132,7 @@ class RopeRepository(private val app: Application) {
         } else {
             emptyList()
         }
-        store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
+        store.saveChatPrefs(chatId, MentionBadgeRules.afterOpened(prefs, System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
             group = group,
@@ -2491,6 +2492,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                mentioned = MentionBadgeRules.mentioned(p.unreadMentions),
             )
         }
         val gs = groups.map { g ->
@@ -2515,6 +2517,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                mentioned = MentionBadgeRules.mentioned(p.unreadMentions),
             )
         }
         val leftover = lastBy.keys
@@ -2544,6 +2547,7 @@ class RopeRepository(private val app: Application) {
                     muted = p.muted,
                     unread = p.unread,
                     archived = p.archived,
+                    mentioned = MentionBadgeRules.mentioned(p.unreadMentions),
                 )
             }
         val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])
@@ -3403,7 +3407,15 @@ class RopeRepository(private val app: Application) {
         val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val cur = store.chatPrefs(chatId)
         if (!chatOpen || !appForeground) {
-            store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
+            store.saveChatPrefs(
+                chatId,
+                MentionBadgeRules.afterHidden(
+                    cur,
+                    ChatIds.isGroup(chatId),
+                    body,
+                    _state.value.profile?.displayName.orEmpty(),
+                ),
+            )
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
