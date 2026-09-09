@@ -101,11 +101,12 @@ class GroupChatUxTest {
     }
 
     @Test
-    fun mentionSuggestionsPreferPrefixThenContains() {
+    fun mentionSuggestionsPreferPrefix() {
         val names = listOf("Аня", "Боря", "Анна", "Иван")
         assertEquals(listOf("Аня", "Анна"), GroupChatUx.mentionSuggestions("ан", names))
         assertEquals(listOf("Боря"), GroupChatUx.mentionSuggestions("бор", names))
-        assertEquals(listOf("Иван"), GroupChatUx.mentionSuggestions("ван", names))
+        assertEquals(listOf("Иван"), GroupChatUx.mentionSuggestions("ив", names))
+        assertTrue(GroupChatUx.mentionSuggestions("ван", names).isEmpty())
         assertEquals(names.take(GroupChatUx.MENTION_LIMIT), GroupChatUx.mentionSuggestions("", names))
         assertTrue(GroupChatUx.mentionSuggestions("xyz", names).isEmpty())
         val many = (1..12).map { "N$it" }

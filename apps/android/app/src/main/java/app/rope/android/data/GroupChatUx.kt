@@ -93,15 +93,7 @@ object GroupChatUx {
     fun mentionSuggestions(query: String, names: List<String>, limit: Int = MENTION_LIMIT): List<String> {
         val q = query.lowercase()
         val clean = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        val matched = if (q.isEmpty()) {
-            clean
-        } else {
-            val prefix = clean.filter { it.lowercase().startsWith(q) }
-            val rest = clean.filter { name ->
-                name !in prefix && name.lowercase().contains(q)
-            }
-            prefix + rest
-        }
+        val matched = if (q.isEmpty()) clean else clean.filter { it.lowercase().startsWith(q) }
         return matched.take(limit)
     }
 
