@@ -135,6 +135,9 @@ func TestHealthAndInfo(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatal(resp.StatusCode)
 	}
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("health Cache-Control %q", resp.Header.Get("Cache-Control"))
+	}
 	if health["ok"] != true {
 		t.Fatalf("health %+v", health)
 	}
@@ -149,6 +152,9 @@ func TestHealthAndInfo(t *testing.T) {
 	var info map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		t.Fatal(err)
+	}
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("info Cache-Control %q", resp.Header.Get("Cache-Control"))
 	}
 	if info["server_id"] != "test-server" {
 		t.Fatalf("%v", info)
