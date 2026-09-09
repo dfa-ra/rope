@@ -87,6 +87,59 @@ class GroupChatUxTest {
     }
 
     @Test
+    fun mentionQueryStartsAfterAtOrWhitespace() {
+        val bare = GroupChatUx.mentionQuery("@", 1)
+        assertEquals(0, bare?.atIndex)
+        assertEquals("", bare?.query)
+        val mid = GroupChatUx.mentionQuery("Эй @Ан", 6)
+        assertEquals(3, mid?.atIndex)
+        assertEquals("Ан", mid?.query)
+        assertEquals("Аня", GroupChatUx.mentionQuery("Эй @Аня", 7)?.query)
+        assertEquals(null, GroupChatUx.mentionQuery("foo@bar", 7))
+        assertEquals(null, GroupChatUx.mentionQuery("Эй @Аня ещё", 11))
+        assertEquals(null, GroupChatUx.mentionQuery("@Аня", 0))
+    }
+
+    @Test
+    fun mentionSuggestionsPreferPrefixThenContains() {
+        val names = listOf("Аня", "Боря", "Анна", "Иван")
+        assertEquals(listOf("Аня", "Анна"), GroupChatUx.mentionSuggestions("ан", names))
+        assertEquals(listOf("Боря"), GroupChatUx.mentionSuggestions("бор", names))
+        assertEquals(listOf("Иван"), GroupChatUx.mentionSuggestions("ван", names))
+        assertEquals(names.take(GroupChatUx.MENTION_LIMIT), GroupChatUx.mentionSuggestions("", names))
+        assertTrue(GroupChatUx.mentionSuggestions("xyz", names).isEmpty())
+        val many = (1..12).map { "N$it" }
+        assertEquals(GroupChatUx.MENTION_LIMIT, GroupChatUx.mentionSuggestions("", many).size)
+    }
+
+    @Test
+    fun applyMentionReplacesQueryAndAddsSpace() {
+        val (text, cursor) = GroupChatUx.applyMention("Эй @Ан", 6, "Аня")
+        assertEquals("Эй @Аня ", text)
+        assertEquals(text.length, cursor)
+        val (again, _) = GroupChatUx.applyMention("просто текст", 5, "Аня")
+        assertEquals("просто текст", again)
+        val (lead, leadCur) = GroupChatUx.applyMention("@", 1, "Боря")
+        assertEquals("@Боря ", lead)
+        assertEquals(6, leadCur)
+    }
+
+    @Test
+    fun mentionCandidatesUseGroupMembersNotWholeDirectory() {
+        val names = mapOf("d1" to "Аня", "d2" to "Боря", "d9" to "Чужак")
+        val hits = GroupChatUx.mentionCandidates(
+            memberIds = listOf("d1", "me", "d2"),
+            namesById = names,
+            myId = "me",
+            myName = "Вика",
+        )
+        assertEquals(listOf("Аня", "Вика", "Боря"), hits)
+        assertFalse(hits.contains("Чужак"))
+        val selfBlank = GroupChatUx.mentionCandidates(listOf("me"), emptyMap(), "me", "")
+        assertEquals(listOf("Вы"), selfBlank)
+    }
+
+    @Test
     fun rolesAndManageFollowOrganizer() {
         val g = RopeGroup("g1", "Команда", 1, listOf("org", "mem"), createdBy = "org")
         assertEquals("организатор", GroupChatUx.memberRoleLabel("org", g))

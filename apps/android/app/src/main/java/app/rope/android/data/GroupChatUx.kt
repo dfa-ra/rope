@@ -75,6 +75,56 @@ object GroupChatUx {
         return SENDER_COLORS[Math.floorMod(key.hashCode(), SENDER_COLORS.size)]
     }
 
+    data class MentionQuery(val atIndex: Int, val query: String)
+
+    const val MENTION_LIMIT = 8
+
+    fun mentionQuery(text: String, cursor: Int): MentionQuery? {
+        if (cursor < 1 || cursor > text.length) return null
+        val before = text.substring(0, cursor)
+        val at = before.lastIndexOf('@')
+        if (at < 0) return null
+        if (at > 0 && !before[at - 1].isWhitespace()) return null
+        val query = before.substring(at + 1)
+        if (query.any { it.isWhitespace() }) return null
+        return MentionQuery(at, query)
+    }
+
+    fun mentionSuggestions(query: String, names: List<String>, limit: Int = MENTION_LIMIT): List<String> {
+        val q = query.lowercase()
+        val clean = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val matched = if (q.isEmpty()) {
+            clean
+        } else {
+            val prefix = clean.filter { it.lowercase().startsWith(q) }
+            val rest = clean.filter { name ->
+                name !in prefix && name.lowercase().contains(q)
+            }
+            prefix + rest
+        }
+        return matched.take(limit)
+    }
+
+    fun applyMention(text: String, cursor: Int, name: String): Pair<String, Int> {
+        val q = mentionQuery(text, cursor) ?: return text to cursor
+        val insert = "@${name.trim()} "
+        val next = text.substring(0, q.atIndex) + insert + text.substring(cursor)
+        return next to (q.atIndex + insert.length)
+    }
+
+    fun mentionCandidates(
+        memberIds: List<String>,
+        namesById: Map<String, String>,
+        myId: String?,
+        myName: String,
+    ): List<String> =
+        memberIds.map { id ->
+            when {
+                id == myId -> myName.ifBlank { YOU }
+                else -> namesById[id]?.ifBlank { null } ?: id.take(8)
+            }
+        }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
     fun mentionSpans(text: String, names: List<String>): List<IntRange> {
         if (text.isEmpty()) return emptyList()
         val sorted = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()

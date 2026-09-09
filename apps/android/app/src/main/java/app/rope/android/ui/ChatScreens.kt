@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -129,7 +130,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -768,11 +771,21 @@ fun ChatPane(
         state.group != null -> "${state.group.members.size} участников · ${if (online) "кто-то в сети" else "все офлайн"}"
         else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
     }
-    val mentionNames = remember(state.group, state.devices, state.profile?.displayName) {
-        (state.devices.map { it.displayName } + listOfNotNull(state.profile?.displayName, GroupChatUx.YOU))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
+    val mentionNames = remember(state.group, state.devices, state.profile?.deviceId, state.profile?.displayName) {
+        val g = state.group
+        if (g != null) {
+            GroupChatUx.mentionCandidates(
+                memberIds = g.members,
+                namesById = state.devices.associate { it.deviceId to it.displayName },
+                myId = state.profile?.deviceId,
+                myName = state.profile?.displayName.orEmpty(),
+            )
+        } else {
+            (state.devices.map { it.displayName } + listOfNotNull(state.profile?.displayName, GroupChatUx.YOU))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+        }
     }
     val visible = remember(state.messages, state.messageQuery) {
         state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
@@ -1103,6 +1116,7 @@ fun ChatPane(
         if (!selecting) {
             ComposerBar(
                 state = state,
+                mentionNames = mentionNames,
                 onDraft = onDraft,
                 onSend = onSend,
                 onAttach = { showAttach = true },
@@ -2226,8 +2240,54 @@ private fun FileBubble(m: ChatMessage) {
 }
 
 @Composable
+private fun MentionPicker(
+    names: List<String>,
+    onPick: (String) -> Unit,
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(RopeShapes.picker),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            names.forEachIndexed { i, name ->
+                if (i > 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(name) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    InitialsAvatar(
+                        title = name,
+                        group = false,
+                        online = false,
+                        size = 32.dp,
+                        tint = Color(GroupChatUx.senderColorArgb(name, name)),
+                        showPresence = false,
+                    )
+                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ComposerBar(
     state: UiState,
+    mentionNames: List<String> = emptyList(),
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onAttach: () -> Unit,
@@ -2241,13 +2301,13 @@ private fun ComposerBar(
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
     var showEmoji by remember { mutableStateOf(false) }
-    var localText by remember { mutableStateOf(state.draftText) }
+    var field by remember { mutableStateOf(TextFieldValue(state.draftText, TextRange(state.draftText.length))) }
     var lastSeenDraft by remember { mutableStateOf(state.draftText) }
     val scope = rememberCoroutineScope()
     var debounce by remember { mutableStateOf<Job?>(null) }
     val chatKey = state.group?.groupId ?: state.peer?.deviceId.orEmpty()
     LaunchedEffect(chatKey) {
-        localText = state.draftText
+        field = TextFieldValue(state.draftText, TextRange(state.draftText.length))
         lastSeenDraft = state.draftText
     }
     fun persistDraft(text: String) {
@@ -2257,10 +2317,16 @@ private fun ComposerBar(
             onDraft(text)
         }
     }
+    fun setDraft(next: String, cursor: Int = next.length) {
+        field = TextFieldValue(next, TextRange(cursor.coerceIn(0, next.length)))
+        persistDraft(next)
+    }
     LaunchedEffect(state.draftText) {
         if (state.draftText != lastSeenDraft) {
             lastSeenDraft = state.draftText
-            if (state.draftText != localText) localText = state.draftText
+            if (state.draftText != field.text) {
+                field = TextFieldValue(state.draftText, TextRange(state.draftText.length))
+            }
         }
     }
     BackHandler(enabled = showEmoji && !state.recording) { showEmoji = false }
@@ -2273,8 +2339,19 @@ private fun ComposerBar(
             showEmoji = false
         }
     }
+    val mentionHits = remember(field, mentionNames, state.group, state.recording) {
+        if (state.group == null || state.recording) {
+            emptyList()
+        } else {
+            val q = GroupChatUx.mentionQuery(field.text, field.selection.end)
+            q?.let { GroupChatUx.mentionSuggestions(it.query, mentionNames) }.orEmpty()
+        }
+    }
+    LaunchedEffect(mentionHits) {
+        if (mentionHits.isNotEmpty()) showEmoji = false
+    }
     val showSend = ComposerRules.showSendButton(
-        localText,
+        field.text,
         state.recording,
         recordingLocked,
         pendingMedia = state.pendingAttachments.isNotEmpty(),
@@ -2328,11 +2405,22 @@ private fun ComposerBar(
                     onDismiss = onDismissLinkPreview,
                 )
             }
-            if (showEmoji && !state.recording) {
+            if (mentionHits.isNotEmpty() && !state.recording) {
+                MentionPicker(
+                    names = mentionHits,
+                    onPick = { name ->
+                        val (next, cursor) = GroupChatUx.applyMention(field.text, field.selection.end, name)
+                        setDraft(next, cursor)
+                    },
+                )
+            }
+            if (showEmoji && !state.recording && mentionHits.isEmpty()) {
                 EmojiPickerPanel(
                     onPick = {
-                        localText += it
-                        persistDraft(localText)
+                        val start = field.selection.min
+                        val end = field.selection.max
+                        val next = field.text.substring(0, start) + it + field.text.substring(end)
+                        setDraft(next, start + it.length)
                     },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
@@ -2382,10 +2470,10 @@ private fun ComposerBar(
                                 )
                             }
                             BasicTextField(
-                                value = localText,
+                                value = field,
                                 onValueChange = {
-                                    localText = it
-                                    persistDraft(it)
+                                    field = it
+                                    persistDraft(it.text)
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -2397,7 +2485,7 @@ private fun ComposerBar(
                                 maxLines = 5,
                                 decorationBox = { inner ->
                                     Box {
-                                        if (localText.isEmpty()) {
+                                        if (field.text.isEmpty()) {
                                             Text(
                                                 if (state.pendingAttachments.isNotEmpty()) {
                                                     MediaSendRules.PLACEHOLDER
@@ -2423,7 +2511,7 @@ private fun ComposerBar(
                                 onVoiceFinish(true)
                             } else {
                                 debounce?.cancel()
-                                onDraft(localText)
+                                onDraft(field.text)
                                 onSend()
                             }
                         },
