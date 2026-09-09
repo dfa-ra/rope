@@ -153,6 +153,7 @@ fun CallOverlay(
     onToggleSpeaker: () -> Unit = {},
     onToggleCamera: () -> Unit = {},
     onFlipCamera: () -> Unit = {},
+    localMirror: Boolean = true,
     eglContext: () -> EglBase.Context? = { null },
     rtcReady: Boolean = false,
     onBindRemote: (VideoSink) -> Unit = {},
@@ -224,7 +225,7 @@ fun CallOverlay(
                         .padding(16.dp)
                         .width(112.dp)
                         .height(160.dp),
-                    mirror = true,
+                    mirror = localMirror,
                     eglContext = eglContext,
                     onBind = onBindLocal,
                     onUnbind = onUnbindLocal,
@@ -389,6 +390,7 @@ private fun CallVideoView(
                 onBind(this)
             }
         },
+        update = { view -> view.setMirror(mirror) },
         onRelease = { view ->
             onUnbind(view)
             view.release()

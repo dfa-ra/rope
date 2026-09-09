@@ -154,6 +154,17 @@ object VideoCallRules {
 
     fun flipCameraWhileSending(camMuted: Boolean): Boolean = !camMuted
 
+    /** Front camera PIP is mirrored; rear is not. */
+    fun localPreviewMirrored(frontFacing: Boolean): Boolean = frontFacing
+
+    /**
+     * Trickle ICE is a handful of candidates. An unbounded queue before
+     * setRemote (or after) is a memory/CPU hammer from the live peer.
+     */
+    const val ICE_PER_SESSION_CAP = 64
+
+    fun acceptIce(accepted: Int): Boolean = accepted in 0 until ICE_PER_SESSION_CAP
+
     /**
      * MainActivity handles orientation itself so an in-call TextureView is
      * not destroyed (EGL 0×0 / black remote after rotate).

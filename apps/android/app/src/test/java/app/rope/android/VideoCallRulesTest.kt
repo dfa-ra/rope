@@ -372,6 +372,13 @@ class VideoCallRulesTest {
         assertTrue(VideoCallRules.flipCameraWhileSending(camMuted = false))
         assertFalse(VideoCallRules.flipCameraWhileSending(camMuted = true))
         assertTrue(VideoCallRules.activityKeepsSurfacesOnRotate())
+        assertTrue(VideoCallRules.localPreviewMirrored(frontFacing = true))
+        assertFalse(VideoCallRules.localPreviewMirrored(frontFacing = false))
+        assertEquals(64, VideoCallRules.ICE_PER_SESSION_CAP)
+        assertTrue(VideoCallRules.acceptIce(0))
+        assertTrue(VideoCallRules.acceptIce(63))
+        assertFalse(VideoCallRules.acceptIce(64))
+        assertFalse(VideoCallRules.acceptIce(-1))
     }
 
     /**

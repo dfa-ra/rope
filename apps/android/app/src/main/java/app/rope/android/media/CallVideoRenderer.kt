@@ -71,6 +71,11 @@ class CallVideoRenderer(context: Context) :
         clipToOutline = true
     }
 
+    fun setMirror(on: Boolean) {
+        if (released || !started) return
+        eglRenderer.setMirror(on)
+    }
+
     override fun onFrame(frame: VideoFrame) {
         if (released || !started) return
         eglRenderer.onFrame(frame)

@@ -158,6 +158,7 @@ data class UiState(
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
     val callCamMuted: Boolean = false,
+    val callLocalMirrored: Boolean = true,
     val callNotice: String? = null,
     val callRtcReady: Boolean = false,
     val groupNameDraft: String = "",
@@ -3133,6 +3134,9 @@ class RopeRepository(private val app: Application) {
                         )
                     },
                     onRemoteVideo = { onRemoteVideoBound() },
+                    onLocalMirror = { mirrored ->
+                        _state.value = _state.value.copy(callLocalMirrored = mirrored)
+                    },
                 )
             } catch (e: Exception) {
                 notice(UserFacing.NO_PATH)
@@ -3326,6 +3330,7 @@ class RopeRepository(private val app: Application) {
             callMicMuted = false,
             callSpeakerOn = false,
             callCamMuted = false,
+            callLocalMirrored = true,
             callNotice = null,
             callRtcReady = false,
         )

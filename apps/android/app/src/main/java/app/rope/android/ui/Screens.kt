@@ -386,6 +386,7 @@ fun RopeScaffold(
             banner = state.callNotice,
             onToggleCamera = onToggleCallCamera,
             onFlipCamera = onFlipCallCamera,
+            localMirror = state.callLocalMirrored,
             eglContext = callEgl,
             rtcReady = state.callRtcReady,
             onBindRemote = onBindCallRemote,

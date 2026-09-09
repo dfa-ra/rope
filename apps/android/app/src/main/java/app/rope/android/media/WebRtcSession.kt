@@ -58,6 +58,7 @@ class WebRtcSession(
     private val onIce: (state: String, viaRelay: Boolean) -> Unit,
     private val onCameraFailed: () -> Unit = {},
     private val onRemoteVideo: () -> Unit = {},
+    private val onLocalMirror: (Boolean) -> Unit = {},
 ) {
     private val app = context.applicationContext
     private val plan = IceServers.plan(iceServers, hintHost, publicIp)
@@ -76,6 +77,8 @@ class WebRtcSession(
     private var remoteSink: VideoSink? = null
     private var videoWanted = wantVideo
     private var sendCamera = startCamera
+    private var frontFacing = true
+    private var iceTaken = 0
     private var callee = polite
     private val pendingIce = mutableListOf<IceCandidate>()
     private var remoteSet = false
@@ -358,7 +361,18 @@ class WebRtcSession(
 
     fun flipCamera() {
         if (closed || !sendCamera) return
-        (capturer as? CameraVideoCapturer)?.switchCamera(null)
+        val cap = capturer as? CameraVideoCapturer ?: return
+        cap.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+            override fun onCameraSwitchDone(isFrontCamera: Boolean) {
+                frontFacing = isFrontCamera
+                val mirrored = VideoCallRules.localPreviewMirrored(isFrontCamera)
+                (localSink as? CallVideoRenderer)?.setMirror(mirrored)
+                onLocalMirror(mirrored)
+            }
+            override fun onCameraSwitchError(errorDescription: String) {
+                Log.w("rope-webrtc", "flip: $errorDescription")
+            }
+        })
     }
 
     fun setCameraEnabled(on: Boolean) {
@@ -428,6 +442,11 @@ class WebRtcSession(
             }
             CallSignal.ICE -> {
                 if (!signal.wireSafe()) return
+                if (!VideoCallRules.acceptIce(iceTaken)) {
+                    Log.w("rope-webrtc", "drop ice: session cap ${VideoCallRules.ICE_PER_SESSION_CAP}")
+                    return
+                }
+                iceTaken++
                 if (CallMedia.isRelayCandidate(signal.candidate)) viaRelay = true
                 val mid = signal.sdpMid.trim().ifEmpty { "0" }
                 val ice = IceCandidate(mid, signal.sdpMLineIndex.coerceAtLeast(0), signal.candidate)
@@ -560,6 +579,7 @@ class WebRtcSession(
             val chosen = names.firstOrNull { enumerator.isFrontFacing(it) }
                 ?: names.firstOrNull()
                 ?: return false
+            frontFacing = enumerator.isFrontFacing(chosen)
             val cap = enumerator.createCapturer(chosen, null) ?: return false
             val helper = SurfaceTextureHelper.create("rope-capture", eglBase.eglBaseContext)
             val source = factory.createVideoSource(cap.isScreencast)
@@ -574,7 +594,8 @@ class WebRtcSession(
             videoSource = source
             videoTrack = track
             videoWanted = true
-            Log.i("rope-webrtc", "camera $chosen ${VideoCallRules.WIDTH}x${VideoCallRules.HEIGHT}")
+            onLocalMirror(VideoCallRules.localPreviewMirrored(frontFacing))
+            Log.i("rope-webrtc", "camera $chosen ${VideoCallRules.WIDTH}x${VideoCallRules.HEIGHT} front=$frontFacing")
             true
         } catch (e: Exception) {
             Log.w("rope-webrtc", "camera", e)
