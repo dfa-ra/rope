@@ -10,10 +10,10 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-079 | Android: revoke-member 404 is already-revoked | AND-01 | DONE | idempotent; no crypto | CG-077 |
 | CG-080 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-078, CG-079 |
 | CG-081 | Ship **0.3.10** | PO | IN_PROGRESS | versionCode 34; do not retag v0.3.9 | CG-080 |
-| CG-073 | Slice: atomic revoke-member last-owner 409 as 0.3.9 | PO | IN_PROGRESS | REV-01: concurrent two-owner revoke-member | CG-007 |
+| CG-073 | Slice: atomic revoke-member last-owner 409 as 0.3.9 | PO | DONE | shipped v0.3.9 | CG-007 |
 | CG-074 | Go: RevokeMemberGuarded BEGIN IMMEDIATE | GO-01 | DONE | same txn as RevokeDeviceGuarded | CG-073 |
-| CG-075 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-074 |
-| CG-076 | Ship **0.3.9** | PO | IN_PROGRESS | versionCode 33; do not retag v0.3.8 | CG-075 |
+| CG-075 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; already-revoked member 200 vs 404 is 0.3.10 | CG-074 |
+| CG-076 | Ship **0.3.9** | PO | DONE | tag v0.3.9 = 7432f81; versionCode 33; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 unchanged | CG-075 |
 | CG-068 | Slice: revoke-device 409 on owner devices as 0.3.8 | PO | DONE | shipped v0.3.8 | CG-007 |
 | CG-069 | Go: OwnerDeviceCount gate on POST /v1/admin/revoke-device | GO-01 | DONE | not OwnerCount members | CG-068 |
 | CG-070 | Android: canRevokeDevice uses ownerDeviceCount | AND-01 | DONE | unused API; People stays revoke-member | CG-068 |
