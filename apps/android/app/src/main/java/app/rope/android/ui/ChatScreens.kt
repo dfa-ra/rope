@@ -154,6 +154,7 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.MarkUnreadRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -205,6 +206,7 @@ fun ChatsPane(
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
+    onMarkUnread: (String) -> Unit = {},
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
@@ -310,6 +312,7 @@ fun ChatsPane(
                                     onClick = { onOpen(c) },
                                     onPin = { onPinChat(c.id) },
                                     onMute = { onMuteChat(c.id) },
+                                    onMarkUnread = { onMarkUnread(c.id) },
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
@@ -332,6 +335,7 @@ fun ChatsPane(
                                 onClick = { onOpen(c) },
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
+                                onMarkUnread = { onMarkUnread(c.id) },
                                 query = state.chatQuery,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
@@ -548,6 +552,7 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    onMarkUnread: (() -> Unit)? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -702,6 +707,11 @@ internal fun ConversationRow(
                 }
                 TextButton(onClick = { onMute(); menu = false }) {
                     Text(if (c.muted) "Включить звук" else "Без звука")
+                }
+                if (onMarkUnread != null && MarkUnreadRules.canMark(c)) {
+                    TextButton(onClick = { onMarkUnread(); menu = false }) {
+                        Text(MarkUnreadRules.label(c.unread))
+                    }
                 }
                 if (onArchive != null && ArchiveRules.canArchive(c.id)) {
                     TextButton(onClick = { onArchive(); menu = false }) {

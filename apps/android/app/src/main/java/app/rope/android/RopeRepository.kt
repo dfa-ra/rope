@@ -63,6 +63,7 @@ import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.MarkUnreadRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
@@ -768,6 +769,13 @@ class RopeRepository(private val app: Application) {
     fun toggleMuteChat(id: String) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
+        refreshConversations()
+    }
+
+    fun toggleMarkUnread(id: String) {
+        if (!MarkUnreadRules.canMark(id)) return
+        val cur = store.chatPrefs(id)
+        store.saveChatPrefs(id, MarkUnreadRules.apply(cur, System.currentTimeMillis()))
         refreshConversations()
     }
 
