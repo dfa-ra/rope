@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
@@ -143,6 +144,13 @@ class MainActivity : AppCompatActivity() {
             LaunchedEffect(state.pendingApkPath, state.installTick) {
                 startedInstallFor = null
                 if (state.pendingApkPath != null) tryInstallPending()
+            }
+            LaunchedEffect(state.screen) {
+                if (SecureDisplayRules.lockRecents(state.screen)) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
             }
             RopeTheme(mode = state.theme) {
                 RopeScaffold(
