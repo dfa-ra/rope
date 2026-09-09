@@ -1354,7 +1354,6 @@ private fun MessageBubble(
                         PollBubble(
                             poll = poll,
                             mine = mine,
-                            selfId = me,
                             accent = if (mine) outFg else senderColor,
                             headerModifier = Modifier.combinedClickable(
                                 onClick = onTap,
