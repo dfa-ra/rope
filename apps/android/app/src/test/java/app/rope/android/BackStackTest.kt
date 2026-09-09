@@ -161,6 +161,10 @@ class BackStackTest {
         val stack = listOf(Screen.Chats, Screen.Chat)
         val base = UiState(screen = Screen.Chat, backStack = stack)
         assertEquals(BackLayer.DismissCall, BackStack.decide(base.copy(call = ringingCall())))
+        assertEquals(
+            BackLayer.DismissCall,
+            BackStack.decide(base.copy(call = ringingCall(), viewingImage = photo)),
+        )
         assertEquals(BackLayer.CancelRecording, BackStack.decide(base.copy(recording = true)))
         assertEquals(BackLayer.CloseEmoji, BackStack.decide(base, OverlayHints(emojiOpen = true)))
         assertEquals(BackLayer.CloseSearch, BackStack.decide(base, OverlayHints(searchOpen = true)))
@@ -211,6 +215,59 @@ class BackStackTest {
         stack = BackStack.pop(stack)
         assertEquals(listOf(Screen.Chats, Screen.Chat), stack)
         assertEquals(Screen.Chat, BackStack.current(stack))
+        assertTrue(BackStack.composerLive(Screen.Chat))
+        assertFalse(BackStack.composerLive(Screen.PeerProfile))
+        assertFalse(BackStack.composerLive(Screen.GroupInfo))
+    }
+
+    @Test
+    fun peerProfileAndGroupInfoBackKeepStagedComposer() {
+        val profile = listOf(Screen.Chats, Screen.Chat, Screen.PeerProfile)
+        val group = listOf(Screen.Groups, Screen.Chat, Screen.GroupInfo)
+        assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(
+                UiState(screen = Screen.PeerProfile, backStack = profile, replyTo = photo),
+            ),
+        )
+        assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(
+                UiState(screen = Screen.PeerProfile, backStack = profile, recording = true),
+            ),
+        )
+        assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(
+                UiState(screen = Screen.GroupInfo, backStack = group, replyTo = photo),
+            ),
+        )
+        assertEquals(
+            BackLayer.Pop,
+            BackStack.decide(
+                UiState(screen = Screen.GroupInfo, backStack = group, recording = true),
+            ),
+        )
+        assertEquals(
+            BackLayer.CancelComposer,
+            BackStack.decide(
+                UiState(
+                    screen = Screen.Chat,
+                    backStack = listOf(Screen.Chats, Screen.Chat),
+                    replyTo = photo,
+                ),
+            ),
+        )
+        assertEquals(
+            BackLayer.CancelRecording,
+            BackStack.decide(
+                UiState(
+                    screen = Screen.Chat,
+                    backStack = listOf(Screen.Chats, Screen.Chat),
+                    recording = true,
+                ),
+            ),
+        )
     }
 
     private fun ringingCall() = CallInfo(

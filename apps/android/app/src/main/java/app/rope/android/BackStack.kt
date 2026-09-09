@@ -89,21 +89,31 @@ object BackStack {
         else -> null
     }
 
+    /** ComposerBar (and lock-to-record) only exist on Chat. Profile / group-info Back must Pop. */
+    fun composerLive(screen: Screen): Boolean = screen == Screen.Chat
+
     fun decide(state: UiState, hints: OverlayHints = OverlayHints()): BackLayer = when {
-        state.viewingImage != null -> BackLayer.CloseImage
         state.call != null -> BackLayer.DismissCall
-        state.recording -> BackLayer.CancelRecording
+        state.viewingImage != null -> BackLayer.CloseImage
+        composerLive(state.screen) && state.recording -> BackLayer.CancelRecording
         hints.emojiOpen -> BackLayer.CloseEmoji
         hints.searchOpen -> BackLayer.CloseSearch
         hints.dialogOpen -> BackLayer.CloseDialog
         state.messageQuery.isNotBlank() -> BackLayer.ClearMessageQuery
         state.chatQuery.isNotBlank() -> BackLayer.ClearChatQuery
         state.forwarding != null -> BackLayer.CancelForward
-        else -> composerBack(
-            state.replyTo != null,
-            state.editTarget != null,
-            state.pendingAttachments.size,
-        ) ?: if (canPop(currentStack(state.backStack, state.screen))) BackLayer.Pop else BackLayer.Exit
+        else -> {
+            val composer = if (composerLive(state.screen)) {
+                composerBack(
+                    state.replyTo != null,
+                    state.editTarget != null,
+                    state.pendingAttachments.size,
+                )
+            } else {
+                null
+            }
+            composer ?: if (canPop(currentStack(state.backStack, state.screen))) BackLayer.Pop else BackLayer.Exit
+        }
     }
 
     fun consumesSystemBack(state: UiState, hints: OverlayHints = OverlayHints()): Boolean =
