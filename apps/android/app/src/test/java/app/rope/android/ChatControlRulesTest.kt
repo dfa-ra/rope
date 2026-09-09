@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
@@ -69,6 +70,27 @@ class ChatControlRulesTest {
         assertFalse(ChatControlRules.allowReact(bob, groupMsg, null))
         assertFalse(ChatControlRules.allowReact(bob, dm.copy(deleted = true), null))
         assertFalse(ChatControlRules.allowReact(bob, null, listOf(bob)))
+    }
+
+    @Test
+    fun expireDoesNotWipeUnknownOrForeignUuid() {
+        val dm = msg(alice, peer = bob)
+        assertTrue(ChatControlRules.allowExpire(bob, dm, null))
+        assertFalse(ChatControlRules.allowExpire(alice, dm, null))
+        assertFalse(ChatControlRules.allowExpire(bob, null, null))
+        assertFalse(ChatControlRules.allowExpire(bob, dm.copy(deleted = true), null))
+        val stranger = "c".repeat(64)
+        assertFalse(ChatControlRules.allowExpire(stranger, dm, null))
+        val gid = "11111111-2222-3333-4444-555555555555"
+        val groupMsg = msg(alice, groupId = gid)
+        assertTrue(ChatControlRules.allowExpire(bob, groupMsg, listOf(alice, bob)))
+        assertFalse(ChatControlRules.allowExpire(bob, groupMsg, listOf(alice)))
+        assertFalse(ChatControlRules.allowExpire(bob, groupMsg, null))
+        assertFalse(ChatControlRules.allowExpire(stranger, groupMsg, listOf(alice, bob)))
+        val parsed = ChatControl.parse(ChatControl(ChatControl.EXPIRE, "m-unknown").toJson())
+        assertEquals(ChatControl.EXPIRE, parsed?.kind)
+        assertEquals("m-unknown", parsed?.targetId)
+        assertNull(ChatControl.parse("""{"kind":"expire"}"""))
     }
 
     @Test

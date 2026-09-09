@@ -2816,6 +2816,15 @@ class RopeRepository(private val app: Application) {
                             }
                         }
                     }
+                    control?.kind == ChatControl.EXPIRE -> {
+                        val target = store.message(control.targetId)
+                        val gid = JsonIds.optional(target?.groupId)
+                            ?: target?.peerDeviceId?.takeIf { ChatIds.isGroup(it) }?.let { ChatIds.rawGroupId(it) }
+                        val members = gid?.let { store.group(it)?.members }
+                        if (ChatControlRules.allowExpire(sender.deviceId, target, members) && target != null) {
+                            store.markDeleted(control.targetId)
+                        }
+                    }
                     reaction != null -> {
                         val target = store.message(reaction.targetId)
                         val gid = JsonIds.optional(target?.groupId)
