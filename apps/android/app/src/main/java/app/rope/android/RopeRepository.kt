@@ -60,6 +60,7 @@ import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
 import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.NicknameRules
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
@@ -185,6 +186,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val nicks: Map<String, String> = emptyMap(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -254,6 +256,7 @@ class RopeRepository(private val app: Application) {
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
                 _state.value = _state.value.copy(
                     theme = store.themeMode(night),
+                    nicks = store.nicknames(),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
@@ -578,6 +581,17 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun setNickname(deviceId: String, raw: String?) {
+        val id = deviceId.trim()
+        if (id.isEmpty() || SavedMessagesRules.isSaved(id) || ChatIds.isGroup(id)) return
+        val next = store.nicknames().toMutableMap()
+        val name = NicknameRules.normalize(raw)
+        if (name.isEmpty()) next.remove(id) else next[id] = name
+        store.saveNicknames(next)
+        _state.value = _state.value.copy(nicks = next)
+        refreshConversations()
     }
 
     fun toggleNotificationsMuted() {
@@ -2470,12 +2484,13 @@ class RopeRepository(private val app: Application) {
         val groups = _state.value.groups
         val lastBy = store.conversations().associate { it.first to it.second }
         val prefs = store.allChatPrefs()
+        val nicks = store.nicknames()
         val dms = devices.map { d ->
             val last = lastBy[d.deviceId]
             val p = prefs[d.deviceId] ?: ChatPrefs()
             Conversation(
                 id = d.deviceId,
-                title = d.displayName.ifBlank { d.deviceId.take(8) },
+                title = NicknameRules.display(nicks[d.deviceId], d.displayName, d.deviceId),
                 subtitle = ChatListPreviewRules.copy(
                     last = last,
                     draft = p.draft,
@@ -2528,7 +2543,11 @@ class RopeRepository(private val app: Application) {
                 val p = prefs[id] ?: ChatPrefs()
                 Conversation(
                     id = id,
-                    title = id.take(8),
+                    title = NicknameRules.display(
+                        nicks[id],
+                        devices.find { it.deviceId == id }?.displayName,
+                        id,
+                    ),
                     subtitle = ChatListPreviewRules.copy(
                         last = lastBy[id],
                         draft = p.draft,

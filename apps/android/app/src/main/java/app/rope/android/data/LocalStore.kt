@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun nicknames(): Map<String, String> = NicknameRules.parse(get("peer_nicks"))
+
+    fun saveNicknames(map: Map<String, String>) {
+        put("peer_nicks", NicknameRules.toJson(map))
+    }
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

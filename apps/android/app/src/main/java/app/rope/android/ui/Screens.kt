@@ -139,6 +139,7 @@ fun RopeScaffold(
     onRemoveMember: (String) -> Unit,
     onLeaveGroup: () -> Unit = {},
     onRevokeMember: (String) -> Unit = {},
+    onSetNickname: (String, String) -> Unit = { _, _ -> },
     onAcceptCall: () -> Unit,
     onRejectCall: () -> Unit,
     onHangup: () -> Unit,
@@ -304,7 +305,7 @@ fun RopeScaffold(
                             listMode = NavRules.listMode(screen),
                         )
                         Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)
-                        Screen.People -> PeoplePane(state, onOpenConversation, onInvite, onRevokeMember)
+                        Screen.People -> PeoplePane(state, onOpenConversation, onInvite, onRevokeMember, onSetNickname)
                         Screen.Chat -> app.rope.android.ui.ChatPane(
                             state, onDraft, onSend, onAttach, onVoiceStart, onVoiceFinish, onCall, onVideoCall, onPlay,
                             onReact, onEnsureMedia,

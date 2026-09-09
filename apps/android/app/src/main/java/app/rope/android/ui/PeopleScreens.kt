@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +27,7 @@ import app.rope.android.NavRules
 import app.rope.android.UiState
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
+import app.rope.android.data.NicknameRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 
@@ -34,10 +37,13 @@ fun PeoplePane(
     onOpen: (Conversation) -> Unit,
     onInvite: () -> Unit,
     onRevokeMember: (String) -> Unit = {},
+    onSetNickname: (String, String) -> Unit = { _, _ -> },
 ) {
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val canRevoke = RevokeRules.canRevoke(state.profile?.role)
     var pendingMemberId by remember { mutableStateOf<String?>(null) }
+    var nickEdit by remember { mutableStateOf<DirectoryDevice?>(null) }
+    var nickDraft by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
         if (people.isEmpty()) {
             val role = state.profile?.role
@@ -66,6 +72,7 @@ fun PeoplePane(
                     FadeIn(0) {
                         PersonRow(
                             d = d,
+                            nick = state.nicks[d.deviceId],
                             showRevoke = RevokeRules.canRevokeTarget(
                                 state.profile?.role,
                                 state.profile?.memberId,
@@ -74,7 +81,9 @@ fun PeoplePane(
                             ),
                             confirming = pendingMemberId == d.memberId,
                             onOpen = {
-                                if (pendingMemberId != d.memberId) onOpen(conversationOf(d))
+                                if (pendingMemberId != d.memberId) {
+                                    onOpen(conversationOf(d, state.nicks[d.deviceId]))
+                                }
                             },
                             onAskRevoke = { pendingMemberId = d.memberId },
                             onConfirmRevoke = {
@@ -82,24 +91,82 @@ fun PeoplePane(
                                 pendingMemberId = null
                             },
                             onCancelRevoke = { pendingMemberId = null },
+                            onEditNick = {
+                                nickEdit = d
+                                nickDraft = state.nicks[d.deviceId].orEmpty()
+                            },
                         )
                     }
                 }
             }
         }
     }
+
+    val editing = nickEdit
+    if (editing != null) {
+        AlertDialog(
+            onDismissRequest = { nickEdit = null },
+            title = { Text(NicknameRules.DIALOG_TITLE) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val orig = editing.displayName.trim()
+                    if (orig.isNotEmpty()) {
+                        Text("Сейчас: $orig", style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedTextField(
+                        value = nickDraft,
+                        onValueChange = { nickDraft = it.take(NicknameRules.MAX) },
+                        singleLine = true,
+                        label = { Text(NicknameRules.ACTION) },
+                        supportingText = { Text("Пустое поле вернёт имя с сервера") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onSetNickname(editing.deviceId, nickDraft)
+                        nickEdit = null
+                    },
+                ) {
+                    Text(NicknameRules.SAVE)
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (NicknameRules.isCustom(state.nicks[editing.deviceId])) {
+                        TextButton(
+                            onClick = {
+                                onSetNickname(editing.deviceId, "")
+                                nickEdit = null
+                            },
+                        ) {
+                            Text(NicknameRules.RESET)
+                        }
+                    }
+                    TextButton(onClick = { nickEdit = null }) {
+                        Text(NicknameRules.CANCEL)
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun PersonRow(
     d: DirectoryDevice,
+    nick: String?,
     showRevoke: Boolean,
     confirming: Boolean,
     onOpen: () -> Unit,
     onAskRevoke: () -> Unit,
     onConfirmRevoke: () -> Unit,
     onCancelRevoke: () -> Unit,
+    onEditNick: () -> Unit,
 ) {
+    val shown = NicknameRules.display(nick, d.displayName, d.deviceId)
+    val original = NicknameRules.originalLine(nick, d.displayName)
     Row(
         Modifier
             .fillMaxWidth()
@@ -114,11 +181,18 @@ private fun PersonRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            InitialsAvatar(d.displayName.ifBlank { "?" }, group = false, online = d.online)
+            InitialsAvatar(shown.ifBlank { "?" }, group = false, online = d.online)
             Column(Modifier.weight(1f)) {
-                Text(d.displayName.ifBlank { d.deviceId.take(8) }, style = MaterialTheme.typography.titleMedium)
+                Text(shown, style = MaterialTheme.typography.titleMedium)
+                if (original != null && !confirming) {
+                    Text(
+                        original,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
-                    if (confirming) RevokeRules.confirmPrompt(d.displayName.ifBlank { d.deviceId.take(8) })
+                    if (confirming) RevokeRules.confirmPrompt(shown)
                     else if (d.online) "в сети" else "не в сети",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (confirming) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -130,6 +204,14 @@ private fun PersonRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+        if (!confirming) {
+            TextButton(
+                onClick = onEditNick,
+                modifier = Modifier.semantics { contentDescription = NicknameRules.ACTION },
+            ) {
+                Text(NicknameRules.ACTION)
             }
         }
         if (showRevoke) {
@@ -157,9 +239,9 @@ private fun PersonRow(
     }
 }
 
-internal fun conversationOf(d: DirectoryDevice): Conversation = Conversation(
+internal fun conversationOf(d: DirectoryDevice, nick: String? = null): Conversation = Conversation(
     id = d.deviceId,
-    title = d.displayName.ifBlank { d.deviceId.take(8) },
+    title = NicknameRules.display(nick, d.displayName, d.deviceId),
     subtitle = if (d.online) "в сети" else "не в сети",
     isGroup = false,
     online = d.online,

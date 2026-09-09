@@ -206,6 +206,7 @@ class MainActivity : AppCompatActivity() {
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,
                     onRevokeMember = repo::revokeMember,
+                    onSetNickname = repo::setNickname,
                     onAcceptCall = {
                         val video = (application as RopeApp).repo.state.value.call?.video == true
                         if (video) withCallMedia("accept") { repo.acceptCall() }

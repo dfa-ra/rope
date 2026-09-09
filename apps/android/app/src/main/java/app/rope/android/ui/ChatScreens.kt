@@ -173,6 +173,7 @@ import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
+import app.rope.android.data.NicknameRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
@@ -757,7 +758,15 @@ fun ChatPane(
     onVideoNotePreviewGone: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
-    val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
+    val title = when {
+        saved -> SavedMessagesRules.TITLE
+        state.group != null -> state.group.name
+        else -> NicknameRules.display(
+            state.nicks[state.peer?.deviceId],
+            state.peer?.displayName,
+            state.peer?.deviceId,
+        )
+    }
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
     } ?: (state.peer?.online == true)

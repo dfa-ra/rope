@@ -63,6 +63,7 @@ import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.Conversation
+import app.rope.android.data.NicknameRules
 import kotlinx.coroutines.delay
 import org.webrtc.EglBase
 import org.webrtc.VideoSink
@@ -112,14 +113,19 @@ fun CallsPane(
                     }
                     itemsIndexed(people, key = { _, d -> "p-${d.deviceId}" }) { index, d ->
                         FadeIn(0) {
-                            SectionCard(Modifier.padding(horizontal = 12.dp), onClick = { onOpen(conversationOf(d)) }) {
+                            SectionCard(Modifier.padding(horizontal = 12.dp), onClick = { onOpen(conversationOf(d, state.nicks[d.deviceId])) }) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    InitialsAvatar(d.displayName.ifBlank { "?" }, group = false, online = d.online)
+                                    val shown = NicknameRules.display(
+                                        state.nicks[d.deviceId],
+                                        d.displayName,
+                                        d.deviceId,
+                                    )
+                                    InitialsAvatar(shown.ifBlank { "?" }, group = false, online = d.online)
                                     Column(Modifier.weight(1f)) {
-                                        Text(d.displayName.ifBlank { d.deviceId.take(8) }, style = MaterialTheme.typography.titleMedium)
+                                        Text(shown, style = MaterialTheme.typography.titleMedium)
                                         Text(
                                             if (d.online) "в сети" else "не в сети",
                                             style = MaterialTheme.typography.bodySmall,
