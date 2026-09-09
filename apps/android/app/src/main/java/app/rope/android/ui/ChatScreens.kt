@@ -169,6 +169,7 @@ import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
+import app.rope.android.data.MuteRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
@@ -200,7 +201,7 @@ fun ChatsPane(
     onCancelForward: () -> Unit = {},
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
-    onMuteChat: (String) -> Unit = {},
+    onMuteChat: (String, Long?) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -288,7 +289,7 @@ fun ChatsPane(
                                     c,
                                     onClick = { onOpen(c) },
                                     onPin = { onPinChat(c.id) },
-                                    onMute = { onMuteChat(c.id) },
+                                    onMute = { onMuteChat(c.id, it) },
                                     query = state.chatQuery,
                                 )
                             }
@@ -308,7 +309,7 @@ fun ChatsPane(
                                 c,
                                 onClick = { onOpen(c) },
                                 onPin = { onPinChat(c.id) },
-                                onMute = { onMuteChat(c.id) },
+                                onMute = { onMuteChat(c.id, it) },
                                 query = state.chatQuery,
                             )
                         }
@@ -429,11 +430,14 @@ internal fun ConversationRow(
     c: Conversation,
     onClick: () -> Unit,
     onPin: () -> Unit,
-    onMute: () -> Unit,
+    onMute: (Long?) -> Unit,
     query: String = "",
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
-    BackHandler(enabled = menu) { menu = false }
+    var mutePick by remember(c.id) { mutableStateOf(false) }
+    BackHandler(enabled = menu) {
+        if (mutePick) mutePick = false else menu = false
+    }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val bg by animateColorAsState(
@@ -461,7 +465,10 @@ internal fun ConversationRow(
                     interactionSource = interaction,
                     indication = LocalIndication.current,
                     onClick = onClick,
-                    onLongClick = { menu = !menu },
+                    onLongClick = {
+                        menu = !menu
+                        mutePick = false
+                    },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -563,15 +570,33 @@ internal fun ConversationRow(
             }
         }
         if (menu) {
-            Row(
-                Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(onClick = { onPin(); menu = false }) {
-                    Text(if (c.pinned) "Открепить" else "Закрепить")
+            Column(Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { onPin(); menu = false; mutePick = false }) {
+                        Text(if (c.pinned) "Открепить" else "Закрепить")
+                    }
+                    if (c.muted) {
+                        TextButton(onClick = { onMute(null); menu = false; mutePick = false }) {
+                            Text(MuteRules.unmuteLabel())
+                        }
+                    } else if (!mutePick) {
+                        TextButton(onClick = { mutePick = true }) {
+                            Text(MuteRules.muteLabel())
+                        }
+                    }
                 }
-                TextButton(onClick = { onMute(); menu = false }) {
-                    Text(if (c.muted) "Включить звук" else "Без звука")
+                if (mutePick && !c.muted) {
+                    MuteRules.CHOICES.forEach { choice ->
+                        TextButton(
+                            onClick = {
+                                onMute(MuteRules.untilMs(choice, System.currentTimeMillis()))
+                                menu = false
+                                mutePick = false
+                            },
+                        ) {
+                            Text(MuteRules.label(choice))
+                        }
+                    }
                 }
             }
         }

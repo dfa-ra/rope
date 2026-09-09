@@ -55,7 +55,7 @@ object SavedMessagesRules {
             last = last,
             peer = stubPeer(),
             pinned = prefs.pinned,
-            muted = prefs.muted,
+            muted = prefs.effectivelyMuted(),
             unread = 0,
         )
     }

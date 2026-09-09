@@ -240,7 +240,7 @@ class MainActivity : AppCompatActivity() {
                     onChatQuery = repo::setChatQuery,
                     onMessageQuery = repo::setMessageQuery,
                     onPinChat = repo::togglePinChat,
-                    onMuteChat = repo::toggleMuteChat,
+                    onMuteChat = repo::muteChat,
                     onCopy = repo::copyMessage,
                     onPinMessage = repo::togglePinMessage,
                     onJump = repo::jumpToMessage,

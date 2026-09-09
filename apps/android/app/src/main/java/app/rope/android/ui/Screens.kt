@@ -168,7 +168,7 @@ fun RopeScaffold(
     onChatQuery: (String) -> Unit,
     onMessageQuery: (String) -> Unit,
     onPinChat: (String) -> Unit,
-    onMuteChat: (String) -> Unit,
+    onMuteChat: (String, Long?) -> Unit,
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,

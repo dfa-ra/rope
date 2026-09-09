@@ -44,6 +44,7 @@ import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
+import app.rope.android.data.effectivelyMuted
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -743,7 +744,17 @@ class RopeRepository(private val app: Application) {
 
     fun toggleMuteChat(id: String) {
         val cur = store.chatPrefs(id)
-        store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
+        if (cur.effectivelyMuted()) muteChat(id, null) else muteChat(id, 0L)
+    }
+
+    fun muteChat(id: String, untilMs: Long?) {
+        val cur = store.chatPrefs(id)
+        val next = if (untilMs == null) {
+            cur.copy(muted = false, muteUntilMs = 0L)
+        } else {
+            cur.copy(muted = true, muteUntilMs = untilMs)
+        }
+        store.saveChatPrefs(id, next)
         refreshConversations()
     }
 
@@ -2464,7 +2475,7 @@ class RopeRepository(private val app: Application) {
                 last = last,
                 peer = d,
                 pinned = p.pinned,
-                muted = p.muted,
+                muted = p.effectivelyMuted(),
                 unread = p.unread,
             )
         }
@@ -2487,7 +2498,7 @@ class RopeRepository(private val app: Application) {
                 last = last,
                 group = g,
                 pinned = p.pinned,
-                muted = p.muted,
+                muted = p.effectivelyMuted(),
                 unread = p.unread,
             )
         }
@@ -2515,7 +2526,7 @@ class RopeRepository(private val app: Application) {
                     last = lastBy[id],
                     peer = devices.find { it.deviceId == id },
                     pinned = p.pinned,
-                    muted = p.muted,
+                    muted = p.effectivelyMuted(),
                     unread = p.unread,
                 )
             }
@@ -2896,7 +2907,7 @@ class RopeRepository(private val app: Application) {
                 }
                 CallEffect.RingIn -> {
                     val s = callMachine.state
-                    val chatMuted = store.chatPrefs(s.peerDeviceId).muted
+                    val chatMuted = store.chatPrefs(s.peerDeviceId).effectivelyMuted()
                     if (CallToneRules.shouldPlayRing(s.phase, s.link, s.mediaUp) &&
                         CallToneRules.shouldRingIncoming(_state.value.notificationsMuted, chatMuted)
                     ) {
@@ -3379,7 +3390,7 @@ class RopeRepository(private val app: Application) {
             store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
             refreshConversations()
         }
-        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
+        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.effectivelyMuted(), _state.value.notificationsMuted)) {
             notifier.message(title, body, AlbumRules.notifyId(body, albumId))
         }
     }
