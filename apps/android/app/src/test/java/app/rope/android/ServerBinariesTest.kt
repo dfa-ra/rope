@@ -4,7 +4,9 @@ import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.ServerBinaries
 import app.rope.android.provision.ServerTarget
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServerBinariesTest {
@@ -60,6 +62,23 @@ class ServerBinariesTest {
     fun customUrlWins() {
         val form = sampleForm(target = ServerTarget.LINUX_AMD64, binaryUrl = "https://example.com/rope")
         assertEquals("https://example.com/rope", ServerBinaries.resolveDownloadUrl(form, "aarch64"))
+        assertTrue(ServerBinaries.isHttpsDownload("https://example.com/rope"))
+        assertTrue(ServerBinaries.isHttpsDownload("HTTPS://example.com/rope"))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun customHttpUrlRejected() {
+        val form = sampleForm(target = ServerTarget.LINUX_AMD64, binaryUrl = "http://example.com/rope")
+        ServerBinaries.resolveDownloadUrl(form, "aarch64")
+    }
+
+    @Test
+    fun customNonHttpsRejected() {
+        assertFalse(ServerBinaries.isHttpsDownload("http://evil/x"))
+        assertFalse(ServerBinaries.isHttpsDownload("file:///data/local/tmp/rope"))
+        assertFalse(ServerBinaries.isHttpsDownload("https://example.com/rope\nhttp://evil"))
+        assertFalse(ServerBinaries.isHttpsDownload("https://example.com/rope http://evil"))
+        assertFalse(ServerBinaries.isHttpsDownload(""))
     }
 
     @Test(expected = IllegalStateException::class)

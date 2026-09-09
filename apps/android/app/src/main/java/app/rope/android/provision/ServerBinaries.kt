@@ -41,13 +41,29 @@ object ServerBinaries {
 
     fun resolveDownloadUrl(form: ProvisionForm, unameOutput: String? = null): String {
         val custom = form.binaryUrl.trim()
-        if (custom.isNotEmpty()) return custom
+        if (custom.isNotEmpty()) {
+            if (!isHttpsDownload(custom)) {
+                error("свой URL бинарника должен быть https:// без пробелов")
+            }
+            return custom
+        }
         val machine = if (form.target == ServerTarget.AUTO) {
             parseUnameMachine(unameOutput.orEmpty())
         } else {
             null
         }
         return latestDownloadUrl(assetName(form.target, machine))
+    }
+
+    /**
+     * Custom binary URL must be HTTPS with no whitespace, so [ReleaseFetcher.downloadTo]
+     * cannot be pointed at file: or http: locations from the provision form.
+     */
+    fun isHttpsDownload(url: String): Boolean {
+        val t = url.trim()
+        if (t.isEmpty()) return false
+        if (t.any { it == '\n' || it == '\r' || it.isWhitespace() }) return false
+        return t.startsWith("https://", ignoreCase = true)
     }
 
     private fun normalizeUname(machine: String): String = machine.trim().lowercase()
