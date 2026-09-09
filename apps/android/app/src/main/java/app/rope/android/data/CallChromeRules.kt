@@ -57,7 +57,15 @@ object CallChromeRules {
 
     fun cameraA11y(muted: Boolean): String = if (muted) "Камера выкл" else "Камера"
 
-    fun showVisibleCaption(kind: CallControlKind): Boolean = false
+    fun showVisibleCaption(kind: CallControlKind): Boolean = when (kind) {
+        CallControlKind.MUTE,
+        CallControlKind.SPEAKER,
+        CallControlKind.CAMERA,
+        CallControlKind.FLIP,
+        CallControlKind.HANGUP,
+        CallControlKind.ACCEPT,
+        CallControlKind.REJECT -> false
+    }
 
     fun iconOnly(spec: CallControlSpec): Boolean =
         spec.visibleCaption.isNullOrBlank() && !showVisibleCaption(spec.kind)
