@@ -11,6 +11,26 @@ enum class CallLinkState {
 object CallLink {
     const val CONNECT_TIMEOUT_MS = 25_000L
     const val RING_TIMEOUT_MS = 45_000L
+    /** Drop back-to-back RING from the same peer after reject/hangup. Glare still uses live RINGING_OUT. */
+    const val RING_FLOOD_COOLDOWN_MS = 2_000L
+
+    fun withinRingCooldown(nowMs: Long, lastAtMs: Long): Boolean =
+        lastAtMs > 0L && nowMs - lastAtMs < RING_FLOOD_COOLDOWN_MS
+
+    /**
+     * New incoming RING while idle. Same-peer RING inside the cooldown is flood.
+     * A different peer is always allowed. Live glare is decided before this.
+     */
+    fun acceptIncomingRing(
+        from: String,
+        lastFrom: String,
+        nowMs: Long,
+        lastAtMs: Long,
+    ): Boolean {
+        if (from.isBlank()) return false
+        if (!PeerIds.same(lastFrom, from)) return true
+        return !withinRingCooldown(nowMs, lastAtMs)
+    }
 
     fun heading(
         phase: CallPhase,

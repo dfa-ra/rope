@@ -267,4 +267,17 @@ class CallLinkTest {
         assertFalse(CallLink.chatDetail().contains("конверт"))
         assertTrue(CallLink.chatDetail().length <= 24)
     }
+
+    @Test
+    fun samePeerRingInsideCooldownIsFlood() {
+        assertEquals(2_000L, CallLink.RING_FLOOD_COOLDOWN_MS)
+        assertFalse(CallLink.withinRingCooldown(1_000L, 0L))
+        assertTrue(CallLink.withinRingCooldown(1_999L, 1L))
+        assertFalse(CallLink.withinRingCooldown(2_001L, 1L))
+        assertFalse(CallLink.acceptIncomingRing("alice", "alice", 1_500L, 1L))
+        assertTrue(CallLink.acceptIncomingRing("alice", "alice", 2_001L, 1L))
+        assertTrue(CallLink.acceptIncomingRing("eve", "alice", 1_500L, 1L))
+        assertTrue(CallLink.acceptIncomingRing("alice", "", 1_500L, 1L))
+        assertFalse(CallLink.acceptIncomingRing("", "alice", 3_000L, 1L))
+    }
 }

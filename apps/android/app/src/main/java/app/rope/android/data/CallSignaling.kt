@@ -70,6 +70,8 @@ sealed class CallEffect {
  */
 class CallMachine {
     private val lock = Any()
+    private var lastIncomingRingFrom = ""
+    private var lastIncomingRingAtMs = 0L
 
     var state = CallMachineState()
         private set
@@ -343,6 +345,7 @@ class CallMachine {
                 CallEffect.Notice(detail),
             )
         }
+        noteIncomingRing(state.peerDeviceId)
         hardEndLocked()
         return listOf(send, CallEffect.Notice(detail), CallEffect.TearDown)
     }
@@ -373,6 +376,7 @@ class CallMachine {
 
     private fun endLocalLocked(event: String): List<CallEffect> {
         if (!state.live) return emptyList()
+        noteIncomingRing(state.peerDeviceId)
         val send = CallEffect.Send(state.callId, state.peerDeviceId, event)
         hardEndLocked()
         return listOf(send, CallEffect.TearDown)
@@ -385,6 +389,12 @@ class CallMachine {
         }
         if (state.live && matchesLocked(from, callId)) return emptyList()
         if (state.live) return emptyList()
+        val now = System.currentTimeMillis()
+        if (!CallLink.acceptIncomingRing(from, lastIncomingRingFrom, now, lastIncomingRingAtMs)) {
+            noteIncomingRing(from, now)
+            return emptyList()
+        }
+        noteIncomingRing(from, now)
         state = CallMachineState(
             callId = callId,
             peerDeviceId = from,
@@ -583,4 +593,11 @@ class CallMachine {
 
     private fun matchesLocked(from: String, callId: String): Boolean =
         CallLink.matchesCall(callId, from, state.callId, state.altCallId, state.peerDeviceId)
+
+    private fun noteIncomingRing(from: String, nowMs: Long = System.currentTimeMillis()) {
+        val peer = PeerIds.normalize(from)
+        if (peer.isBlank()) return
+        lastIncomingRingFrom = peer
+        lastIncomingRingAtMs = nowMs
+    }
 }

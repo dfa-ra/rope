@@ -228,6 +228,7 @@ class RopeRepository(private val app: Application) {
     private var callPeerName: String = ""
     private var connectWatch: Job? = null
     private var ringWatch: Job? = null
+    private var oneWayWatch: Job? = null
     private var rtcAsCaller = false
     private val rtcLock = Any()
     private var boundRemote: VideoSink? = null
@@ -1309,6 +1310,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun flipCallCamera() {
+        if (!VideoCallRules.flipCameraWhileSending(_state.value.callCamMuted)) return
         rtc?.flipCamera()
     }
 
@@ -2849,6 +2851,7 @@ class RopeRepository(private val app: Application) {
                 }
                 CallEffect.StartWssMedia -> {
                     stopTone()
+                    cancelOneWayWatch()
                     startWssMedia()
                 }
                 is CallEffect.DeliverAudio -> playWssAudio(effect.signals)
@@ -3093,6 +3096,9 @@ class RopeRepository(private val app: Application) {
                     },
                     onIce = { name, viaRelay ->
                         applyCallEffects(callMachine.onIce(name, viaRelay))
+                        if (callMachine.state.mediaUp && callMachine.state.video) {
+                            watchOneWayVideo()
+                        }
                     },
                     onCameraFailed = {
                         _state.value = _state.value.copy(
@@ -3100,6 +3106,7 @@ class RopeRepository(private val app: Application) {
                             callNotice = VideoCallRules.cameraFailedNotice(),
                         )
                     },
+                    onRemoteVideo = { onRemoteVideoBound() },
                 )
             } catch (e: Exception) {
                 notice(UserFacing.NO_PATH)
@@ -3141,6 +3148,50 @@ class RopeRepository(private val app: Application) {
         ringWatch = scope.launch {
             delay(CallLink.RING_TIMEOUT_MS)
             applyCallEffects(callMachine.onRingTimeout())
+        }
+    }
+
+    private fun cancelOneWayWatch() {
+        oneWayWatch?.cancel()
+        oneWayWatch = null
+    }
+
+    private fun watchOneWayVideo() {
+        if (!callMachine.state.video || callMachine.state.wssMedia) {
+            cancelOneWayWatch()
+            return
+        }
+        if (rtc?.hasRemoteVideo() == true) {
+            cancelOneWayWatch()
+            return
+        }
+        if (oneWayWatch?.isActive == true) return
+        oneWayWatch = scope.launch {
+            delay(VideoCallRules.ONE_WAY_VIDEO_MS)
+            if (!isActive) return@launch
+            val s = callMachine.state
+            val bound = rtc?.hasRemoteVideo() == true
+            val incoming = VideoCallRules.oneWayVideoNotice(
+                video = s.video,
+                mediaUp = s.mediaUp,
+                wssFallback = s.wssMedia,
+                remoteVideoBound = bound,
+                connectedForMs = VideoCallRules.ONE_WAY_VIDEO_MS,
+            ) ?: return@launch
+            val st = _state.value
+            if (st.call == null) return@launch
+            val next = VideoCallRules.keepExistingOverlayNotice(st.callNotice, incoming)
+            if (next != st.callNotice) {
+                _state.value = st.copy(callNotice = next)
+            }
+        }
+    }
+
+    private fun onRemoteVideoBound() {
+        cancelOneWayWatch()
+        val st = _state.value
+        if (st.callNotice == VideoCallRules.oneWayRemoteNotice()) {
+            _state.value = st.copy(callNotice = null)
         }
     }
 
@@ -3223,6 +3274,7 @@ class RopeRepository(private val app: Application) {
         connectWatch = null
         ringWatch?.cancel()
         ringWatch = null
+        cancelOneWayWatch()
         rtcAsCaller = false
         callPeerName = ""
         boundRemote = null

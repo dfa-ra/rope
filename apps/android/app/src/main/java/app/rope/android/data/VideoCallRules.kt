@@ -129,6 +129,37 @@ object VideoCallRules {
 
     fun cameraDenyFallbackNotice(): String = cameraFailedNotice()
 
+    const val ONE_WAY_VIDEO_MS = 4_000L
+
+    fun oneWayRemoteNotice(): String = "нет видео пира"
+
+    /**
+     * After ICE is up, a video call with no remote track is one-way media —
+     * local preview can still exist. Do not overwrite camera-deny copy.
+     */
+    fun oneWayVideoNotice(
+        video: Boolean,
+        mediaUp: Boolean,
+        wssFallback: Boolean,
+        remoteVideoBound: Boolean,
+        connectedForMs: Long,
+    ): String? {
+        if (!video || !mediaUp || wssFallback || remoteVideoBound) return null
+        if (connectedForMs < ONE_WAY_VIDEO_MS) return null
+        return oneWayRemoteNotice()
+    }
+
+    fun keepExistingOverlayNotice(existing: String?, incoming: String?): String? =
+        existing?.takeIf { it.isNotBlank() } ?: incoming
+
+    fun flipCameraWhileSending(camMuted: Boolean): Boolean = !camMuted
+
+    /**
+     * MainActivity handles orientation itself so an in-call TextureView is
+     * not destroyed (EGL 0×0 / black remote after rotate).
+     */
+    fun activityKeepsSurfacesOnRotate(): Boolean = true
+
     fun micDeniedNotice(): String = "Нет доступа к микрофону"
 
     /** Incoming Accept + mic deny must land on the overlay, not a Scaffold snackbar. */

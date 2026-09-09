@@ -27,7 +27,8 @@ object CallChromeRules {
         CallControlSpec(CallControlKind.ACCEPT, a11y = "Ответить"),
     )
 
-    fun showFlip(camMuted: Boolean, rtcReady: Boolean): Boolean = !camMuted && rtcReady
+    fun showFlip(camMuted: Boolean, rtcReady: Boolean): Boolean =
+        VideoCallRules.flipCameraWhileSending(camMuted) && rtcReady
 
     fun inCallControls(
         video: Boolean,

@@ -57,6 +57,7 @@ class WebRtcSession(
     private val onLocalSignal: (CallSignal) -> Unit,
     private val onIce: (state: String, viaRelay: Boolean) -> Unit,
     private val onCameraFailed: () -> Unit = {},
+    private val onRemoteVideo: () -> Unit = {},
 ) {
     private val app = context.applicationContext
     private val plan = IceServers.plan(iceServers, hintHost, publicIp)
@@ -350,8 +351,13 @@ class WebRtcSession(
         remoteSink = null
     }
 
+    fun hasRemoteVideo(): Boolean {
+        val track = remoteVideo ?: return false
+        return !closed && track.enabled()
+    }
+
     fun flipCamera() {
-        if (closed) return
+        if (closed || !sendCamera) return
         (capturer as? CameraVideoCapturer)?.switchCamera(null)
     }
 
@@ -534,6 +540,7 @@ class WebRtcSession(
                 vt.addSink(sink)
             }
             Log.i("rope-webrtc", "remote video ${vt.id()} enabled")
+            onRemoteVideo()
         }
     }
 

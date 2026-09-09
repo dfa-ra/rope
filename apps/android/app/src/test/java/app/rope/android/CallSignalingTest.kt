@@ -166,6 +166,48 @@ class CallSignalingTest {
     }
 
     @Test
+    fun floodRingAfterRejectFromSamePeerIsDropped() {
+        val m = CallMachine()
+        val first = m.onWire("alice", CallSignal.RING, "c1", "", "bob")
+        assertTrue(first.any { it is CallEffect.NotifyIncoming })
+        m.localReject()
+        assertFalse(m.state.live)
+
+        val flood = m.onWire("alice", CallSignal.RING, "c2", "", "bob")
+        assertTrue(flood.isEmpty())
+        assertFalse(m.state.live)
+        val again = m.onWire("alice", CallSignal.RING, "c3", "", "bob")
+        assertTrue(again.isEmpty())
+
+        val other = m.onWire("eve", CallSignal.RING, "c4", "", "bob")
+        assertTrue(other.any { it is CallEffect.NotifyIncoming })
+        assertEquals(CallPhase.RINGING_IN, m.state.phase)
+        assertEquals("eve", m.state.peerDeviceId)
+    }
+
+    @Test
+    fun floodRingAfterIncomingTimeoutIsDropped() {
+        val m = CallMachine()
+        m.onWire("alice", CallSignal.RING, "c1", "", "bob")
+        m.onRingTimeout()
+        assertFalse(m.state.live)
+        val flood = m.onWire("alice", CallSignal.RING, "c2", "", "bob")
+        assertTrue(flood.isEmpty())
+        assertFalse(m.state.live)
+    }
+
+    @Test
+    fun glareRingIsNotTreatedAsFlood() {
+        val m = CallMachine()
+        m.localStart("call-aaa", "bbb", "aaa")
+        val glare = m.onWire("bbb", CallSignal.RING, "call-bbb", "", "aaa")
+        assertTrue(glare.any { it is CallEffect.StartRtc })
+        assertTrue(m.state.live)
+        assertEquals(CallPhase.ACTIVE, m.state.phase)
+        assertEquals("bbb", m.state.peerDeviceId)
+    }
+
+    @Test
     fun rejectTearsDownBothSides() {
         val callee = CallMachine()
         callee.onWire("alice", CallSignal.RING, "c1", "", "bob")

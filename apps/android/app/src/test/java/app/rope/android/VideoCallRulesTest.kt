@@ -307,6 +307,72 @@ class VideoCallRulesTest {
         assertTrue(applied.contains("m=video"))
     }
 
+    @Test
+    fun oneWayVideoNoticeAfterFourSeconds() {
+        assertEquals("нет видео пира", VideoCallRules.oneWayRemoteNotice())
+        assertEquals(4_000L, VideoCallRules.ONE_WAY_VIDEO_MS)
+        assertNull(
+            VideoCallRules.oneWayVideoNotice(
+                video = true,
+                mediaUp = true,
+                wssFallback = false,
+                remoteVideoBound = false,
+                connectedForMs = 3_999L,
+            ),
+        )
+        assertEquals(
+            VideoCallRules.oneWayRemoteNotice(),
+            VideoCallRules.oneWayVideoNotice(
+                video = true,
+                mediaUp = true,
+                wssFallback = false,
+                remoteVideoBound = false,
+                connectedForMs = 4_000L,
+            ),
+        )
+        assertNull(
+            VideoCallRules.oneWayVideoNotice(
+                video = true,
+                mediaUp = true,
+                wssFallback = true,
+                remoteVideoBound = false,
+                connectedForMs = 4_000L,
+            ),
+        )
+        assertNull(
+            VideoCallRules.oneWayVideoNotice(
+                video = true,
+                mediaUp = true,
+                wssFallback = false,
+                remoteVideoBound = true,
+                connectedForMs = 4_000L,
+            ),
+        )
+        assertNull(
+            VideoCallRules.oneWayVideoNotice(
+                video = false,
+                mediaUp = true,
+                wssFallback = false,
+                remoteVideoBound = false,
+                connectedForMs = 4_000L,
+            ),
+        )
+        assertEquals(
+            VideoCallRules.cameraFailedNotice(),
+            VideoCallRules.keepExistingOverlayNotice(
+                VideoCallRules.cameraFailedNotice(),
+                VideoCallRules.oneWayRemoteNotice(),
+            ),
+        )
+        assertEquals(
+            VideoCallRules.oneWayRemoteNotice(),
+            VideoCallRules.keepExistingOverlayNotice(null, VideoCallRules.oneWayRemoteNotice()),
+        )
+        assertTrue(VideoCallRules.flipCameraWhileSending(camMuted = false))
+        assertFalse(VideoCallRules.flipCameraWhileSending(camMuted = true))
+        assertTrue(VideoCallRules.activityKeepsSurfacesOnRotate())
+    }
+
     /**
      * Compact VP8+opus offer similar to Unified Plan. Real device SDP is larger
      * (ICE, fingerprint, more fmtp) but still typically 2–6 KiB — under 16 KiB.

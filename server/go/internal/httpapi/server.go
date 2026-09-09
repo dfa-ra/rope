@@ -35,6 +35,7 @@ type Server struct {
 	Hub          *Hub
 	Limit        *ratelimit.Limiter
 	CallAudio    *ratelimit.Limiter
+	CallRing     *ratelimit.Limiter
 	FP           string
 	setup        string
 	pendingMu    sync.Mutex
@@ -52,6 +53,7 @@ func New(cfg config.Config, store *db.Store, logger *log.Logger) *Server {
 		Hub:          NewHub(),
 		Limit:        ratelimit.New(60, time.Minute),
 		CallAudio:    ratelimit.New(callAudioPerSec, time.Second),
+		CallRing:     ratelimit.New(callRingBurst, callRingWindow),
 		setup:        cfg.SetupToken,
 		pendingCalls: map[string]pendingCall{},
 	}
@@ -676,6 +678,8 @@ func (s *Server) handleGroupSend(ctx context.Context, from *clientConn, groupID 
 const (
 	maxCallPayloadBytes = 16384
 	callAudioPerSec     = 40
+	callRingBurst       = 6
+	callRingWindow      = 30 * time.Second
 	pendingCallTTL      = 60 * time.Second
 	maxPendingCalls     = 256
 )
@@ -700,6 +704,10 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		return
 	}
 	if strings.EqualFold(in.Event, "audio") && !s.CallAudio.Allow("ws-call-audio:"+from.id) {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
+		return
+	}
+	if strings.EqualFold(in.Event, "ring") && s.CallRing != nil && !s.CallRing.Allow("ws-call-ring:"+from.id) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}
