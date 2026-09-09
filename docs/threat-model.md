@@ -29,7 +29,7 @@
 - Invite tokens are stored as SHA-256 hashes and are single-use with TTL.
 - Private device keys are not uploaded during ordinary messaging, bootstrap, or mailbox sync.
 - Private device keys are not written to public Downloads. An empty identity vault is not auto-restored from shared storage.
-- Identity export (`rope-device.backup`) is wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto). Cleartext v1 JSON is not auto-applied.
+- There is no identity-file export writer. A Keystore `RODB` wrap API exists for a future writer. Inner backup JSON is still cleartext. Explicit SAF restore opens a wrapped blob or legacy v1. Cleartext leftover files are not auto-applied.
 - Default logs omit payload bytes, invite tokens, and SSH secrets.
 - Live call offer/answer/ICE apply only from sealed `EnvelopeTypes.CALL` blobs. Plain WSS `type=call` may carry RING/ACCEPT/REJECT/HANGUP/RELAY and ciphertext audio frames, not SDP/ICE.
 - TURNS/TLS pin comparison fails closed when the expected fingerprint is blank.
@@ -48,6 +48,7 @@
 - There is no forward-secrecy ratchet (Signal/X3DH) in MVP. Compromise of a device ECDH key exposes future messages to that device until keys are rotated (out of scope).
 - Offline mailbox blobs live on disk until delivery ack or TTL expiry. They remain encrypted, but metadata remains.
 - WSS connect still puts `sig` on the query string (proxy logs). Phase A also accepts `X-Rope-Ws-Auth`; dropping the query is Phase B after every VPS is upgraded.
+- `DeviceBackup.toBytes()` still emits clear JSON (identity + `github_token`). It must not be written to shared storage. `toSealedBytes` is tests-only until an export writer exists.
 
 ## Abuse controls
 

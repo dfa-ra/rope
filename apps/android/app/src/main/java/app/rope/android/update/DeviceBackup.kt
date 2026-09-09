@@ -9,7 +9,11 @@ data class DeviceBackup(
     val githubToken: String = "",
     val sshJson: String = "",
 ) {
-    /** Inner JSON. Do not write this to shared storage — use [toSealedBytes]. */
+    /**
+     * Inner v1 JSON, including [githubToken] in the clear.
+     * Public and still used by tests / SAF legacy parse. Do not write this
+     * to Downloads or any shared storage. There is no export writer yet.
+     */
     fun toBytes(): ByteArray = JSONObject()
         .put("v", 1)
         .put("identity", Base64.getEncoder().encodeToString(identity))
@@ -20,8 +24,10 @@ data class DeviceBackup(
         .toByteArray()
 
     /**
-     * At-rest wrap: `RODB` + Keystore AES-GCM of [toBytes].
-     * Not envelope crypto — same wrap as [app.rope.android.data.IdentityVault].
+     * Wrap format: `RODB` + Keystore AES-GCM of [toBytes] (same layout as
+     * [app.rope.android.data.IdentityVault]). Not envelope crypto. Tests-only
+     * until a writer exists — do not add a PublicDownloads path. Future export
+     * must call this, never [toBytes].
      */
     fun toSealedBytes(encrypt: (ByteArray) -> ByteArray): ByteArray = MAGIC + encrypt(toBytes())
 
@@ -36,7 +42,11 @@ data class DeviceBackup(
                 raw[2] == MAGIC[2] &&
                 raw[3] == MAGIC[3]
 
-        /** Cold-start auto-restore must not apply leftover cleartext v1 JSON. */
+        /**
+         * True only for `RODB` blobs. Production skip of leftover Downloads
+         * JSON is the 0.3.35 reader removal; wire this helper if auto-restore
+         * returns.
+         */
         fun allowAutoRestore(raw: ByteArray): Boolean = isSealed(raw)
 
         fun parse(raw: ByteArray): DeviceBackup {

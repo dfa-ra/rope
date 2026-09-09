@@ -25,15 +25,11 @@ class IdentityVault(private val context: Context) {
     fun wrap(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        val iv = cipher.iv
-        val ct = cipher.doFinal(plain)
-        return byteArrayOf(iv.size.toByte()) + iv + ct
+        return pack(cipher.iv, cipher.doFinal(plain))
     }
 
     fun unwrap(blob: ByteArray): ByteArray {
-        val ivLen = blob[0].toInt() and 0xff
-        val iv = blob.copyOfRange(1, 1 + ivLen)
-        val ct = blob.copyOfRange(1 + ivLen, blob.size)
+        val (iv, ct) = unpack(blob)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
         return cipher.doFinal(ct)
@@ -55,5 +51,20 @@ class IdentityVault(private val context: Context) {
 
     companion object {
         private const val ALIAS = "rope-identity-wrap"
+
+        /** On-disk layout: 1-byte IV length, IV, ciphertext. */
+        fun pack(iv: ByteArray, ct: ByteArray): ByteArray {
+            require(iv.isNotEmpty() && iv.size <= 255)
+            return byteArrayOf(iv.size.toByte()) + iv + ct
+        }
+
+        fun unpack(blob: ByteArray): Pair<ByteArray, ByteArray> {
+            if (blob.isEmpty()) error("empty wrap")
+            val ivLen = blob[0].toInt() and 0xff
+            if (ivLen < 1 || blob.size < 1 + ivLen) error("bad wrap")
+            val iv = blob.copyOfRange(1, 1 + ivLen)
+            val ct = blob.copyOfRange(1 + ivLen, blob.size)
+            return iv to ct
+        }
     }
 }

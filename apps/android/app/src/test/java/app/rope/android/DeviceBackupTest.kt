@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.data.IdentityVault
 import app.rope.android.update.AppRelease
 import app.rope.android.update.DeviceBackup
 import org.junit.Assert.assertArrayEquals
@@ -60,6 +61,51 @@ class DeviceBackupTest {
         val robk = byteArrayOf(0x52, 0x4F, 0x42, 0x4B) + byteArrayOf(1, 2, 3)
         assertFalse(DeviceBackup.isSealed(robk))
         assertFalse(DeviceBackup.allowAutoRestore(robk))
+    }
+
+    @Test
+    fun toBytesIsCleartextJsonIncludingGithubToken() {
+        val json = String(sample().toBytes(), Charsets.UTF_8)
+        assertTrue(json.contains("ghp_test"))
+        assertTrue(json.contains("github_token"))
+        assertTrue(json.contains("identity"))
+    }
+
+    @Test
+    fun aesGcmIvLenPrefixRoundtripsThroughOpen() {
+        val key = javax.crypto.spec.SecretKeySpec(ByteArray(32) { it.toByte() }, "AES")
+        val encrypt: (ByteArray) -> ByteArray = { plain ->
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key)
+            IdentityVault.pack(cipher.iv, cipher.doFinal(plain))
+        }
+        val decrypt: (ByteArray) -> ByteArray = { blob ->
+            val (iv, ct) = IdentityVault.unpack(blob)
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(
+                javax.crypto.Cipher.DECRYPT_MODE,
+                key,
+                javax.crypto.spec.GCMParameterSpec(128, iv),
+            )
+            cipher.doFinal(ct)
+        }
+        val backup = sample()
+        val sealed = backup.toSealedBytes(encrypt)
+        assertTrue(DeviceBackup.isSealed(sealed))
+        val opened = DeviceBackup.open(sealed, decrypt)
+        assertArrayEquals(backup.identity, opened.identity)
+        assertEquals("ghp_test", opened.githubToken)
+        val packed = sealed.copyOfRange(DeviceBackup.MAGIC.size, sealed.size)
+        assertEquals(packed[0].toInt() and 0xff, IdentityVault.unpack(packed).first.size)
+    }
+
+    @Test
+    fun unpackRejectsTruncatedIvLenPrefix() {
+        try {
+            IdentityVault.unpack(byteArrayOf(12))
+            org.junit.Assert.fail("expected bad wrap")
+        } catch (_: IllegalStateException) {
+        }
     }
 
     @Test
