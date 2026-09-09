@@ -30,7 +30,7 @@ class GlobalSearchRulesTest {
     @Test
     fun newestFirstCappedAndTitled() {
         val older = msg("m1", "dev-a", "секретный план", ts = 10L)
-        val newer = msg("m2", "dev-b", "ещё секрет", ts = 50L)
+        val newer = msg("m2", "dev-b", "ещё секрет", ts = 200L)
         val filler = (1..50).map { msg("x$it", "dev-c", "секрет $it", ts = 20L + it) }
         val hits = GlobalSearchRules.hits(
             listOf(older, newer) + filler,
