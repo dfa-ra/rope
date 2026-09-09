@@ -55,6 +55,14 @@ object VideoCallRules {
 
     fun cameraDenyFallbackNotice(): String = cameraFailedNotice()
 
+    fun micDeniedNotice(): String = "Нет доступа к микрофону"
+
+    /** Incoming accept with camera deny still proceeds; local camera stays muted. */
+    fun incomingCameraMuted(cameraGranted: Boolean): Boolean = !cameraGranted
+
+    fun shouldStartLocalCamera(wantVideo: Boolean, camMuted: Boolean): Boolean =
+        wantVideo && !camMuted
+
     /**
      * Mic is required. Camera deny on an outgoing video request starts an
      * audio call instead of aborting. Incoming accept still proceeds without camera.

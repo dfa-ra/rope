@@ -18,7 +18,38 @@ data class MediaPayload(
     val albumCount: Int = 1,
     val forwardedFrom: String? = null,
     val caption: String? = null,
+    val replyTo: String? = null,
+    val replyPreview: String = "",
+    val replyName: String = "",
+    val quoteText: String = "",
+    val quoteStart: Int = -1,
+    val quoteEnd: Int = -1,
 ) {
+    fun withReply(
+        replyTo: String?,
+        replyPreview: String = "",
+        replyName: String = "",
+        quoteText: String = "",
+        quoteStart: Int = -1,
+        quoteEnd: Int = -1,
+    ): MediaPayload = copy(
+        replyTo = replyTo,
+        replyPreview = replyPreview,
+        replyName = replyName,
+        quoteText = quoteText,
+        quoteStart = quoteStart,
+        quoteEnd = quoteEnd,
+    )
+
+    fun withoutReply(): MediaPayload = copy(
+        replyTo = null,
+        replyPreview = "",
+        replyName = "",
+        quoteText = "",
+        quoteStart = -1,
+        quoteEnd = -1,
+    )
+
     fun toJson(): String = JSONObject()
         .put("kind", kind)
         .put("object_id", objectId)
@@ -38,6 +69,10 @@ data class MediaPayload(
             }
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
             JsonIds.optional(caption)?.let { put("caption", it) }
+            JsonIds.optional(replyTo)?.let { put("r", it) }
+            if (replyPreview.isNotBlank()) put("rp", replyPreview)
+            if (replyName.isNotBlank()) put("rn", replyName)
+            QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
         }
         .toString()
 
@@ -71,6 +106,7 @@ data class MediaPayload(
     companion object {
         fun parse(raw: String): MediaPayload {
             val o = JSONObject(raw)
+            val quote = QuoteSpanRules.read(o)
             return MediaPayload(
                 kind = o.optString("kind"),
                 objectId = o.optString("object_id"),
@@ -86,6 +122,12 @@ data class MediaPayload(
                 albumCount = o.optInt("album_count", 1).let { if (it <= 0) 1 else it },
                 forwardedFrom = JsonIds.optional(o.optString("ff")),
                 caption = JsonIds.optional(o.optString("caption")),
+                replyTo = JsonIds.optional(o.optString("r")),
+                replyPreview = o.optString("rp"),
+                replyName = o.optString("rn"),
+                quoteText = quote?.text.orEmpty(),
+                quoteStart = quote?.start ?: -1,
+                quoteEnd = quote?.end ?: -1,
             )
         }
 

@@ -147,6 +147,7 @@ fun CallOverlay(
     micMuted: Boolean = false,
     speakerOn: Boolean = false,
     camMuted: Boolean = false,
+    banner: String? = null,
     onToggleMute: () -> Unit = {},
     onToggleSpeaker: () -> Unit = {},
     onToggleCamera: () -> Unit = {},
@@ -276,6 +277,13 @@ fun CallOverlay(
                         },
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (!banner.isNullOrBlank()) {
+                        Text(
+                            banner,
+                            color = if (showVideo) Color.White else MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     if (clock != null || ice.isNotBlank()) {
                         Text(
                             listOfNotNull(clock, ice.takeIf { it.isNotBlank() }).joinToString(" · "),

@@ -141,6 +141,7 @@ data class UiState(
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
     val callCamMuted: Boolean = false,
+    val callNotice: String? = null,
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
@@ -292,6 +293,10 @@ class RopeRepository(private val app: Application) {
             }
             BackLayer.CancelComposer -> {
                 cancelComposerExtra()
+                true
+            }
+            BackLayer.CancelPendingMedia -> {
+                cancelPendingMedia()
                 true
             }
             BackLayer.Pop -> {
@@ -552,6 +557,7 @@ class RopeRepository(private val app: Application) {
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
             val caption = _state.value.draftText
+            val pack = replyPack(_state.value.replyTo)
             _state.value = _state.value.copy(
                 draftText = "",
                 pendingAttachments = emptyList(),
@@ -560,7 +566,7 @@ class RopeRepository(private val app: Application) {
                 editTarget = null,
             )
             persistOpenDraft()
-            sendAttachments(pending, caption = caption)
+            sendAttachments(pending, caption = caption, pack = pack)
             return
         }
         val text = _state.value.draftText
@@ -653,8 +659,11 @@ class RopeRepository(private val app: Application) {
             replyTo = null,
             replySpan = null,
             editTarget = null,
-            pendingAttachments = emptyList(),
         )
+    }
+
+    fun cancelPendingMedia() {
+        _state.value = _state.value.copy(pendingAttachments = emptyList())
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -776,12 +785,21 @@ class RopeRepository(private val app: Application) {
     }
 
     fun stageAttachments(uris: List<Uri>) {
-        val next = uris.take(AlbumRules.MAX_PHOTOS)
-        if (next.isEmpty()) return
-        _state.value = _state.value.copy(pendingAttachments = next)
+        val merged = (_state.value.pendingAttachments + uris).distinct().take(AlbumRules.MAX_PHOTOS)
+        if (merged.isEmpty()) return
+        _state.value = _state.value.copy(pendingAttachments = merged)
     }
 
-    fun sendAttachments(uris: List<Uri>, forcedMime: String? = null, caption: String? = null) {
+    fun sendAttachments(
+        uris: List<Uri>,
+        forcedMime: String? = null,
+        caption: String? = null,
+        pack: ReplyPack = ReplyPack(),
+    ) {
+        val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
+        if (pack.id == null && resolved.id != null) {
+            _state.value = _state.value.copy(replyTo = null, replySpan = null)
+        }
         scope.launch {
             try {
                 val prepared = uris.take(AlbumRules.MAX_PHOTOS).mapNotNull { uri ->
@@ -803,10 +821,11 @@ class RopeRepository(private val app: Application) {
                         albumIndex = slot.index,
                         albumCount = slot.count,
                         caption = MediaSendRules.onFirstOnly(slot.index, cap),
+                        pack = resolved,
                     )
                 }
                 rest.forEach { item ->
-                    sendMediaBytes(item.bytes, item.mime, item.name, item.kind, item.durationMs)
+                    sendMediaBytes(item.bytes, item.mime, item.name, item.kind, item.durationMs, pack = resolved)
                 }
             } catch (e: Exception) {
                 error(e)
@@ -894,10 +913,12 @@ class RopeRepository(private val app: Application) {
             take?.file?.delete()
             return
         }
+        val pack = replyPack(_state.value.replyTo)
+        _state.value = _state.value.copy(replyTo = null, replySpan = null)
         scope.launch {
             try {
                 val bytes = take.file.readBytes()
-                sendMediaBytes(bytes, "audio/mp4", take.file.name, "voice", take.durationMs)
+                sendMediaBytes(bytes, "audio/mp4", take.file.name, "voice", take.durationMs, pack = pack)
             } catch (e: Exception) {
                 error(e)
             } finally {
@@ -1106,7 +1127,14 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cameraDenied() {
-        notice(VideoCallRules.cameraDenyFallbackNotice())
+        _state.value = _state.value.copy(
+            callCamMuted = true,
+            callNotice = VideoCallRules.cameraDenyFallbackNotice(),
+        )
+    }
+
+    fun micDenied() {
+        notice(VideoCallRules.micDeniedNotice())
     }
 
     fun callEglContext(): org.webrtc.EglBase.Context? = rtc?.eglContext()
@@ -1322,6 +1350,7 @@ class RopeRepository(private val app: Application) {
         albumIndex: Int = 0,
         albumCount: Int = 1,
         caption: String? = null,
+        pack: ReplyPack = ReplyPack(),
     ) {
         val id = identity ?: return
         val group = _state.value.group
@@ -1333,36 +1362,7 @@ class RopeRepository(private val app: Application) {
         val enc = encryptObject(bytes)
         val grouped = VideoRules.albumEligible(kind)
         val cap = MediaSendRules.normalize(caption)
-        if (saved) {
-            val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
-            val payload = MediaPayload(
-                kind = kind,
-                objectId = objectId,
-                sha256 = enc.sha256,
-                keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
-                mime = mime,
-                name = name,
-                size = bytes.size.toLong(),
-                durationMs = durationMs,
-                albumId = if (grouped) albumId else null,
-                albumIndex = if (grouped) albumIndex else 0,
-                albumCount = if (grouped) albumCount else 1,
-                caption = cap,
-            )
-            val cache = persistPlain(objectId, name, mime, bytes)
-            insertLocalSaved(
-                text = payload.preview(),
-                kind = payload.messageKind(),
-                extra = payload.toJson(),
-                localFile = cache,
-            )
-            return
-        }
-        val api = api ?: throw IllegalStateException("нет сети")
-        val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
-        val objectId = uploaded.getString("object_id")
-        val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
-        val payload = MediaPayload(
+        fun payloadOf(objectId: String, groupId: String?): MediaPayload = MediaPayload(
             kind = kind,
             objectId = objectId,
             sha256 = enc.sha256,
@@ -1371,15 +1371,49 @@ class RopeRepository(private val app: Application) {
             name = name,
             size = bytes.size.toLong(),
             durationMs = durationMs,
-            groupId = if (inKnownGroup) group?.groupId else null,
+            groupId = groupId,
             albumId = if (grouped) albumId else null,
             albumIndex = if (grouped) albumIndex else 0,
             albumCount = if (grouped) albumCount else 1,
             caption = cap,
+        ).withReply(
+            pack.id,
+            pack.preview,
+            pack.name,
+            pack.quoteText,
+            pack.quoteStart,
+            pack.quoteEnd,
         )
+        if (saved) {
+            val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
+            val payload = payloadOf(objectId, null)
+            val cache = persistPlain(objectId, name, mime, bytes)
+            insertLocalSaved(
+                text = payload.preview(),
+                kind = payload.messageKind(),
+                extra = payload.toJson(),
+                localFile = cache,
+                pack = pack,
+            )
+            return
+        }
+        val api = api ?: throw IllegalStateException("нет сети")
+        val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
+        val objectId = uploaded.getString("object_id")
+        val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
+        val payload = payloadOf(objectId, if (inKnownGroup) group?.groupId else null)
         val cache = persistPlain(objectId, name, mime, bytes)
         if (inKnownGroup && group != null) {
-            sendGroupPayload(group, EnvelopeTypes.MEDIA, payload.toJson().toByteArray(), payload.preview(), payload.messageKind(), payload.toJson(), cache)
+            sendGroupPayload(
+                group,
+                EnvelopeTypes.MEDIA,
+                payload.toJson().toByteArray(),
+                payload.preview(),
+                payload.messageKind(),
+                payload.toJson(),
+                cache,
+                pack = pack,
+            )
             return
         }
         val dest = peer ?: throw IllegalStateException("откройте личный чат")
@@ -1397,6 +1431,12 @@ class RopeRepository(private val app: Application) {
             localPath = cache.absolutePath,
             senderId = id.deviceId(),
             senderName = _state.value.profile?.displayName.orEmpty(),
+            replyToId = pack.id,
+            replyPreview = pack.preview,
+            replyName = pack.name,
+            quoteText = pack.quoteText,
+            quoteStart = pack.quoteStart,
+            quoteEnd = pack.quoteEnd,
         )
         store.insertMessage(local)
         refreshMessages(dest.deviceId)
@@ -1681,6 +1721,7 @@ class RopeRepository(private val app: Application) {
             pinnedMessageId = prefs.pinnedMessageId,
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
+            pendingAttachments = emptyList(),
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
@@ -1939,7 +1980,7 @@ class RopeRepository(private val app: Application) {
                     size = bytes.size.toLong(),
                     groupId = null,
                     forwardedFrom = forwardedFrom,
-                )
+                ).withoutReply()
             }
             val uploaded = (api ?: throw IllegalStateException("нет сети")).uploadObject(enc.ciphertext, enc.sha256)
             persistPlain(uploaded.getString("object_id"), base.name.ifBlank { file.name }, base.mime, bytes)
@@ -1950,13 +1991,13 @@ class RopeRepository(private val app: Application) {
                 size = bytes.size.toLong(),
                 groupId = groupId,
                 forwardedFrom = forwardedFrom,
-            )
+            ).withoutReply()
         }
         if (!upload) {
             notice("это вложение уже нельзя переслать")
             return null
         }
-        return base.copy(groupId = groupId, forwardedFrom = forwardedFrom)
+        return base.copy(groupId = groupId, forwardedFrom = forwardedFrom).withoutReply()
     }
 
     private fun refreshDirectory() {
@@ -2258,6 +2299,12 @@ class RopeRepository(private val app: Application) {
                     groupId = routedGroup,
                     senderId = sender.deviceId,
                     senderName = sender.displayName,
+                    replyToId = payload.replyTo,
+                    replyPreview = payload.replyPreview,
+                    replyName = payload.replyName,
+                    quoteText = payload.quoteText,
+                    quoteStart = payload.quoteStart,
+                    quoteEnd = payload.quoteEnd,
                     forwardedFrom = payload.forwardedFrom,
                 )
                 store.insertMessage(msg)
@@ -2570,6 +2617,7 @@ class RopeRepository(private val app: Application) {
             val existing = rtc
             if (existing != null) {
                 if (_state.value.callMicMuted) existing.setMicEnabled(false)
+                if (_state.value.callCamMuted) existing.setCameraEnabled(false)
                 if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
                 if (asCaller && !rtcAsCaller) {
                     rtcAsCaller = true
@@ -2587,6 +2635,7 @@ class RopeRepository(private val app: Application) {
                     publicIp = IceServers.parsePublicIp(profile?.iceServersJson),
                     polite = !asCaller,
                     wantVideo = video,
+                    startCamera = VideoCallRules.shouldStartLocalCamera(video, _state.value.callCamMuted),
                     onLocalSignal = { sig ->
                         val callId = callMachine.state.callId
                         val peerId = callMachine.state.peerDeviceId
@@ -2614,7 +2663,10 @@ class RopeRepository(private val app: Application) {
                         applyCallEffects(callMachine.onIce(name, viaRelay))
                     },
                     onCameraFailed = {
-                        notice(VideoCallRules.cameraFailedNotice())
+                        _state.value = _state.value.copy(
+                            callCamMuted = true,
+                            callNotice = VideoCallRules.cameraFailedNotice(),
+                        )
                     },
                 )
             } catch (e: Exception) {
@@ -2624,6 +2676,7 @@ class RopeRepository(private val app: Application) {
             rtc = session
             rtcAsCaller = asCaller
             if (_state.value.callMicMuted) session.setMicEnabled(false)
+            if (_state.value.callCamMuted) session.setCameraEnabled(false)
             if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
             if (asCaller) session.createOffer() else session.prepareCallee()
         }
@@ -2754,6 +2807,7 @@ class RopeRepository(private val app: Application) {
             callMicMuted = false,
             callSpeakerOn = false,
             callCamMuted = false,
+            callNotice = null,
         )
     }
 

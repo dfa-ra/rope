@@ -72,6 +72,12 @@ class VideoCallRulesTest {
         assertEquals(CallMediaStart.AUDIO, VideoCallRules.afterOutgoingVideoPermission(true, false))
         assertTrue(VideoCallRules.proceedIncoming(true))
         assertFalse(VideoCallRules.proceedIncoming(false))
+        assertTrue(VideoCallRules.incomingCameraMuted(false))
+        assertFalse(VideoCallRules.incomingCameraMuted(true))
+        assertFalse(VideoCallRules.shouldStartLocalCamera(wantVideo = true, camMuted = true))
+        assertTrue(VideoCallRules.shouldStartLocalCamera(wantVideo = true, camMuted = false))
+        assertFalse(VideoCallRules.shouldStartLocalCamera(wantVideo = false, camMuted = false))
+        assertEquals("Нет доступа к микрофону", VideoCallRules.micDeniedNotice())
         assertEquals(
             VideoCallRules.cameraFailedNotice(),
             VideoCallRules.noticeCameraDenyFallback(wantVideo = true, cameraGranted = false),

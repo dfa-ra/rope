@@ -13,6 +13,7 @@ enum class BackLayer {
     ClearChatQuery,
     CancelForward,
     CancelComposer,
+    CancelPendingMedia,
     Pop,
     Exit,
 }
@@ -93,6 +94,7 @@ object BackStack {
         state.chatQuery.isNotBlank() -> BackLayer.ClearChatQuery
         state.forwarding != null -> BackLayer.CancelForward
         state.replyTo != null || state.editTarget != null -> BackLayer.CancelComposer
+        state.pendingAttachments.isNotEmpty() -> BackLayer.CancelPendingMedia
         canPop(currentStack(state.backStack, state.screen)) -> BackLayer.Pop
         else -> BackLayer.Exit
     }

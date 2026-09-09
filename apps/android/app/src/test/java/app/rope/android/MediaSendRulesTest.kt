@@ -81,12 +81,39 @@ class MediaSendRulesTest {
         val hint = MediaSendRules.hint(3, videos = 1)
         assertEquals(ComposerHintKind.MEDIA, hint.kind)
         assertEquals("Альбом · 3", hint.title)
+        assertEquals("Видео", MediaSendRules.hint(1, videos = 1).title)
+        assertEquals("Фото", MediaSendRules.hint(1).title)
+        assertEquals("Альбом · 2 видео", MediaSendRules.hint(2, videos = 2).title)
+        assertEquals(1, MediaSendRules.videoCount(listOf("video/mp4", "image/jpeg"), listOf("a.mp4", "b.jpg")))
+        assertEquals(0, MediaSendRules.videoCount(listOf("image/jpeg")))
         assertEquals(MediaSendRules.DISMISS, hint.dismissContentDescription)
         assertEquals("Подпись", MediaSendRules.PLACEHOLDER)
         val first = member("a", "image", 0, 2, caption = "шутка")
         val second = member("b", "video", 1, 2)
         assertEquals("шутка", MediaSendRules.albumCaption(listOf(first, second)))
         assertEquals("шутка", first.let { MediaPayload.parse(it.extra).preview() })
+    }
+
+    @Test
+    fun mediaReplyPackSurvivesJsonAndIncoming() {
+        val bare = MediaPayload("image", "o", "ab", "KEY", "image/jpeg", "p.jpg", 1, caption = "подпись")
+        val packed = bare.withReply("mid", "привет", "Анна", "фраг", 1, 4)
+        val json = packed.toJson()
+        assertTrue(json.contains("\"r\":\"mid\""))
+        assertTrue(json.contains("\"rp\":\"привет\""))
+        assertTrue(json.contains("\"rn\":\"Анна\""))
+        assertTrue(json.contains("\"caption\":\"подпись\""))
+        val got = MediaPayload.parse(json)
+        assertEquals("mid", got.replyTo)
+        assertEquals("привет", got.replyPreview)
+        assertEquals("Анна", got.replyName)
+        assertEquals("фраг", got.quoteText)
+        assertEquals(1, got.quoteStart)
+        assertEquals(4, got.quoteEnd)
+        val stripped = packed.withoutReply()
+        assertNull(stripped.replyTo)
+        assertFalse(stripped.toJson().contains("\"r\""))
+        assertEquals("подпись", stripped.caption)
     }
 
     private fun member(

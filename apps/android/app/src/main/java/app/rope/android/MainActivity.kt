@@ -58,8 +58,11 @@ class MainActivity : AppCompatActivity() {
     private val audioPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val next = afterAudio
         afterAudio = null
-        if (!granted) return@registerForActivityResult
         val repo = (application as RopeApp).repo
+        if (!granted) {
+            repo.micDenied()
+            return@registerForActivityResult
+        }
         when (next) {
             "call" -> repo.startCall()
             "video" -> repo.startVideoCall()
@@ -74,11 +77,13 @@ class MainActivity : AppCompatActivity() {
         val next = afterAudio
         afterAudio = null
         val repo = (application as RopeApp).repo
-        val mic = granted[Manifest.permission.RECORD_AUDIO] == true
-        val cam = granted[Manifest.permission.CAMERA] == true
+        val mic = granted[Manifest.permission.RECORD_AUDIO] == true || hasMic()
+        val cam = granted[Manifest.permission.CAMERA] == true || hasCam()
         when (next) {
             "video" -> when (VideoCallRules.afterOutgoingVideoPermission(mic, cam)) {
-                CallMediaStart.ABORT -> Unit
+                CallMediaStart.ABORT -> {
+                    if (!mic) repo.micDenied()
+                }
                 CallMediaStart.VIDEO -> repo.startVideoCall()
                 CallMediaStart.AUDIO -> {
                     repo.cameraDenied()
@@ -86,8 +91,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             "accept" -> {
-                if (!VideoCallRules.proceedIncoming(mic)) return@registerForActivityResult
-                if (!cam) repo.cameraDenied()
+                if (!VideoCallRules.proceedIncoming(mic)) {
+                    repo.micDenied()
+                    return@registerForActivityResult
+                }
+                if (VideoCallRules.incomingCameraMuted(cam)) repo.cameraDenied()
                 repo.acceptCall()
             }
         }
@@ -196,6 +204,7 @@ class MainActivity : AppCompatActivity() {
                     onDelete = repo::deleteMessage,
                     onForward = repo::startForward,
                     onCancelComposer = repo::cancelComposerExtra,
+                    onCancelPendingMedia = repo::cancelPendingMedia,
                     onCancelForward = repo::cancelForward,
                     onChatQuery = repo::setChatQuery,
                     onMessageQuery = repo::setMessageQuery,
@@ -273,9 +282,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun withMic(action: String, granted: () -> Unit) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
+        if (hasMic()) {
             granted()
         } else {
             afterAudio = action
@@ -284,12 +291,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun withCallMedia(action: String, granted: () -> Unit) {
-        val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        val cam = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
+        val mic = hasMic()
+        val cam = hasCam()
         when {
             mic && cam -> granted()
+            action == "accept" && mic -> {
+                afterAudio = action
+                callMediaPerm.launch(arrayOf(Manifest.permission.CAMERA))
+            }
             else -> {
                 afterAudio = action
                 callMediaPerm.launch(
@@ -298,6 +307,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun hasMic(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasCam(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= 33 &&

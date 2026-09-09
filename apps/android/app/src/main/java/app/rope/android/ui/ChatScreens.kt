@@ -595,6 +595,7 @@ fun ChatPane(
     onDelete: (ChatMessage) -> Unit = {},
     onForward: (ChatMessage) -> Unit = {},
     onCancelComposer: () -> Unit = {},
+    onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
@@ -957,6 +958,7 @@ fun ChatPane(
                 onVoiceStart = onVoiceStart,
                 onVoiceFinish = onVoiceFinish,
                 onCancelComposer = onCancelComposer,
+                onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
             )
         }
@@ -1837,6 +1839,7 @@ private fun ComposerBar(
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCancelComposer: () -> Unit,
+    onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
@@ -1911,9 +1914,16 @@ private fun ComposerBar(
                 )
             }
             if (state.pendingAttachments.isNotEmpty()) {
+                val context = LocalContext.current
+                val videos = remember(state.pendingAttachments) {
+                    MediaSendRules.videoCount(
+                        state.pendingAttachments.map { context.contentResolver.getType(it).orEmpty() },
+                        state.pendingAttachments.map { it.lastPathSegment.orEmpty() },
+                    )
+                }
                 ComposerHint(
-                    copy = MediaSendRules.hint(state.pendingAttachments.size),
-                    onCancel = onCancelComposer,
+                    copy = MediaSendRules.hint(state.pendingAttachments.size, videos),
+                    onCancel = onCancelPendingMedia,
                 )
             }
             if (showEmoji && !state.recording) {

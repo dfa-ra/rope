@@ -53,6 +53,7 @@ class WebRtcSession(
     publicIp: String? = null,
     private val polite: Boolean = false,
     private val wantVideo: Boolean = false,
+    private val startCamera: Boolean = wantVideo,
     private val onLocalSignal: (CallSignal) -> Unit,
     private val onIce: (state: String, viaRelay: Boolean) -> Unit,
     private val onCameraFailed: () -> Unit = {},
@@ -73,6 +74,7 @@ class WebRtcSession(
     private var localSink: VideoSink? = null
     private var remoteSink: VideoSink? = null
     private var videoWanted = wantVideo
+    private var sendCamera = startCamera
     private var callee = polite
     private val pendingIce = mutableListOf<IceCandidate>()
     private var remoteSet = false
@@ -212,8 +214,14 @@ class WebRtcSession(
             }
         }
         if (wantVideo) {
-            val ok = startCameraLocked()
-            if (!ok) onCameraFailed()
+            videoWanted = true
+            if (sendCamera) {
+                val ok = startCameraLocked()
+                if (!ok) {
+                    sendCamera = false
+                    onCameraFailed()
+                }
+            }
         }
         Log.i(
             "rope-webrtc",
@@ -307,12 +315,21 @@ class WebRtcSession(
 
     fun setCameraEnabled(on: Boolean) {
         if (closed) return
-        videoTrack?.setEnabled(on)
+        sendCamera = on
         if (on) {
+            if (videoTrack == null) {
+                if (!startCameraLocked()) {
+                    sendCamera = false
+                    onCameraFailed()
+                    return
+                }
+            }
+            videoTrack?.setEnabled(true)
             runCatching {
                 capturer?.startCapture(VideoCallRules.WIDTH, VideoCallRules.HEIGHT, VideoCallRules.FPS)
             }
         } else {
+            videoTrack?.setEnabled(false)
             runCatching { capturer?.stopCapture() }
         }
     }
@@ -397,7 +414,10 @@ class WebRtcSession(
         val desc = SessionDescription(type, signal.sdp)
         if (signal.kind == CallSignal.OFFER && VideoCallRules.sdpHasVideo(signal.sdp)) {
             videoWanted = true
-            if (videoTrack == null && !startCameraLocked()) onCameraFailed()
+            if (sendCamera && videoTrack == null && !startCameraLocked()) {
+                sendCamera = false
+                onCameraFailed()
+            }
         }
         pc?.setRemoteDescription(object : SdpObserver by noopSdp {
             override fun onSetSuccess() {

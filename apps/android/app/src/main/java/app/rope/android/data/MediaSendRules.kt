@@ -26,6 +26,11 @@ object MediaSendRules {
     fun albumCaption(members: List<ChatMessage>): String? =
         members.asSequence().mapNotNull { captionOf(it) }.firstOrNull()
 
+    fun videoCount(mimes: List<String>, names: List<String> = emptyList()): Int =
+        mimes.indices.count { i ->
+            VideoRules.looksLikeVideo(names.getOrElse(i) { "" }, mimes[i])
+        }
+
     fun hint(count: Int, videos: Int = 0): ComposerHintCopy {
         val n = count.coerceAtLeast(1)
         val title = when {
