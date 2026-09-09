@@ -2029,6 +2029,7 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            pollReceipts = store.pollReceipts(),
         )
         publishTyping()
         prefetchMedia(_state.value.messages)

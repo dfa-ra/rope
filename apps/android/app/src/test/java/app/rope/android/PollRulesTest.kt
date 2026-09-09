@@ -161,6 +161,21 @@ class PollRulesTest {
     }
 
     @Test
+    fun enterChatHydrateUsesStoredReceiptsNotEmptyDefault() {
+        val stored = listOf(
+            vote("a", listOf(0), 1, "r1"),
+            vote("b", listOf(1), 2, "r2"),
+        )
+        assertEquals(emptyList<PollReceipt>(), UiState().pollReceipts)
+        assertEquals("0 голосов · видны", PollRules.footer(apply(emptyList()).totalVoters, false))
+        val opened = UiState().copy(pollReceipts = stored)
+        val hydrated = apply(opened.pollReceipts)
+        assertEquals(2, hydrated.totalVoters)
+        assertEquals(listOf(1, 1), hydrated.counts)
+        assertEquals("2 голосов · видны", PollRules.footer(hydrated.totalVoters, false))
+    }
+
+    @Test
     fun mediaPayloadPollOmitsObjectAndPreviews() {
         val raw = """{"kind":"poll","g":"gid","q":"Куда на обед?","o":["Пицца","Суши"],"m":false,"qzid":"q-1"}"""
         val p = MediaPayload.parse(raw)
