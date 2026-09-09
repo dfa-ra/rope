@@ -23,6 +23,8 @@ class SshProvisioner(
     private val fetcher: ReleaseFetcher = ReleaseFetcher(),
 ) {
     fun install(form: ProvisionForm): ProvisionResult {
+        require(ProvisionShell.hostOK(form.host)) { "bad host" }
+        require(ProvisionShell.portOK(form.listenPort) && ProvisionShell.portOK(form.sshPort)) { "bad port" }
         CryptoInit.ensureModernBc()
         val localBin = File(context.cacheDir, "rope-server-linux")
         CacheSecret.wipeStaleSshPem(context.cacheDir)
@@ -69,7 +71,7 @@ class SshProvisioner(
             val cmd = """
                 set -euo pipefail
                 ${sudo}chmod +x /tmp/rope-install.sh /tmp/rope-server
-                ${sudo}/tmp/rope-install.sh --binary /tmp/rope-server --host ${form.host} --port ${form.listenPort}$modeFlag
+                ${sudo}/tmp/rope-install.sh --binary /tmp/rope-server --host ${ProvisionShell.quote(form.host)} --port ${form.listenPort}$modeFlag
             """.trimIndent()
             val output = exec(ssh, cmd)
             if (output.contains("ROPE_ALREADY_INSTALLED")) {
