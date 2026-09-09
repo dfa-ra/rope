@@ -41,6 +41,8 @@ class SettingsRulesTest {
         assertTrue(hint.contains("звонок"))
         assertFalse(SettingsRules.aboutBody().contains("FCM"))
         assertTrue(SettingsRules.appearanceHint().contains("логотип"))
+        assertTrue(SettingsRules.notifyPreviewHint().contains("шторке"))
+        assertFalse(SettingsRules.notifyPreviewHint().contains("FCM"))
         assertTrue(SettingsRules.serverPinHint(true).contains("не видит"))
         assertTrue(SettingsRules.serverPinHint(false).contains("HTTP"))
     }

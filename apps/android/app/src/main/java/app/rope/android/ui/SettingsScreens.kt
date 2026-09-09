@@ -36,6 +36,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleNotifyPreview: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -120,6 +121,28 @@ fun SettingsPane(
                             if (checked != state.linkPreviewsEnabled) onToggleLinkPreviews()
                         },
                         modifier = Modifier.semantics { contentDescription = "Предпросмотр ссылок" },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Текст в уведомлении", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            SettingsRules.notifyPreviewHint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.notifyPreviewEnabled,
+                        onCheckedChange = { checked ->
+                            if (checked != state.notifyPreviewEnabled) onToggleNotifyPreview()
+                        },
+                        modifier = Modifier.semantics { contentDescription = "Текст в уведомлении" },
                     )
                 }
             }

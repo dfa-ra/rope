@@ -167,6 +167,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val notifyPreviewEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    notifyPreviewEnabled = store.notifyPreviewEnabled(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -584,6 +586,12 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleNotifyPreview() {
+        val next = !_state.value.notifyPreviewEnabled
+        store.saveNotifyPreview(next)
+        _state.value = _state.value.copy(notifyPreviewEnabled = next)
     }
 
     fun toggleLinkPreviews() {
@@ -3407,7 +3415,11 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            notifier.message(
+                title,
+                NotifyRules.messageBody(body, _state.value.notifyPreviewEnabled),
+                AlbumRules.notifyId(body, albumId),
+            )
         }
     }
 

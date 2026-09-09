@@ -57,4 +57,18 @@ class NotifyRulesTest {
         assertTrue(ChatActions.canOpen(photo))
         assertFalse(ChatActions.canOpen(gone))
     }
+
+    @Test
+    fun messageBodyHidesTextWhenPreviewOff() {
+        assertEquals("Новое сообщение", NotifyRules.messageBody("секрет", preview = false))
+        assertEquals("Новое сообщение", NotifyRules.messageBody("  ", preview = false))
+        assertEquals("Новое сообщение", NotifyRules.messageBody("", preview = false))
+    }
+
+    @Test
+    fun messageBodyShowsTrimmedTextWhenPreviewOn() {
+        assertEquals("привет", NotifyRules.messageBody("  привет  ", preview = true))
+        assertEquals("Сообщение", NotifyRules.messageBody("   ", preview = true))
+        assertEquals("Сообщение", NotifyRules.messageBody("", preview = true))
+    }
 }

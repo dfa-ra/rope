@@ -8,6 +8,16 @@ package app.rope.android.data
  * Global mute (Settings) silences messages only — not the incoming-call overlay.
  */
 object NotifyRules {
+    /**
+     * Shade body for an incoming message. Off hides the ciphertext-derived
+     * text; the sender title is unchanged. Album collapse still keys off the
+     * raw body in the repository.
+     */
+    fun messageBody(raw: String, preview: Boolean): String {
+        if (!preview) return "Новое сообщение"
+        return raw.trim().ifEmpty { "Сообщение" }
+    }
+
     fun shouldAlert(
         chatOpen: Boolean,
         appForeground: Boolean,
