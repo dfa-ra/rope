@@ -458,8 +458,8 @@ func (s *Server) revokeMember(w http.ResponseWriter, _ *http.Request, a authed, 
 		return
 	}
 	if target.Role == "owner" {
-		n, err := s.Store.OwnerCount()
-		if err != nil || n <= 1 {
+		remaining, err := s.Store.OwnerDeviceCountExceptMember(target.ID)
+		if err != nil || remaining == 0 {
 			writeJSON(w, 409, map[string]string{"error": "last owner"})
 			return
 		}
@@ -494,24 +494,16 @@ func (s *Server) revokeDevice(w http.ResponseWriter, _ *http.Request, a authed, 
 		return
 	}
 	deviceID := strings.ToLower(req.DeviceID)
-	target, err := s.Store.Device(deviceID)
-	if err != nil {
+	err := s.Store.RevokeDeviceGuarded(deviceID)
+	if errors.Is(err, db.ErrNotFound) {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
 	}
-	member, err := s.Store.Member(target.MemberID)
-	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "not found"})
+	if errors.Is(err, db.ErrLastOwner) {
+		writeJSON(w, 409, map[string]string{"error": "last owner"})
 		return
 	}
-	if member.Role == "owner" {
-		n, err := s.Store.OwnerDeviceCount()
-		if err != nil || n <= 1 {
-			writeJSON(w, 409, map[string]string{"error": "last owner"})
-			return
-		}
-	}
-	if err := s.Store.RevokeDevice(deviceID); err != nil {
+	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}

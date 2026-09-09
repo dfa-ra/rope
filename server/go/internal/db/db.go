@@ -1,14 +1,30 @@
 package db
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
+
+var (
+	ErrNotFound  = errors.New("not found")
+	ErrLastOwner = errors.New("last owner")
+)
+
+const liveOwnerDevicesSQL = `
+SELECT COUNT(*) FROM devices d
+JOIN members m ON m.member_id = d.member_id
+WHERE m.role = 'owner' AND m.revoked_at IS NULL AND d.revoked_at IS NULL`
+
+// AfterOwnerDeviceCount, if set, runs after OwnerDeviceCount's SELECT.
+// Tests use it to overlap the old check-then-act revoke-device path.
+var AfterOwnerDeviceCount func()
 
 type Store struct {
 	SQL *sql.DB
@@ -205,10 +221,19 @@ func (s *Store) OwnerCount() (int, error) {
 // by revoking every device while OwnerCount stays > 1.
 func (s *Store) OwnerDeviceCount() (int, error) {
 	var n int
-	err := s.SQL.QueryRow(`
-		SELECT COUNT(*) FROM devices d
-		JOIN members m ON m.member_id = d.member_id
-		WHERE m.role = 'owner' AND m.revoked_at IS NULL AND d.revoked_at IS NULL`).Scan(&n)
+	err := s.SQL.QueryRow(liveOwnerDevicesSQL).Scan(&n)
+	if err == nil && AfterOwnerDeviceCount != nil {
+		AfterOwnerDeviceCount()
+	}
+	return n, err
+}
+
+// OwnerDeviceCountExceptMember is live owner devices that would remain if
+// memberID were fully revoked. revoke-member 409 keys off this so a leftover
+// owner member with zero devices cannot be used to kick the last live owner.
+func (s *Store) OwnerDeviceCountExceptMember(memberID string) (int, error) {
+	var n int
+	err := s.SQL.QueryRow(liveOwnerDevicesSQL+` AND d.member_id != ?`, memberID).Scan(&n)
 	return n, err
 }
 
@@ -310,6 +335,73 @@ func (s *Store) RevokeMember(id string) error {
 func (s *Store) RevokeDevice(id string) error {
 	_, err := s.SQL.Exec(`UPDATE devices SET revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL`, nowRFC(), id)
 	return err
+}
+
+// RevokeDeviceGuarded revokes a live device in one IMMEDIATE transaction.
+// Unknown or already-revoked devices return ErrNotFound. The last live owner
+// device returns ErrLastOwner. Two concurrent owner-device revokes cannot both
+// succeed: the write lock is taken before the count and held through UPDATE.
+func (s *Store) RevokeDeviceGuarded(id string) error {
+	ctx := context.Background()
+	conn, err := s.SQL.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+
+	var revoked sql.NullString
+	var role string
+	var memberRevoked sql.NullString
+	err = conn.QueryRowContext(ctx, `
+		SELECT d.revoked_at, m.role, m.revoked_at
+		FROM devices d
+		JOIN members m ON m.member_id = d.member_id
+		WHERE d.device_id = ?`, id).Scan(&revoked, &role, &memberRevoked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if revoked.Valid {
+		return ErrNotFound
+	}
+	if role == "owner" && !memberRevoked.Valid {
+		var n int
+		if err := conn.QueryRowContext(ctx, liveOwnerDevicesSQL).Scan(&n); err != nil {
+			return err
+		}
+		if n <= 1 {
+			return ErrLastOwner
+		}
+	}
+	res, err := conn.ExecContext(ctx,
+		`UPDATE devices SET revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL`,
+		nowRFC(), id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return ErrNotFound
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 type MailboxRow struct {

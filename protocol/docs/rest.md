@@ -207,7 +207,7 @@ Soft-removes the member and bumps epoch. Removed devices no longer see the group
 { "member_id": "uuid" }
 ```
 
-Owner only. `403` if the caller is not owner. `404` if the member is unknown. `409` if the target is the last remaining owner. Success revokes the member and every still-active device, then drops their live WSS connections. Subsequent auth from those devices is `401`.
+Owner only. `403` if the caller is not owner. `404` if the member is unknown. `409` if revoking this member would leave no live owner **device** (the last remaining owner, or a leftover owner member after every other owner device was already revoked). Success revokes the member and every still-active device, then drops their live WSS connections. Subsequent auth from those devices is `401`.
 
 ### `POST /v1/admin/revoke-device` (owner)
 
@@ -215,4 +215,4 @@ Owner only. `403` if the caller is not owner. `404` if the member is unknown. `4
 { "device_id": "hex" }
 ```
 
-Owner only. `403` if the caller is not owner. `404` if the device is unknown. `409` if this is the last remaining owner **device** (revoking it would brick the instance). The gate is live owner devices, not `OwnerCount` members: a co-owner with another live owner device may be revoked; a last owner with a spare device may revoke the spare. Success revokes that device and drops its live WSS. Other devices of the same member stay until separately revoked.
+Owner only. `403` if the caller is not owner. `404` if the device is unknown or already revoked. `409` if this is the last remaining live owner **device** (revoking it would brick the instance). The last-owner-device gate is a single SQLite `BEGIN IMMEDIATE` transaction so two concurrent revokes cannot both succeed. The gate is live owner devices, not `OwnerCount` members: a co-owner with another live owner device may be revoked; a last owner with a spare device may revoke the spare. Success revokes that device and drops its live WSS. Other devices of the same member stay until separately revoked.
