@@ -20,6 +20,22 @@ object RevokeRules {
         return target.memberId.isNotBlank()
     }
 
+    /**
+     * Last owner must not brick the instance via revoke-device.
+     * People UI uses revoke-member only; this stays unused in UI.
+     */
+    fun canRevokeDevice(
+        actorRole: String?,
+        actorDeviceId: String?,
+        target: DirectoryDevice,
+        ownerCount: Int,
+    ): Boolean {
+        if (!canRevoke(actorRole)) return false
+        if (PeerIds.same(actorDeviceId, target.deviceId)) return false
+        if (RoleRules.isOwner(target.role) && ownerCount <= 1) return false
+        return target.deviceId.isNotBlank()
+    }
+
     fun actionLabel(): String = "Исключить"
 
     fun confirmPrompt(name: String): String {

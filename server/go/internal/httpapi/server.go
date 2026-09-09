@@ -493,11 +493,29 @@ func (s *Server) revokeDevice(w http.ResponseWriter, _ *http.Request, a authed, 
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
-	if err := s.Store.RevokeDevice(req.DeviceID); err != nil {
+	deviceID := strings.ToLower(req.DeviceID)
+	target, err := s.Store.Device(deviceID)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	member, err := s.Store.Member(target.MemberID)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	if member.Role == "owner" {
+		n, err := s.Store.OwnerCount()
+		if err != nil || n <= 1 {
+			writeJSON(w, 409, map[string]string{"error": "last owner"})
+			return
+		}
+	}
+	if err := s.Store.RevokeDevice(deviceID); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}
-	s.Hub.Drop(req.DeviceID)
+	s.Hub.Drop(deviceID)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 

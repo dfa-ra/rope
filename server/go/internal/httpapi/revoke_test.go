@@ -169,3 +169,99 @@ func TestLastOwnerCannotRevokeSelf(t *testing.T) {
 		t.Fatalf("last owner wanted 409 got %d %s", resp.StatusCode, b)
 	}
 }
+
+func TestLastOwnerCannotRevokeOwnDevice(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	body := []byte(`{"device_id":"` + owner.id + `"}`)
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", body, owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 409 {
+		t.Fatalf("last owner revoke-device wanted 409 got %d %s", resp.StatusCode, b)
+	}
+
+	dirReq := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, owner)
+	resp, err = http.DefaultClient.Do(dirReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("last owner still wanted 200 directory got %d", resp.StatusCode)
+	}
+}
+
+func TestOwnerCanRevokeGuestDevice(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	body := []byte(`{"ttl_seconds":3600}`)
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", body, owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&inv); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	guest := newDevice(t)
+	bootstrap(t, hs, inv.Token, guest, "guest")
+
+	forbid := []byte(`{"device_id":"` + owner.id + `"}`)
+	bad := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", forbid, guest)
+	resp, err = http.DefaultClient.Do(bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 403 {
+		t.Fatalf("guest revoke-device wanted 403 got %d %s", resp.StatusCode, b)
+	}
+
+	okBody := []byte(`{"device_id":"` + guest.id + `"}`)
+	okReq := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", okBody, owner)
+	resp, err = http.DefaultClient.Do(okReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("owner revoke guest device wanted 200 got %d %s", resp.StatusCode, b)
+	}
+
+	late := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, guest)
+	resp, err = http.DefaultClient.Do(late)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Fatalf("revoked guest directory wanted 401 got %d", resp.StatusCode)
+	}
+
+	unknown := []byte(`{"device_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
+	miss := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", unknown, owner)
+	resp, err = http.DefaultClient.Do(miss)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("unknown device wanted 404 got %d %s", resp.StatusCode, b)
+	}
+}

@@ -4,7 +4,12 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | DONE | unfreeze for 0.3.6 complete | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.7 last-owner revoke-device | — |
+| CG-063 | Slice: last-owner revoke-device 409 as 0.3.7 | PO | IN_PROGRESS | REV-01: last owner can brick via revoke-device | CG-007 |
+| CG-064 | Go: last-owner POST /v1/admin/revoke-device 409 | GO-01 | DONE | like revoke-member | CG-063 |
+| CG-065 | Android: do not expose unused revokeDevice for last owner | AND-01 | DONE | RevokeRules.canRevokeDevice; drop unused API | CG-063 |
+| CG-066 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; co-owner device-count gap is 0.3.8 | CG-064, CG-065 |
+| CG-067 | Ship **0.3.7** | PO | IN_PROGRESS | versionCode 31; do not retag v0.3.6 | CG-066 |
 | CG-058 | Slice: owner revoke UI as 0.3.6 | PO | DONE | shipped v0.3.6 | CG-007 |
 | CG-059 | Android: People Исключить + RevokeRules | AND-01 | DONE | D-019 | CG-058 |
 | CG-060 | Go: last-owner 409 + drop WSS on revoke | GO-01 | DONE | existing POST /v1/admin/revoke-* | CG-058 |

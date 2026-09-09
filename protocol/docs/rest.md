@@ -39,7 +39,7 @@ Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running":
 ### `GET /version`
 
 ```json
-{ "server": "0.3.6", "protocol": 1 }
+{ "server": "0.3.7", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -131,7 +131,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,
@@ -215,4 +215,4 @@ Owner only. `403` if the caller is not owner. `404` if the member is unknown. `4
 { "device_id": "hex" }
 ```
 
-Owner only. Drops that device from the live hub. Other devices of the same member stay until separately revoked.
+Owner only. `403` if the caller is not owner. `404` if the device is unknown. `409` if the device belongs to the last remaining owner (revoking it would brick the instance). Success revokes that device and drops its live WSS. Other devices of the same member stay until separately revoked.

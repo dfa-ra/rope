@@ -77,11 +77,6 @@ class ServerApi(
         return authed("POST", "/v1/admin/revoke-member", body)
     }
 
-    fun revokeDevice(deviceId: String): JSONObject {
-        val body = JSONObject().put("device_id", deviceId).toString().toByteArray()
-        return authed("POST", "/v1/admin/revoke-device", body)
-    }
-
     fun uploadObject(ciphertext: ByteArray, sha256: String): JSONObject {
         val path = "/v1/objects"
         val header = sendAuthHeader("POST", path, ciphertext)
