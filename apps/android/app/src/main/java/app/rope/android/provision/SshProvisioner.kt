@@ -25,15 +25,20 @@ class SshProvisioner(
     fun install(form: ProvisionForm): ProvisionResult {
         CryptoInit.ensureModernBc()
         val localBin = File(context.cacheDir, "rope-server-linux")
+        CacheSecret.wipeStaleSshPem(context.cacheDir)
 
         val ssh = connect(form.host, form.sshPort)
         try {
             when {
                 form.keyPem.isNotBlank() -> {
-                    val keyFile = File(context.cacheDir, "ssh-key.pem")
-                    keyFile.writeText(form.keyPem)
-                    val keys: KeyProvider = ssh.loadKeys(keyFile.absolutePath)
-                    ssh.authPublickey(form.user, keys)
+                    val keyFile = File.createTempFile(CacheSecret.TEMP_PREFIX, CacheSecret.TEMP_SUFFIX, context.cacheDir)
+                    try {
+                        keyFile.writeText(form.keyPem)
+                        val keys: KeyProvider = ssh.loadKeys(keyFile.absolutePath)
+                        ssh.authPublickey(form.user, keys)
+                    } finally {
+                        CacheSecret.wipe(keyFile)
+                    }
                 }
                 form.password.isNotBlank() -> ssh.authPassword(form.user, form.password)
                 else -> error("SSH password or key required")
