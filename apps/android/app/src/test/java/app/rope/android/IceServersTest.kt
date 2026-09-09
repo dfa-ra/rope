@@ -89,8 +89,10 @@ class IceServersTest {
         assertFalse(IceServers.usesPublicStunFallback(hinted))
 
         val fallback = IceServers.resolve(emptyList())
-        assertTrue(IceServers.usesPublicStunFallback(fallback))
-        assertEquals(CallMedia.STUN_URLS, fallback.flatMap { it.urls })
+        assertTrue(fallback.isEmpty())
+        assertFalse(IceServers.usesPublicStunFallback(fallback))
+        assertTrue(IceServers.usesPublicStunFallback(IceServers.fallbackStun()))
+        assertEquals(CallMedia.STUN_URLS, IceServers.fallbackStun().flatMap { it.urls })
     }
 
     @Test

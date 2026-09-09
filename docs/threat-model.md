@@ -37,6 +37,7 @@
 - Bootstrap rate limits key on `RemoteAddr`, not `X-Forwarded-For`.
 - The GitHub token in local kv is wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
 - Cached TURN HMAC credentials in local profile kv are wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
+- Cached ICE unwrap failure (Keystore miss / corrupt wrap) does not fall back to public Google or Cloudflare STUN.
 - PeerConnection ICE URLs are allowlisted to `stun:`, `turn:`, and `turns:` schemes.
 
 ## Non-guarantees (honest limitations)

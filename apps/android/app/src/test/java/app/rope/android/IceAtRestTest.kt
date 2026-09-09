@@ -1,6 +1,7 @@
 package app.rope.android
 
 import app.rope.android.data.IceAtRest
+import app.rope.android.data.IceServers
 import app.rope.android.data.SecretKv
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -37,6 +38,28 @@ class IceAtRestTest {
         val sealed = IceAtRest.seal("""[{"urls":["turn:vps:3478"],"credential":"c"}]""", xor)
         assertEquals("", IceAtRest.open(sealed) { error("keystore miss") })
         assertEquals("", IceAtRest.open(SecretKv.PREFIX + "%%%") { it })
+    }
+
+    @Test
+    fun unwrapMissDoesNotResolveToPublicStun() {
+        val sealed = IceAtRest.seal("""[{"urls":["turn:vps:3478"],"credential":"c"}]""", xor)
+        val ice = IceAtRest.open(sealed) { error("keystore miss") }
+        assertEquals("", ice)
+        val parsed = IceServers.parse(ice)
+        val noHost = IceServers.resolve(parsed)
+        assertTrue(noHost.isEmpty())
+        assertFalse(IceServers.usesPublicStunFallback(noHost))
+        assertTrue(noHost.none { spec -> spec.urls.any { it.contains("google") || it.contains("cloudflare") } })
+        val hinted = IceServers.resolve(parsed, "203.0.113.9")
+        assertEquals(listOf("stun:203.0.113.9:3478"), hinted.flatMap { it.urls })
+        assertFalse(IceServers.usesPublicStunFallback(hinted))
+        val privateHost = IceServers.resolve(parsed, "10.0.0.8")
+        assertTrue(privateHost.isEmpty())
+        assertFalse(IceServers.usesPublicStunFallback(privateHost))
+        val plan = IceServers.plan(parsed)
+        assertTrue(plan.servers.isEmpty())
+        assertFalse(plan.forceRelay)
+        assertTrue(plan.servers.none { spec -> spec.urls.any { it.contains("google") || it.contains("cloudflare") } })
     }
 
     @Test

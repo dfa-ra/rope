@@ -185,9 +185,10 @@ object IceServers {
             )
         }.filter { it.urls.isNotEmpty() }
         if (cleaned.isNotEmpty()) return cleaned
-        // Russia: Google/Cloudflare STUN is often blocked. Prefer the VPS host.
+        // IceAtRest unwrap miss is empty JSON. Prefer the VPS host; never
+        // phone Google/Cloudflare STUN (IP leak + often blocked in Russia).
         stunHint(hintHost)?.let { return listOf(it) }
-        return fallbackStun()
+        return emptyList()
     }
 
     fun plan(
@@ -299,7 +300,6 @@ object IceServers {
         CallMedia.STUN_URLS.map { IceServerSpec(listOf(it)) }
 
     fun usesPublicStunFallback(resolved: List<IceServerSpec>): Boolean {
-        if (resolved.isEmpty()) return true
         val urls = resolved.flatMap { it.urls }
         return urls.isNotEmpty() && urls.all { it in CallMedia.STUN_URLS }
     }

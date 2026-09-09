@@ -3,6 +3,9 @@ package app.rope.android.data
 /**
  * At-rest wrap for cached TURN JSON in the profile kv row.
  * Uses [SecretKv] + Keystore AES-GCM. Not envelope crypto.
+ *
+ * Unwrap miss / corrupt wrap returns empty. Callers must not treat that
+ * empty as "no ICE, use public STUN" — [IceServers.resolve] fails closed.
  */
 object IceAtRest {
     fun seal(plain: String, encrypt: (ByteArray) -> ByteArray): String {

@@ -458,7 +458,8 @@ class Stage2UxTest {
         assertTrue(resolved.none { spec -> spec.urls.any { it.contains("google") || it.contains("cloudflare") } })
 
         val fallback = IceServers.resolve(emptyList())
-        assertTrue(IceServers.usesPublicStunFallback(fallback))
-        assertEquals(CallMedia.STUN_URLS, fallback.flatMap { it.urls })
+        assertTrue(fallback.isEmpty())
+        assertFalse(IceServers.usesPublicStunFallback(fallback))
+        assertEquals(CallMedia.STUN_URLS, IceServers.fallbackStun().flatMap { it.urls })
     }
 }
