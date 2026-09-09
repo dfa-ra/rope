@@ -10,11 +10,11 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.33**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, and `v0.3.32` remain published history.
+The product trunk is **`main`**, shipping **0.3.34**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, and `v0.3.33` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.33` / `versionCode=57`, plus CryptoGalera operating layer |
+| **`main`** | Shipped tree: Android `versionName=0.3.34` / `versionCode=58`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
 | **GitHub Release `v0.3.0`** | Previous line. Do not retag `v0.3.0`. |
 | **GitHub Release `v0.3.1`** | Previous line. Do not retag `v0.3.1`. |
@@ -48,7 +48,8 @@ The product trunk is **`main`**, shipping **0.3.33**. GitHub Releases `v0.2.15`,
 | **GitHub Release `v0.3.29`** | Previous line. Do not retag `v0.3.29`. |
 | **GitHub Release `v0.3.30`** | Previous line. Do not retag `v0.3.30`. |
 | **GitHub Release `v0.3.31`** | Previous line. Do not retag `v0.3.31`. |
-| **GitHub Release `v0.3.32`** | Previous Latest until `v0.3.33` publishes. Do not retag `v0.3.32`. |
+| **GitHub Release `v0.3.32`** | Previous line. Do not retag `v0.3.32`. |
+| **GitHub Release `v0.3.33`** | Previous Latest until `v0.3.34` publishes. Do not retag `v0.3.33`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -58,7 +59,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.33`).
+1. Install the Android app (this cycle ships `v0.3.34`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).
@@ -79,6 +80,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 - **0.3.31 QA:** callee `onRenegotiationNeeded` offers only when this side is the offerer and signaling is STABLE; unmute still offers when STABLE; overlay `callNotice` clears on successful Accept/unmute; Back from peer profile / group info keeps the staged album; CallOverlay draws above the image viewer
 - **0.3.32 calls:** in-call video uses a TextureView EGL sink (init before attach, bind after EGL); camera capturer starts on the main thread before createOffer; OfferToReceiveVideo stays true on video offers/answers; ring/tone plays only while RINGING_IN/OUT and stops on CONNECTED; ICE DISCONNECTED/FAILED/CHECKING after media-up must not restart RING or pulse the overlay
 - **0.3.33 Voice notes 2.0:** 1x/1.5x/2x playback, seekable waveform (live amplitudes stored as inner JSON `wf`), and round video notes (кружок, kind `video_note`). Hold-to-record voice already shipped. In-call camera path unchanged.
+- **0.3.34 security:** live call offer/answer/ICE bind to the current peer (call-id reuse from a third device cannot inject SDP); SDP/ICE drop CRLF and `file:` / `javascript:` / `data:` schemes; APK install status is a non-exported receiver and only launches PackageInstaller confirm intents.
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator
