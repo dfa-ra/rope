@@ -42,9 +42,11 @@
 ## Abuse controls
 
 - Authenticated REST and WSS (device signature over method/path/timestamp/body).
-- Max envelope size (64 KiB).
+- Max envelope size (64 KiB). Call offer/answer JSON is still capped at 16 KiB on WSS.
 - Per-IP rate limits on bootstrap, invite creation, and WSS sends.
 - Revocation of members and devices by the owner.
+- Live call offer/answer/ICE and hangup apply only from the current peer. A third device that reuses the call id cannot inject SDP. ICE candidates must be a single line; SDP/ICE with `file:`, `javascript:`, or `data:` schemes are dropped.
+- In-app APK install status is a non-exported receiver. `EXTRA_INTENT` is launched only if it is a PackageInstaller confirm action.
 
 ## Incident notes
 

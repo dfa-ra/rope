@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
-import app.rope.android.MainActivity
 import java.io.File
 
 class ApkInstaller(private val context: Context) {
@@ -24,13 +23,12 @@ class ApkInstaller(private val context: Context) {
                 file.inputStream().use { it.copyTo(out) }
                 session.fsync(out)
             }
-            val callback = Intent(context, MainActivity::class.java).apply {
+            val callback = Intent(context, InstallStatusReceiver::class.java).apply {
                 action = ACTION
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                 if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
-            val pending = PendingIntent.getActivity(context, sessionId, callback, flags)
+            val pending = PendingIntent.getBroadcast(context, sessionId, callback, flags)
             session.commit(pending.intentSender)
         } catch (e: Exception) {
             session.abandon()

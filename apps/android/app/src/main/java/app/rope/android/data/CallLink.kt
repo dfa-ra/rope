@@ -58,6 +58,10 @@ object CallLink {
         return if (a <= b) a else b
     }
 
+    /**
+     * Live media (offer/answer/ICE) and hangup bind to the current peer.
+     * A matching call id from a third device must not inject SDP into the call.
+     */
     fun matchesCall(
         eventCallId: String,
         eventFrom: String,
@@ -67,14 +71,12 @@ object CallLink {
     ): Boolean {
         val from = PeerIds.normalize(eventFrom)
         val peer = PeerIds.normalize(peerDeviceId)
+        if (from.isBlank() || peer.isBlank() || from != peer) return false
         val ev = eventCallId.trim()
         val id = callId.trim()
         val alt = altCallId.trim()
-        if (from.isNotBlank() && from == peer) {
-            if (ev.isBlank() || id.isBlank()) return true
-            return ev == id || ev == alt
-        }
-        return ev.isNotBlank() && (ev == id || ev == alt)
+        if (ev.isBlank() || id.isBlank()) return true
+        return ev == id || ev == alt
     }
 
     fun shouldQueueSignal(

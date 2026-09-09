@@ -487,7 +487,8 @@ class CallMachine {
         val sig = CallSignal.parseMedia(event, payload)
         if (!state.live) {
             if (event != CallSignal.OFFER) return emptyList()
-            val video = sig != null && VideoCallRules.sdpHasVideo(sig.sdp)
+            if (sig == null || !sig.wireSafe()) return emptyList()
+            val video = VideoCallRules.sdpHasVideo(sig.sdp)
             state = CallMachineState(
                 callId = callId,
                 peerDeviceId = from,
@@ -496,14 +497,14 @@ class CallMachine {
                 link = CallLinkState.RINGING,
                 media = if (video) "один тап — ответить · видео" else "один тап — ответить",
                 ended = false,
-                queue = listOfNotNull(sig),
+                queue = listOf(sig),
                 startedAtMs = System.currentTimeMillis(),
                 video = video,
             )
             return incomingRingEffects()
         }
         if (!matchesLocked(from, callId)) return emptyList()
-        if (sig == null) return emptyList()
+        if (sig == null || !sig.wireSafe()) return emptyList()
         return enqueueLocked(sig)
     }
 

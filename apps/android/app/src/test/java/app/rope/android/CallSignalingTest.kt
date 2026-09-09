@@ -522,6 +522,66 @@ class CallSignalingTest {
     }
 
     @Test
+    fun thirdPartyCannotInjectSdpOrIceIntoLiveCall() {
+        val m = connectedCall()
+        val injected = offer("v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\n")
+        val eveOffer = m.media("eve", CallSignal.OFFER, "c1", injected, "alice")
+        assertTrue(eveOffer.none { it is CallEffect.DeliverRemote })
+        val eveIce = m.media(
+            "eve",
+            CallSignal.ICE,
+            "c1",
+            ice("candidate:1 1 UDP 1 203.0.113.9 9 typ host"),
+            "alice",
+        )
+        assertTrue(eveIce.none { it is CallEffect.DeliverRemote })
+        val eveHang = m.onWire("eve", CallSignal.HANGUP, "c1", "", "alice")
+        assertTrue(eveHang.none { it is CallEffect.TearDown })
+        assertTrue(m.state.live)
+        assertEquals("bob", m.state.peerDeviceId)
+        val bobIce = m.media("bob", CallSignal.ICE, "c1", ice(), "alice")
+        assertTrue(bobIce.any { it is CallEffect.DeliverRemote })
+    }
+
+    @Test
+    fun sdpAndIceRejectCrLfAndFileSchemeInjection() {
+        val crlfIce = JSONObject()
+            .put("kind", "ice")
+            .put("candidate", "x\r\na=fingerprint:sha-256 AA")
+            .put("sdp_mid", "0")
+            .toString()
+        assertNull(CallSignal.parse(crlfIce))
+        val crlfMid = JSONObject()
+            .put("kind", "ice")
+            .put("candidate", "typ host")
+            .put("sdp_mid", "0\na=setup:actpass")
+            .toString()
+        assertNull(CallSignal.parse(crlfMid))
+        val fileSdp = JSONObject()
+            .put("kind", "offer")
+            .put("sdp", "v=0\nc=IN IP4 0.0.0.0\na=file://etc/passwd")
+            .toString()
+        assertNull(CallSignal.parse(fileSdp))
+        assertNull(CallSignal.parse("""{"kind":"answer","sdp":"o=evil"}"""))
+        assertFalse(CallSignal.candidateSafe("host\ntyp relay"))
+        assertFalse(CallSignal.sdpSafe("v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\na=x file:foo"))
+        assertTrue(CallSignal.sdpSafe("v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\n"))
+        assertTrue(CallSignal.candidateSafe("candidate:1 1 UDP 1 192.0.2.1 9 typ host"))
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        m.onSessionAttached()
+        m.onLocalOfferSent()
+        val poisonSdp = JSONObject()
+            .put("kind", "answer")
+            .put("sdp", "v=0\na=javascript:alert(1)")
+            .toString()
+        val poison = m.onWire("bob", CallSignal.ANSWER, "c1", poisonSdp, "alice")
+        assertTrue(poison.none { it is CallEffect.DeliverRemote })
+        assertTrue(m.state.live)
+    }
+
+    @Test
     fun muteFlipCameraDenyAreNotHangupSignals() {
         assertFalse(VideoCallRules.sdpErrorFailsIce())
         assertTrue(VideoCallRules.iceBlipKeepsCall("FAILED", mediaWasUp = true))

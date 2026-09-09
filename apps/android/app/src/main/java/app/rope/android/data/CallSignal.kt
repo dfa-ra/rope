@@ -87,19 +87,50 @@ data class CallSignal(
                 val sdp = JsonIds.optional(o.optString("sdp")).orEmpty()
                 val candidate = JsonIds.optional(o.optString("candidate")).orEmpty()
                 val frame = JsonIds.optional(o.optString("frame")).orEmpty()
+                val mid = JsonIds.optional(o.optString("sdp_mid")).orEmpty()
                 if ((kind == OFFER || kind == ANSWER) && sdp.isBlank()) return null
-                CallSignal(
+                val parsed = CallSignal(
                     kind = kind,
                     sdp = sdp,
                     candidate = candidate,
-                    sdpMid = JsonIds.optional(o.optString("sdp_mid")).orEmpty(),
+                    sdpMid = mid,
                     sdpMLineIndex = o.optInt("sdp_mline"),
                     frame = frame,
                 )
+                if (!parsed.wireSafe()) return null
+                parsed
             } catch (_: Exception) {
                 null
             }
         }
+
+        /** Single-line ICE / mid / frame. Rejects CRLF injection into SDP. */
+        fun singleLine(value: String): Boolean =
+            value.indexOf('\n') < 0 && value.indexOf('\r') < 0 && value.indexOf('\u0000') < 0
+
+        fun midSafe(mid: String): Boolean = singleLine(mid) && ' ' !in mid && '\t' !in mid
+
+        fun candidateSafe(candidate: String): Boolean =
+            singleLine(candidate) && !hasForbiddenScheme(candidate)
+
+        fun sdpSafe(sdp: String): Boolean {
+            if (sdp.isEmpty()) return true
+            if (sdp.indexOf('\u0000') >= 0) return false
+            if (!sdp.lineSequence().any { it.startsWith("v=") }) return false
+            return sdp.lineSequence().none { hasForbiddenScheme(it) }
+        }
+
+        fun hasForbiddenScheme(value: String): Boolean {
+            val lower = value.lowercase()
+            return "file:" in lower || "javascript:" in lower || "data:" in lower
+        }
+    }
+
+    fun wireSafe(): Boolean = when (kind) {
+        OFFER, ANSWER -> sdpSafe(sdp) && candidateSafe(candidate) && midSafe(sdpMid)
+        ICE -> candidate.isNotBlank() && candidateSafe(candidate) && midSafe(sdpMid)
+        AUDIO -> singleLine(frame)
+        else -> true
     }
 }
 

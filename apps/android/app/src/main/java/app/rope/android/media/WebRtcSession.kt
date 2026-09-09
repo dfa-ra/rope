@@ -394,6 +394,7 @@ class WebRtcSession(
         if (closed) return
         when (signal.kind) {
             CallSignal.OFFER -> {
+                if (!signal.wireSafe()) return
                 if (VideoCallRules.ignoreRemoteOfferOnGlare(
                         makingOffer = makingOffer,
                         haveLocalOffer = pc?.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER,
@@ -406,6 +407,7 @@ class WebRtcSession(
                 applyRemoteSdp(signal)
             }
             CallSignal.ANSWER -> {
+                if (!signal.wireSafe()) return
                 if (!localSet) {
                     pendingRemote = signal
                     return
@@ -413,7 +415,7 @@ class WebRtcSession(
                 applyRemoteSdp(signal)
             }
             CallSignal.ICE -> {
-                if (signal.candidate.isBlank()) return
+                if (!signal.wireSafe()) return
                 if (CallMedia.isRelayCandidate(signal.candidate)) viaRelay = true
                 val mid = signal.sdpMid.trim().ifEmpty { "0" }
                 val ice = IceCandidate(mid, signal.sdpMLineIndex.coerceAtLeast(0), signal.candidate)

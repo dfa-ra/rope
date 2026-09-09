@@ -82,6 +82,10 @@ class CallLinkTest {
         assertEquals(CallLink.weCreateOffer("AbC", "def"), CallLink.weCreateOffer("abc", "DEF"))
         assertTrue(CallLink.matchesCall("c1", "BOB", "c1", "", "bob"))
         assertFalse(CallLink.matchesCall("other", "BOB", "c1", "", "eve"))
+        assertFalse(CallLink.matchesCall("c1", "eve", "c1", "", "bob"))
+        assertFalse(CallLink.matchesCall("c1", "eve", "c1", "c1", "bob"))
+        assertFalse(CallLink.matchesCall("c1", "", "c1", "", "bob"))
+        assertTrue(CallLink.matchesCall("c1", "bob", "c1", "", "BOB"))
     }
 
     @Test
