@@ -17,4 +17,20 @@ object NotifyRules {
         if (globalMuted || muted) return false
         return !(chatOpen && appForeground)
     }
+
+    data class IncomingCallText(
+        val title: String,
+        val privateBody: String,
+        val publicBody: String,
+    )
+
+    /**
+     * Shade may show the peer. Lockscreen public version is title-only.
+     */
+    fun incomingCallText(peerName: String): IncomingCallText =
+        IncomingCallText(
+            title = "Входящий вызов",
+            privateBody = peerName,
+            publicBody = "",
+        )
 }

@@ -40,6 +40,15 @@ class NotifyRulesTest {
     }
 
     @Test
+    fun incomingCallLockscreenOmitsPeerName() {
+        val copy = NotifyRules.incomingCallText("Анна")
+        assertEquals("Входящий вызов", copy.title)
+        assertEquals("Анна", copy.privateBody)
+        assertEquals("", copy.publicBody)
+        assertFalse(copy.publicBody.contains("Анна"))
+    }
+
+    @Test
     fun openIsOnlyForLiveImages() {
         val text = ChatMessage("1", "p", false, "hi", MessageStatus.DELIVERED_TO_DEVICE, 1L)
         val photo = text.copy(id = "2", kind = MessageKind.IMAGE)
