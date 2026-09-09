@@ -379,9 +379,20 @@ class RopeRepository(private val app: Application) {
     }
 
     fun setChatQuery(query: String) {
-        val titles = _state.value.conversations.associate { it.id to it.title }
+        val convs = _state.value.conversations
+        val titles = convs.associate { it.id to it.title }
+        val openable = buildSet {
+            convs.forEach { add(it.id) }
+            _state.value.groups.forEach { add(ChatIds.group(it.groupId)) }
+            add(SavedMessagesRules.ID)
+        }
         val hits = if (GlobalSearchRules.shouldSearch(query, forwarding = false, mode = ChatListMode.ALL)) {
-            GlobalSearchRules.hits(store.recentMessages(GlobalSearchRules.SCAN_LIMIT), titles, query)
+            GlobalSearchRules.hits(
+                store.recentMessages(GlobalSearchRules.SCAN_LIMIT),
+                titles,
+                query,
+                openableChatIds = openable,
+            )
         } else {
             emptyList()
         }
@@ -573,9 +584,15 @@ class RopeRepository(private val app: Application) {
 
     fun openGlobalHit(chatId: String, messageId: String) {
         if (chatId.isBlank() || messageId.isBlank()) return
-        persistOpenDraft()
         val state = _state.value
         val conv = state.conversations.find { it.id == chatId }
+        val openable = buildSet {
+            state.conversations.forEach { add(it.id) }
+            state.groups.forEach { add(ChatIds.group(it.groupId)) }
+            add(SavedMessagesRules.ID)
+        }
+        if (!GlobalSearchRules.canOpen(chatId, openable)) return
+        persistOpenDraft()
         when {
             SavedMessagesRules.isSaved(chatId) ->
                 enterChat(chatId, SavedMessagesRules.stubPeer(), null, jumpId = messageId)

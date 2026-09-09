@@ -29,6 +29,18 @@ object GlobalSearchRules {
         return haystack(msg).contains(q)
     }
 
+    /**
+     * Left groups are not leftover threads ([ChatRouting.showLeftoverThread]
+     * is false for `g:`) and have no read-only view. Skip them so a hit
+     * cannot appear without an openable chat.
+     */
+    fun canOpen(chatId: String, openableChatIds: Set<String>): Boolean {
+        if (chatId.isBlank()) return false
+        if (SavedMessagesRules.isSaved(chatId)) return true
+        if (ChatIds.isGroup(chatId)) return chatId in openableChatIds
+        return true
+    }
+
     fun snippet(msg: ChatMessage): String {
         val raw = if (msg.text.isNotBlank()) msg.text else msg.preview()
         return raw.replace('\n', ' ').replace(Regex("\\s+"), " ").trim().take(120)
@@ -38,12 +50,14 @@ object GlobalSearchRules {
         messages: List<ChatMessage>,
         titles: Map<String, String>,
         query: String,
+        openableChatIds: Set<String> = emptySet(),
     ): List<GlobalSearchHit> {
         if (ChatListRules.normalize(query).length < MIN_CHARS) return emptyList()
         val seen = HashSet<String>()
         return messages
             .asSequence()
             .filter { matches(it, query) }
+            .filter { canOpen(it.peerDeviceId, openableChatIds) }
             .sortedWith(compareByDescending<ChatMessage> { it.timestampMs }.thenBy { it.id })
             .mapNotNull { msg ->
                 if (!seen.add(msg.id)) return@mapNotNull null

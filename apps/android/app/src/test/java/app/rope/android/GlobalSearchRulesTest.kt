@@ -1,9 +1,12 @@
 package app.rope.android
 
+import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ChatRouting
 import app.rope.android.data.GlobalSearchRules
 import app.rope.android.data.MessageStatus
+import app.rope.android.data.SavedMessagesRules
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -53,6 +56,29 @@ class GlobalSearchRulesTest {
         ).single()
         assertEquals("строка два", hit.snippet)
         assertEquals("dev", hit.title)
+    }
+
+    @Test
+    fun skipsLeftGroupThreads() {
+        val live = ChatIds.group("live-uuid")
+        val left = ChatIds.group("left-uuid")
+        val liveMsg = msg("m1", live, "секрет в живой", ts = 30L)
+        val leftMsg = msg("m2", left, "секрет в ушедшей", ts = 99L)
+        val leftoverDm = msg("m3", "peer-gone", "секрет лично", ts = 50L)
+        val hits = GlobalSearchRules.hits(
+            listOf(liveMsg, leftMsg, leftoverDm),
+            mapOf(live to "Команда", left to "Старая"),
+            "секрет",
+            openableChatIds = setOf(live),
+        )
+        assertTrue(hits.none { it.chatId == left })
+        assertEquals(listOf("m3", "m1"), hits.map { it.messageId })
+        assertFalse(GlobalSearchRules.canOpen(left, setOf(live)))
+        assertTrue(GlobalSearchRules.canOpen(live, setOf(live)))
+        assertTrue(GlobalSearchRules.canOpen("peer-gone", emptySet()))
+        assertTrue(GlobalSearchRules.canOpen(SavedMessagesRules.ID, emptySet()))
+        assertFalse(GlobalSearchRules.canOpen("", emptySet()))
+        assertFalse(ChatRouting.showLeftoverThread(left))
     }
 
     private fun msg(id: String, peer: String, text: String, ts: Long = 1L) = ChatMessage(
