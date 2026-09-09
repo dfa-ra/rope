@@ -34,6 +34,7 @@ import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
+import app.rope.android.data.GroupTextRules
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
@@ -2715,12 +2716,12 @@ class RopeRepository(private val app: Application) {
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
                 val payload = GroupTextPayload.parse(String(typed.body))
-                val gid = JsonIds.optional(payload.groupId)
-                if (gid == null) {
+                val chatId = GroupTextRules.chatId(payload.groupId, sender.deviceId, store.groups())
+                if (chatId == null) {
                     ack(typed.messageId)
                     return
                 }
-                val chatId = ChatIds.group(gid)
+                val gid = ChatIds.rawGroupId(chatId)
                 val msg = ChatMessage(
                     id = typed.messageId,
                     peerDeviceId = chatId,
