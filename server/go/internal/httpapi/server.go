@@ -181,18 +181,26 @@ func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"server": config.ServerVersion, "protocol": config.ProtocolVersion})
 }
 
-func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{
 		"server_id":        s.Cfg.ServerID,
 		"protocol_version": config.ProtocolVersion,
 		"fingerprint":      s.FP,
 	}
+	if ip := s.Cfg.PublicIPv4(); ip != "" {
+		out["public_ip"] = ip
+	}
+	if r.Header.Get("Authorization") == "" {
+		writeJSON(w, 200, out)
+		return
+	}
+	if _, err := s.authenticate(r, nil); err != nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
 	if ice := s.Cfg.IceServers(time.Now()); len(ice) > 0 {
 		out["ice_servers"] = ice
 		out["ice_ttl_seconds"] = s.Cfg.IceTTLSeconds()
-	}
-	if ip := s.Cfg.PublicIPv4(); ip != "" {
-		out["public_ip"] = ip
 	}
 	writeJSON(w, 200, out)
 }
@@ -708,7 +716,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		return
 	}
 	target := s.resolveCallTarget(in.To)
-        if dest, ok := s.Hub.Get(target); ok {
+	if dest, ok := s.Hub.Get(target); ok {
 		if isCallTerminal(in.Event) {
 			s.dropPendingCall(in.CallID)
 		}
@@ -855,9 +863,6 @@ func (s *Server) handleAck(ctx context.Context, from *clientConn, messageID stri
 }
 
 func clientIP(r *http.Request) string {
-	if x := r.Header.Get("X-Forwarded-For"); x != "" {
-		return strings.Split(x, ",")[0]
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

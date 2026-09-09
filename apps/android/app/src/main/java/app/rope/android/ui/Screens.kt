@@ -474,10 +474,10 @@ private fun StartPane(onGo: (Screen) -> Unit, onRestore: () -> Unit) {
                 QuietButton("Войти по QR или ссылке", { onGo(Screen.Join) }, Modifier.fillMaxWidth())
             }
             TextButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) {
-                Text("Восстановить устройство из Загрузок")
+                Text("Восстановить устройство из файла")
             }
             Text(
-                "Если пришлось удалить приложение из‑за другой подписи: выберите файл rope-device.backup из Загрузок.",
+                "Выберите файл резервной копии устройства, если вы сохраняли его сами. Rope больше не кладёт ключи в Загрузки.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

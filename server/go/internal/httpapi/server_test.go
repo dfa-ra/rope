@@ -165,7 +165,7 @@ func TestHealthAndInfo(t *testing.T) {
 }
 
 func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
-	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+	_, hs, token := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "198.51.100.20"
 		cfg.TurnSecret = "hmac-from-install"
 		cfg.TurnsPort = 443
@@ -174,11 +174,33 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var anon map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&anon); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if _, ok := anon["ice_servers"]; ok {
+		t.Fatal("unauthenticated GET /v1/info must not advertise TURN creds")
+	}
+	if _, ok := anon["ice_ttl_seconds"]; ok {
+		t.Fatal("unauthenticated GET /v1/info must omit ice_ttl_seconds")
+	}
+
+	owner := newDevice(t)
+	bootstrap(t, hs, token, owner, "owner")
+	req := authReq(t, http.MethodGet, hs.URL+"/v1/info", "/v1/info", nil, owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("authed info %d", resp.StatusCode)
+	}
 	var info struct {
 		ServerID      string             `json:"server_id"`
-		PublicIP      string           `json:"public_ip"`
-		IceTTLSeconds int              `json:"ice_ttl_seconds"`
+		PublicIP      string             `json:"public_ip"`
+		IceTTLSeconds int                `json:"ice_ttl_seconds"`
 		IceServers    []config.IceServer `json:"ice_servers"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -234,12 +256,15 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 }
 
 func TestInfoAdvertises5349Not443(t *testing.T) {
-	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+	_, hs, token := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "198.51.100.20"
 		cfg.TurnSecret = "hmac-from-install"
 		cfg.TurnsPort = 5349
 	})
-	resp, err := http.Get(hs.URL + "/v1/info")
+	owner := newDevice(t)
+	bootstrap(t, hs, token, owner, "owner")
+	req := authReq(t, http.MethodGet, hs.URL+"/v1/info", "/v1/info", nil, owner)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,13 +285,16 @@ func TestInfoAdvertises5349Not443(t *testing.T) {
 }
 
 func TestInfoHostnameAndPublicIP(t *testing.T) {
-	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+	_, hs, token := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "vps.example"
 		cfg.PublicIP = "203.0.113.9"
 		cfg.TurnSecret = "hmac-from-install"
 		cfg.TurnsPort = 443
 	})
-	resp, err := http.Get(hs.URL + "/v1/info")
+	owner := newDevice(t)
+	bootstrap(t, hs, token, owner, "owner")
+	req := authReq(t, http.MethodGet, hs.URL+"/v1/info", "/v1/info", nil, owner)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,13 +323,16 @@ func TestInfoHostnameAndPublicIP(t *testing.T) {
 		t.Fatalf("urls %+v", info.IceServers[1].URLs)
 	}
 
-	_, hsIP, _ := testServerCfg(t, func(cfg *config.Config) {
+	_, hsIP, tokenIP := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "203.0.113.9"
 		cfg.TLSHostname = "rope.example"
 		cfg.TurnSecret = "hmac-from-install"
 		cfg.TurnsPort = 443
 	})
-	resp, err = http.Get(hsIP.URL + "/v1/info")
+	ipOwner := newDevice(t)
+	bootstrap(t, hsIP, tokenIP, ipOwner, "owner")
+	reqIP := authReq(t, http.MethodGet, hsIP.URL+"/v1/info", "/v1/info", nil, ipOwner)
+	resp, err = http.DefaultClient.Do(reqIP)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +352,7 @@ func TestInfoHostnameAndPublicIP(t *testing.T) {
 }
 
 func TestInfoOmitsIceWhenHostIsPrivate(t *testing.T) {
-	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+	_, hs, token := testServerCfg(t, func(cfg *config.Config) {
 		cfg.PublicHost = "10.0.0.4"
 		cfg.TurnSecret = "hmac-from-install"
 		cfg.TurnsPort = 443
@@ -343,6 +374,52 @@ func TestInfoOmitsIceWhenHostIsPrivate(t *testing.T) {
 	}
 	if _, ok := info["public_ip"]; ok {
 		t.Fatalf("private public_ip leaked: %+v", info)
+	}
+
+	owner := newDevice(t)
+	bootstrap(t, hs, token, owner, "owner")
+	req := authReq(t, http.MethodGet, hs.URL+"/v1/info", "/v1/info", nil, owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var authed map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&authed); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := authed["ice_servers"]; ok {
+		t.Fatalf("private-only host must not advertise ice_servers when authed: %+v", authed)
+	}
+}
+
+func TestClientIPIgnoresXForwardedFor(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "/v1/bootstrap", nil)
+	r.RemoteAddr = "203.0.113.9:4321"
+	r.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
+	if got := clientIP(r); got != "203.0.113.9" {
+		t.Fatalf("clientIP=%q", got)
+	}
+}
+
+func TestInfoBadAuthDoesNotLeakIce(t *testing.T) {
+	_, hs, _ := testServerCfg(t, func(cfg *config.Config) {
+		cfg.PublicHost = "198.51.100.20"
+		cfg.TurnSecret = "hmac-from-install"
+		cfg.TurnsPort = 443
+	})
+	req, err := http.NewRequest(http.MethodGet, hs.URL+"/v1/info", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Rope deadbeef.1.aaaa")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Fatalf("got %d", resp.StatusCode)
 	}
 }
 

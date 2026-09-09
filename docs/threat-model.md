@@ -28,7 +28,13 @@
 - A guest cannot join a different host than the one named in the invite if the TLS fingerprint does not match.
 - Invite tokens are stored as SHA-256 hashes and are single-use with TTL.
 - Private device keys are not uploaded during ordinary messaging, bootstrap, or mailbox sync.
+- Private device keys are not written to public Downloads. An empty identity vault is not auto-restored from shared storage.
 - Default logs omit payload bytes, invite tokens, and SSH secrets.
+- Live call offer/answer/ICE apply only from sealed `EnvelopeTypes.CALL` blobs. Plain WSS `type=call` may carry RING/ACCEPT/REJECT/HANGUP/RELAY and ciphertext audio frames, not SDP/ICE.
+- TURNS/TLS pin comparison fails closed when the expected fingerprint is blank.
+- Unauthenticated `GET /v1/info` does not advertise TURN username/credential. ICE is returned only to an authenticated device.
+- Bootstrap rate limits key on `RemoteAddr`, not `X-Forwarded-For`.
+- The GitHub token in local kv is wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
 
 ## Non-guarantees (honest limitations)
 
@@ -38,6 +44,7 @@
 - Self-signed TLS plus fingerprint pinning does not replace a public CA after a user ignores a mismatch warning.
 - There is no forward-secrecy ratchet (Signal/X3DH) in MVP. Compromise of a device ECDH key exposes future messages to that device until keys are rotated (out of scope).
 - Offline mailbox blobs live on disk until delivery ack or TTL expiry. They remain encrypted, but metadata remains.
+- WSS connect still authenticates with `device_id`/`ts`/`sig` query parameters. Moving `sig` into a header needs a paired client+server cut so an updated APK can still reach an older VPS. Left for a later slice.
 
 ## Abuse controls
 

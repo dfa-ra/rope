@@ -294,6 +294,18 @@ class CallSignalingTest {
         assertTrue(CallSignal.skipMailbox(CallSignal.AUDIO))
         assertTrue(CallSignal.skipMailbox(CallSignal.RELAY))
         assertFalse(CallSignal.skipMailbox(CallSignal.OFFER))
+        assertFalse(CallSignal.trustsPlainWss(CallSignal.OFFER))
+        assertFalse(CallSignal.trustsPlainWss(CallSignal.ANSWER))
+        assertFalse(CallSignal.trustsPlainWss(CallSignal.ICE))
+        assertTrue(CallSignal.trustsPlainWss(CallSignal.RING))
+        assertTrue(CallSignal.trustsPlainWss(CallSignal.ACCEPT))
+        assertTrue(CallSignal.trustsPlainWss(CallSignal.REJECT))
+        assertTrue(CallSignal.trustsPlainWss(CallSignal.HANGUP))
+        assertTrue(CallSignal.trustsPlainWss(CallSignal.RELAY))
+        assertTrue(CallSignal.trustsPlainWss(CallSignal.AUDIO))
+        assertFalse(CallSignal.trustsPlainWss("not-an-event"))
+        assertTrue(VideoCallRules.fitsWss("v=0"))
+        assertFalse(VideoCallRules.fitsWss("x".repeat(VideoCallRules.MAX_WSS_PAYLOAD + 1)))
         assertNull(CallSignal.parse("""{"kind":"offer","sdp":""}"""))
     }
 

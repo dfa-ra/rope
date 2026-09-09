@@ -44,6 +44,16 @@ data class CallSignal(
 
         fun skipMailbox(event: String): Boolean = event in FALLBACK
 
+        /**
+         * Plain WSS `type=call` is visible to the untrusted VPS.
+         * Offer/answer/ICE (DTLS fingerprints, ICE lines) apply only from sealed envelopes.
+         * RING/ACCEPT/REJECT/HANGUP/RELAY/AUDIO may still use plaintext WSS.
+         */
+        fun trustsPlainWss(event: String): Boolean {
+            val ev = parseEvent(event) ?: return false
+            return ev in CONTROL || ev in FALLBACK
+        }
+
         fun parseMedia(event: String?, payload: Any?): CallSignal? {
             val ev = parseEvent(event) ?: return null
             when (ev) {

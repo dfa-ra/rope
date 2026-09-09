@@ -8,7 +8,7 @@ Server stays a transport: encrypted envelopes, encrypted object blobs, group mem
 2. Encrypted object store: `POST/GET /v1/objects`, 25 MB, 7-day TTL, 512 MB quota
 3. Photos, files, voice notes on Android (hold-to-record)
 4. Local notifications + WSS reconnect (no FCM — the VPS is private)
-5. 1-to-1 audio: WebRTC (DTLS-SRTP) over existing `type=call` WSS. Events `offer`/`answer`/`ice` carry SDP. The same VPS runs coturn; `GET /v1/info` advertises `ice_servers` (STUN + TURN/TURNS on that host). Media stays DTLS-SRTP — TURN only relays ciphertext.
+5. 1-to-1 audio: WebRTC (DTLS-SRTP). Events `offer`/`answer`/`ice` travel in sealed call envelopes. The same VPS runs coturn; authenticated `GET /v1/info` advertises `ice_servers` (STUN + TURN/TURNS on that host). Media stays DTLS-SRTP — TURN only relays ciphertext.
 6. Groups: REST membership, pairwise `group_send`, epoch bump on add/remove
 7. Group attachments use the same media payload with `group_id`
 8. Admin health cards (objects, groups, online, quota)
@@ -40,4 +40,4 @@ Not MLS. Each group message is a fan-out of pairwise envelopes. The server check
 
 WSS events: `ring`, `accept`, `reject`, `hangup`, plus WebRTC `offer`, `answer`, `ice`. If the callee is not on the live hub, RING and other signaling (`accept`, `offer`, `answer`, `ice`, `relay`) sit in a short-TTL in-memory pending slot (~60s, one slot per `call_id`); the caller gets `queued`, not `not_found`. When the callee connects, the server delivers that pending `type=call` after mailbox flush, then drops it. `hangup`/`reject` replace the slot so the callee still gets a clean end on reconnect. `audio` stays live-only (`not_found` if offline). Nothing is written to SQLite — no SDP, no audio mailbox, no disk for missed rings. Incoming UI is full-screen. Media is DTLS-SRTP. When UDP hole punching fails (typical in Russia), ICE uses TURN on the same VPS — usually TURNS/TLS on 443 (`turns:HOST:443?transport=tcp`) plus TURN on 3478. The relay forwards encrypted media only; it does not decrypt voice. The call overlay shows `WebRTC · через сервер` when the selected pair is a relay, otherwise `WebRTC · DTLS-SRTP`.
 
-`install.sh` and in-app «Обновить ядро» install/enable coturn next to `rope-server`. HMAC `turn_secret` is generated per VPS and stored in `/etc/rope/config.json` (mode 640). Clients cache `ice_servers` on the profile after `/v1/info`. Public Google/Cloudflare STUN is a last-resort fallback only when the VPS did not advertise ICE.
+`install.sh` and in-app «Обновить ядро» install/enable coturn next to `rope-server`. HMAC `turn_secret` is generated per VPS and stored in `/etc/rope/config.json` (mode 640). Clients cache `ice_servers` on the profile after authenticated `/v1/info`. Public Google/Cloudflare STUN is a last-resort fallback only when the VPS did not advertise ICE.

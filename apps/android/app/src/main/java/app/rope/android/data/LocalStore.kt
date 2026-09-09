@@ -320,10 +320,17 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun saveGithubToken(token: String) {
         if (token.isBlank()) return
-        put("github_token", token)
+        put("github_token", SecretKv.wrap(token) { encryptBytes(it) })
     }
 
-    fun githubToken(): String? = get("github_token")
+    fun githubToken(): String? {
+        val stored = get("github_token") ?: return null
+        val plain = SecretKv.unwrap(stored) { decryptBytes(it) } ?: return null
+        if (plain.isNotBlank() && !SecretKv.isWrapped(stored)) {
+            put("github_token", SecretKv.wrap(plain) { encryptBytes(it) })
+        }
+        return plain.takeIf { it.isNotBlank() }
+    }
 
     fun saveSshTarget(t: SshTarget) {
         put(
@@ -429,7 +436,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun applyBackup(backup: DeviceBackup) {
         if (backup.profileJson.isNotBlank()) put("profile", backup.profileJson)
-        if (backup.githubToken.isNotBlank()) put("github_token", backup.githubToken)
+        if (backup.githubToken.isNotBlank()) saveGithubToken(backup.githubToken)
         if (backup.sshJson.isNotBlank()) put("ssh_target", backup.sshJson)
     }
 
@@ -479,21 +486,25 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         c.use { return if (it.moveToFirst()) it.getString(0) else null }
     }
 
-    private fun encrypt(text: String): ByteArray {
+    private fun encrypt(text: String): ByteArray = encryptBytes(text.toByteArray())
+
+    private fun decrypt(blob: ByteArray): String = String(decryptBytes(blob))
+
+    private fun encryptBytes(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, payloadKey)
         val iv = cipher.iv
-        val ct = cipher.doFinal(text.toByteArray())
+        val ct = cipher.doFinal(plain)
         return byteArrayOf(iv.size.toByte()) + iv + ct
     }
 
-    private fun decrypt(blob: ByteArray): String {
+    private fun decryptBytes(blob: ByteArray): ByteArray {
         val ivLen = blob[0].toInt() and 0xff
         val iv = blob.copyOfRange(1, 1 + ivLen)
         val ct = blob.copyOfRange(1 + ivLen, blob.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, payloadKey, GCMParameterSpec(128, iv))
-        return String(cipher.doFinal(ct))
+        return cipher.doFinal(ct)
     }
 
     private fun payloadKey(): SecretKey {

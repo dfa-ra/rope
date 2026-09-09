@@ -197,9 +197,7 @@ class WebRtcSession(
             setSSLCertificateVerifier(SSLCertificateVerifier { der ->
                 val got = runCatching { PinnedClient.fingerprintHex(der) }.getOrDefault("")
                 val ok = PinnedClient.tlsPinAllows(got, pinnedFingerprint)
-                if (pinnedFingerprint.isBlank()) {
-                    Log.w("rope-webrtc", "tls pin blank — allow (debug HTTP / missing profile)")
-                } else if (!ok) {
+                if (!ok) {
                     Log.w("rope-webrtc", "tls cert $got pin=$pinnedFingerprint — reject")
                 }
                 ok

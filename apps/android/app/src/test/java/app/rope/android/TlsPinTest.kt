@@ -8,10 +8,10 @@ import org.junit.Test
 
 class TlsPinTest {
     @Test
-    fun blankPinAllowsDebugOrMissingProfile() {
-        assertTrue(PinnedClient.tlsPinAllows("abc", ""))
-        assertTrue(PinnedClient.tlsPinAllows("abc", "  "))
-        assertTrue(PinnedClient.tlsPinAllows("", ""))
+    fun blankPinFailsClosed() {
+        assertFalse(PinnedClient.tlsPinAllows("abc", ""))
+        assertFalse(PinnedClient.tlsPinAllows("abc", "  "))
+        assertFalse(PinnedClient.tlsPinAllows("", ""))
     }
 
     @Test

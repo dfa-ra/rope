@@ -32,7 +32,7 @@ class ServerApi(
     val baseWs: String
         get() = (if (profile.useTls) "wss" else "ws") + "://${profile.host}:${profile.port}"
 
-    fun info(): JSONObject = get("/v1/info")
+    fun info(): JSONObject = authed("GET", "/v1/info", ByteArray(0))
 
     fun directory(): List<DirectoryDevice> {
         val obj = authed("GET", "/v1/directory", ByteArray(0))
@@ -186,15 +186,6 @@ class ServerApi(
             members = ids,
             createdBy = obj.optString("created_by").ifBlank { obj.optString("createdBy") },
         )
-    }
-
-    private fun get(path: String): JSONObject {
-        val req = Request.Builder().url(baseHttp + path).get().build()
-        client.newCall(req).execute().use { resp ->
-            val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) error("${resp.code}: $text")
-            return JSONObject(text)
-        }
     }
 
     private fun authed(

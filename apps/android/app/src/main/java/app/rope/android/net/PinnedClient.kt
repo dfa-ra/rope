@@ -14,12 +14,12 @@ object PinnedClient {
     }
 
     /**
-     * Fail-closed when a pin is configured. Blank pin = debug HTTP / missing profile.
+     * Fail-closed: a blank expected pin never allows TURNS/TLS.
      * Hex compare only — not a crypto implementation.
      */
     fun tlsPinAllows(presentedHex: String, expectedHex: String): Boolean {
         val pin = expectedHex.trim()
-        if (pin.isEmpty()) return true
+        if (pin.isEmpty()) return false
         return presentedHex.trim().equals(pin, ignoreCase = true)
     }
 
@@ -33,7 +33,7 @@ object PinnedClient {
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
             override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
                 val presented = fingerprintHex(chain[0].encoded)
-                if (!presented.equals(expectedFp, ignoreCase = true)) {
+                if (!tlsPinAllows(presented, expectedFp)) {
                     throw javax.net.ssl.SSLException("fingerprint mismatch")
                 }
             }

@@ -85,6 +85,7 @@ import app.rope.android.provision.ProvisionForm
 import app.rope.android.provision.ServerTarget
 import app.rope.android.provision.SshProvisioner
 import app.rope.android.update.DeviceBackup
+import app.rope.android.update.PublicBackupRules
 import app.rope.android.update.PublicDownloads
 import app.rope.android.update.AppRelease
 import app.rope.android.update.AppUpdater
@@ -242,7 +243,6 @@ class RopeRepository(private val app: Application) {
                     notificationsMuted = store.notificationsMuted(),
                 )
                 store.rehomeMisroutedMedia()
-                if (!vault.exists()) tryRestoreBackup()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
                     vault.save(it.toBytes())
                 }
@@ -2379,7 +2379,7 @@ class RopeRepository(private val app: Application) {
                 refreshOpenChat()
             }
             "deliver" -> handleDeliver(obj)
-            "call" -> handleCallEvent(obj)
+            "call" -> handleCallEvent(obj, sealed = false)
             "error" -> {
                 val code = obj.optString("code")
                 val msg = obj.optString("message")
@@ -2549,6 +2549,7 @@ class RopeRepository(private val app: Application) {
                         .put("event", body.optString("event"))
                         .put("call_id", body.optString("call_id"))
                         .put("payload", if (body.has("payload")) body.opt("payload") else ""),
+                    sealed = true,
                 )
                 ack(typed.messageId)
             }
@@ -2578,11 +2579,12 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    private fun handleCallEvent(obj: JSONObject) {
+    private fun handleCallEvent(obj: JSONObject, sealed: Boolean = false) {
         val from = PeerIds.normalize(obj.optString("from"))
         val event = CallSignal.parseEvent(obj.optString("event")).orEmpty()
         val callId = JsonIds.optional(obj.optString("call_id")).orEmpty()
         if (from.isBlank() || callId.isBlank() || event.isBlank()) return
+        if (!sealed && !CallSignal.trustsPlainWss(event)) return
         val resolved = resolveCallPeer(from, _state.value.peer)
         val name = resolved?.displayName
             ?: _state.value.devices.find { PeerIds.same(it.deviceId, from) }?.displayName
@@ -2692,11 +2694,13 @@ class RopeRepository(private val app: Application) {
     private fun dispatchCall(callId: String, peerId: String, event: String, payload: String): Boolean {
         val peer = resolveCallPeer(peerId, _state.value.peer)
         val to = PeerIds.wireId(peer, peerId)
-        val sent = to.isNotBlank() && sendCall(callId, to, event, payload)
+        if (to.isBlank()) return false
+        val wss = CallSignal.trustsPlainWss(event) && sendCall(callId, to, event, payload)
         if (!CallSignal.skipMailbox(event) && peer != null && peer.publicIdentity.isNotEmpty()) {
             sendCallEnvelope(peer, callId, event, payload)
+            return true
         }
-        return sent
+        return wss
     }
 
     private suspend fun startRtc(asCaller: Boolean, video: Boolean) {
@@ -2857,7 +2861,9 @@ class RopeRepository(private val app: Application) {
                         val peer = resolveCallPeer(peerId, _state.value.peer)
                         val to = PeerIds.wireId(peer, peerId)
                         if (to.isBlank()) return@WebRtcSession
-                        sendCall(callId, to, sig.kind, json)
+                        if (CallSignal.trustsPlainWss(sig.kind)) {
+                            sendCall(callId, to, sig.kind, json)
+                        }
                         if (peer != null && peer.publicIdentity.isNotEmpty()) {
                             sendCallEnvelope(peer, callId, sig.kind, json)
                         }
@@ -2924,6 +2930,10 @@ class RopeRepository(private val app: Application) {
     private fun sendCallEnvelope(peer: DirectoryDevice, callId: String, event: String, payload: String = "") {
         val id = identity ?: return
         if (peer.publicIdentity.isEmpty()) return
+        if (payload.isNotEmpty() && !VideoCallRules.fitsWss(payload)) {
+            notice(VideoCallRules.sdpTooLargeNotice())
+            return
+        }
         scope.launch {
             try {
                 val body = CallSignal.envelopeJson(callId, event, payload).toByteArray()
@@ -3199,24 +3209,10 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun writeUpdateArtifacts(apk: File, assetName: String) {
-        val id = identity ?: return
-        val backup = DeviceBackup(
-            identity = id.toBytes(),
-            profileJson = store.profileJson().orEmpty(),
-            githubToken = store.githubToken().orEmpty(),
-            sshJson = store.sshJson().orEmpty(),
-        )
-        runCatching {
-            PublicDownloads.write(app, DeviceBackup.FILE_NAME, "application/octet-stream", backup.toBytes())
-        }
+        if (!PublicBackupRules.allowApkCopy) return
         runCatching {
             PublicDownloads.write(app, assetName, "application/vnd.android.package-archive", apk.readBytes())
         }
-    }
-
-    private fun tryRestoreBackup() {
-        val raw = PublicDownloads.read(app, DeviceBackup.FILE_NAME) ?: return
-        applyDeviceBackup(DeviceBackup.parse(raw))
     }
 
     private fun applyDeviceBackup(backup: DeviceBackup) {
