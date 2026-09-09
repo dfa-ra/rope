@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -123,6 +124,7 @@ import app.rope.android.UiState
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
+import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
@@ -533,7 +535,7 @@ internal fun ConversationRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatPane(
     state: UiState,
@@ -579,7 +581,11 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val visible = remember(state.messages, state.messageQuery) {
+        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    }
+    val dayGroups = remember(visible) { DateSeparatorRules.grouped(visible) }
+    val threadItems = remember(dayGroups) { DateSeparatorRules.flatten(dayGroups) }
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
@@ -598,12 +604,14 @@ fun ChatPane(
         onMessageQuery("")
     }
     BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
-    LaunchedEffect(visible.size, state.messageQuery) {
-        if (visible.isNotEmpty() && state.scrollToMessageId == null) list.animateScrollToItem(visible.lastIndex)
+    LaunchedEffect(threadItems.size, state.messageQuery) {
+        if (threadItems.isNotEmpty() && state.scrollToMessageId == null) {
+            list.animateScrollToItem(threadItems.lastIndex)
+        }
     }
     LaunchedEffect(state.scrollToMessageId) {
         val id = state.scrollToMessageId ?: return@LaunchedEffect
-        val idx = visible.indexOfFirst { it.id == id }
+        val idx = DateSeparatorRules.indexOfMessage(threadItems, id)
         if (idx >= 0) list.animateScrollToItem(idx)
         flashId = id
         onConsumedScroll()
@@ -746,32 +754,38 @@ fun ChatPane(
                     },
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
-                    itemsIndexed(visible, key = { _, m -> m.id }) { index, m ->
-                        MessageBubble(
-                            m, state, onPlay, onReact, onEnsureMedia, onJump,
-                            highlighted = flashId == m.id,
-                            clusterFirst = GroupChatUx.firstInCluster(visible, index),
-                            clusterLast = GroupChatUx.lastInCluster(visible, index),
-                            mentionNames = mentionNames,
-                            selected = m.id in selectedIds,
-                            selecting = selecting,
-                            onToggleSelect = {
-                                selectedIds = if (m.id in selectedIds) selectedIds - m.id else selectedIds + m.id
-                            },
-                            onEnterSelect = {
-                                if (!m.deleted) {
-                                    menuMessage = null
-                                    reactionExpanded = false
-                                    selectedIds = selectedIds + m.id
-                                }
-                            },
-                            onTap = {
-                                if (!m.deleted) {
-                                    menuMessage = m
-                                    reactionExpanded = false
-                                }
-                            },
-                        )
+                    dayGroups.forEach { group ->
+                        stickyHeader(key = "day-${group.dayKey}") {
+                            DateChip(group.label)
+                        }
+                        itemsIndexed(group.messages, key = { _, m -> m.id }) { _, m ->
+                            val index = visible.indexOfFirst { it.id == m.id }
+                            MessageBubble(
+                                m, state, onPlay, onReact, onEnsureMedia, onJump,
+                                highlighted = flashId == m.id,
+                                clusterFirst = GroupChatUx.firstInCluster(visible, index),
+                                clusterLast = GroupChatUx.lastInCluster(visible, index),
+                                mentionNames = mentionNames,
+                                selected = m.id in selectedIds,
+                                selecting = selecting,
+                                onToggleSelect = {
+                                    selectedIds = if (m.id in selectedIds) selectedIds - m.id else selectedIds + m.id
+                                },
+                                onEnterSelect = {
+                                    if (!m.deleted) {
+                                        menuMessage = null
+                                        reactionExpanded = false
+                                        selectedIds = selectedIds + m.id
+                                    }
+                                },
+                                onTap = {
+                                    if (!m.deleted) {
+                                        menuMessage = m
+                                        reactionExpanded = false
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -1671,6 +1685,26 @@ private fun RecordingStrip(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun DateChip(label: String) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(RoundedCornerShape(RopeShapes.chip))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
 }

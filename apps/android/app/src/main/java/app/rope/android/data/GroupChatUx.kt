@@ -54,6 +54,7 @@ object GroupChatUx {
         if (prev == null) return false
         if (prev.outgoing != next.outgoing) return false
         if (senderKey(prev) != senderKey(next)) return false
+        if (!DateSeparatorRules.sameDay(prev.timestampMs, next.timestampMs)) return false
         return kotlin.math.abs(next.timestampMs - prev.timestampMs) <= gapMs
     }
 

@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.13 chat date separators | — |
+| CG-090 | Slice: chat date separators as 0.3.13 | PO | IN_PROGRESS | Telegram Сегодня/Вчера/weekday/date | CG-007 |
+| CG-091 | Android: DateSeparatorRules + sticky day chips | AND-01 | IN_PROGRESS | D-026; no 0.3.2 tap/long-press redo | CG-090 |
+| CG-092 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-091 |
+| CG-093 | Ship **0.3.13** | PO | IN_PROGRESS | versionCode 37; do not retag v0.3.12 | CG-092 |
 | CG-086 | Slice: muted unread badge as 0.3.12 | PO | DONE | shipped v0.3.12 | CG-007 |
 | CG-087 | Android: UnreadBadgeRules MUTED vs ACCENT | AND-01 | DONE | D-025; no 0.3.2 tap/long-press redo | CG-086 |
 | CG-088 | Independent review | REV-01 | DONE | PASS; muted vs accent unread badge shipped in 0.3.12 | CG-087 |
