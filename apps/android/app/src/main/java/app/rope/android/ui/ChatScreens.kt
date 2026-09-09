@@ -201,7 +201,7 @@ fun ChatsPane(
     onCancelForward: () -> Unit = {},
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
-    onMuteChat: (String, Long?) -> Unit = {},
+    onMuteChat: (String, Long?) -> Unit = { _, _ -> },
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
