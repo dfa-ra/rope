@@ -543,6 +543,64 @@ func TestInviteSingleUseAndExpiry(t *testing.T) {
 	resp.Body.Close()
 }
 
+func TestInviteTTLSecondsClamp(t *testing.T) {
+	if got := inviteTTLSeconds(0); got != defaultInviteTTLSeconds {
+		t.Fatalf("zero %d", got)
+	}
+	if got := inviteTTLSeconds(-1); got != defaultInviteTTLSeconds {
+		t.Fatalf("neg %d", got)
+	}
+	if got := inviteTTLSeconds(3600); got != 3600 {
+		t.Fatalf("hour %d", got)
+	}
+	if got := inviteTTLSeconds(1); got != 1 {
+		t.Fatalf("one %d", got)
+	}
+	if got := inviteTTLSeconds(maxInviteTTLSeconds); got != maxInviteTTLSeconds {
+		t.Fatalf("max %d", got)
+	}
+	if got := inviteTTLSeconds(maxInviteTTLSeconds + 1); got != maxInviteTTLSeconds {
+		t.Fatalf("over %d", got)
+	}
+	if got := inviteTTLSeconds(1_000_000_000); got != maxInviteTTLSeconds {
+		t.Fatalf("huge %d", got)
+	}
+}
+
+func TestInviteTTLIsCapped(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+	before := time.Now()
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":1000000000}`), owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("invite %d %s", resp.StatusCode, b)
+	}
+	var inv struct {
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&inv); err != nil {
+		t.Fatal(err)
+	}
+	exp, err := time.Parse(time.RFC3339, inv.ExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxDur := time.Duration(maxInviteTTLSeconds) * time.Second
+	if exp.Before(before.Add(maxDur - 5*time.Second)) || exp.After(time.Now().Add(maxDur+5*time.Second)) {
+		t.Fatalf("expires_at %s not clamped to 24h", inv.ExpiresAt)
+	}
+	if exp.After(before.Add(48 * time.Hour)) {
+		t.Fatalf("expires_at %s still multi-day", inv.ExpiresAt)
+	}
+}
+
 func TestWrongSetupTokenRejected(t *testing.T) {
 	_, hs, _ := testServer(t)
 	d := newDevice(t)

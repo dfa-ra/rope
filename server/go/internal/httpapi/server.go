@@ -406,6 +406,21 @@ func (s *Server) directory(w http.ResponseWriter, _ *http.Request, _ authed, _ [
 	writeJSON(w, 200, map[string]any{"members": outM, "devices": outD})
 }
 
+const (
+	defaultInviteTTLSeconds = 3600
+	maxInviteTTLSeconds     = 24 * 3600
+)
+
+func inviteTTLSeconds(v int) int {
+	if v <= 0 {
+		return defaultInviteTTLSeconds
+	}
+	if v > maxInviteTTLSeconds {
+		return maxInviteTTLSeconds
+	}
+	return v
+}
+
 func (s *Server) createInvite(w http.ResponseWriter, _ *http.Request, a authed, body []byte) {
 	if a.Member.Role != "owner" {
 		writeJSON(w, 403, map[string]string{"error": "owner only"})
@@ -419,9 +434,7 @@ func (s *Server) createInvite(w http.ResponseWriter, _ *http.Request, a authed, 
 		TTLSeconds int `json:"ttl_seconds"`
 	}
 	_ = json.Unmarshal(body, &req)
-	if req.TTLSeconds <= 0 {
-		req.TTLSeconds = 3600
-	}
+	req.TTLSeconds = inviteTTLSeconds(req.TTLSeconds)
 	token := uuid.NewString() + uuid.NewString()
 	id := uuid.NewString()
 	exp := time.Now().Add(time.Duration(req.TTLSeconds) * time.Second)
