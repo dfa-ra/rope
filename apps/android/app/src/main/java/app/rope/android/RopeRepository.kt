@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.GallerySaveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -71,6 +72,7 @@ import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.data.VoicePlayback
 import app.rope.android.media.CallAudio
+import app.rope.android.media.GallerySave
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
 import app.rope.android.media.VideoNoteRecorder
@@ -184,6 +186,7 @@ data class UiState(
     val pinnedMessageId: String? = null,
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
+    val gallerySave: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
 )
 
@@ -256,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    gallerySave = store.gallerySave(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -578,6 +582,12 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun toggleGallerySave() {
+        val next = !_state.value.gallerySave
+        store.saveGallerySave(next)
+        _state.value = _state.value.copy(gallerySave = next)
     }
 
     fun toggleNotificationsMuted() {
@@ -2845,6 +2855,16 @@ class RopeRepository(private val app: Application) {
             val plain = decryptObject(key, blob, expected)
             val dest = persistPlain(payload.objectId, payload.name, payload.mime, plain)
             store.updateLocalPath(messageId, dest.absolutePath)
+            if (GallerySaveRules.shouldCopy(payload.messageKind(), _state.value.gallerySave)) {
+                runCatching {
+                    GallerySave.copy(
+                        app,
+                        dest,
+                        payload.mime,
+                        GallerySaveRules.displayName(payload.name, payload.objectId),
+                    )
+                }
+            }
             _state.value = _state.value.copy(updateText = "")
             refreshOpenChat()
         } catch (e: Exception) {

@@ -341,6 +341,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun group(id: String): RopeGroup? = groups().find { it.groupId == id }
 
+    fun saveGallerySave(enabled: Boolean) {
+        put("save_gallery", if (enabled) "1" else "0")
+    }
+
+    fun gallerySave(): Boolean = get("save_gallery") == "1"
+
     fun saveGithubToken(token: String) {
         if (token.isBlank()) return
         put("github_token", SecretKv.wrap(token) { encryptBytes(it) })
