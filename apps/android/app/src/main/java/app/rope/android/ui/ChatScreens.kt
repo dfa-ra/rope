@@ -783,7 +783,7 @@ fun ChatPane(
         UnreadSeparatorRules.insert(
             AlbumRules.collapse(DateSeparatorRules.items(visible)),
             state.unreadAnchorId,
-            searching = state.messageQuery.isNotBlank(),
+            searching = SearchJumpRules.searching(state.messageQuery),
         )
     }
     val list = rememberLazyListState()
