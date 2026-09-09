@@ -48,7 +48,7 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 ### `GET /version`
 
 ```json
-{ "server": "0.3.46", "protocol": 1 }
+{ "server": "0.3.47", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -153,7 +153,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.3.46",
+  "version": "0.3.47",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,
