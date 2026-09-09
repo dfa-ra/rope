@@ -358,7 +358,17 @@ func (s *Server) withAuth(fn func(http.ResponseWriter, *http.Request, authed, []
 
 func (s *Server) withAuthLimit(limit int64, fn func(http.ResponseWriter, *http.Request, authed, []byte)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(io.LimitReader(r.Body, limit))
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				writeJSON(w, 413, map[string]string{"error": "too large"})
+				return
+			}
+			writeJSON(w, 400, map[string]string{"error": "bad body"})
+			return
+		}
 		a, err := s.authenticate(r, body)
 		if err != nil {
 			writeJSON(w, 401, map[string]string{"error": "unauthorized"})

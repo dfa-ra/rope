@@ -121,6 +121,26 @@ func bootstrap(t *testing.T, hs *httptest.Server, token string, d testDevice, na
 	}
 }
 
+func TestAuthRejectsOversizedBody(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+	huge := bytes.Repeat([]byte("a"), 1<<20+1)
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", huge, owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 413 {
+		t.Fatalf("oversized authed body want 413 got %d %s", resp.StatusCode, b)
+	}
+	if !strings.Contains(string(b), "too large") {
+		t.Fatalf("body %s", b)
+	}
+}
+
 func TestHealthAndInfo(t *testing.T) {
 	_, hs, _ := testServer(t)
 	resp, err := http.Get(hs.URL + "/health")
