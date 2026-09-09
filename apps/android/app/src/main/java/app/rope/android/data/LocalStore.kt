@@ -388,6 +388,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
 
+    fun saveKeepScreenOn(enabled: Boolean) {
+        put("keep_screen", if (enabled) "1" else "0")
+    }
+
+    fun keepScreenOn(): Boolean = get("keep_screen") == "1"
+
     fun saveLinkPreviews(enabled: Boolean) {
         put("link_previews", if (enabled) "1" else "0")
     }

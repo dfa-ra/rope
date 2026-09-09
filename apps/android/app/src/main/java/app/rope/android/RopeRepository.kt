@@ -166,6 +166,7 @@ data class UiState(
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
+    val keepScreenOn: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
@@ -255,6 +256,7 @@ class RopeRepository(private val app: Application) {
                 _state.value = _state.value.copy(
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
+                    keepScreenOn = store.keepScreenOn(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
                 store.rehomeMisroutedMedia()
@@ -584,6 +586,12 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleKeepScreenOn() {
+        val next = !_state.value.keepScreenOn
+        store.saveKeepScreenOn(next)
+        _state.value = _state.value.copy(keepScreenOn = next)
     }
 
     fun toggleLinkPreviews() {
