@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
@@ -43,13 +44,13 @@ object NavRules {
 
     fun isMessengerShell(screen: Screen): Boolean = when (screen) {
         Screen.Chats, Screen.Groups, Screen.Calls, Screen.People, Screen.Status,
-        Screen.Chat, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile,
+        Screen.Chat, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile, Screen.Archive,
         -> true
         else -> false
     }
 
     fun showsBottomBar(screen: Screen, signedIn: Boolean): Boolean =
-        signedIn && isMessengerTab(screen)
+        signedIn && (isMessengerTab(screen) || screen == Screen.Archive)
 
     fun canOpenHome(screen: Screen, signedIn: Boolean): Boolean =
         signedIn && screen != Screen.Home &&
@@ -89,6 +90,7 @@ object NavRules {
             Screen.Status -> "Статус"
             Screen.Settings -> "Настройки"
             Screen.Invite -> "Приглашение"
+            Screen.Archive -> ArchiveRules.TITLE
             Screen.Home, Screen.Start, Screen.Provision, Screen.Join, Screen.Chat -> ""
         }
     }
@@ -98,7 +100,7 @@ object NavRules {
         screen == Screen.Home || screen == Screen.People || screen == Screen.Settings
 
     fun selectedTab(screen: Screen): Screen? = when (screen) {
-        Screen.Chats, Screen.Chat, Screen.PeerProfile -> Screen.Chats
+        Screen.Chats, Screen.Chat, Screen.PeerProfile, Screen.Archive -> Screen.Chats
         Screen.Groups, Screen.NewGroup, Screen.GroupInfo -> Screen.Groups
         Screen.Calls -> Screen.Calls
         Screen.People -> Screen.People
@@ -109,14 +111,15 @@ object NavRules {
     fun listMode(screen: Screen): ChatListMode = when (screen) {
         Screen.Groups -> ChatListMode.GROUPS
         Screen.Calls -> ChatListMode.CALLS
+        Screen.Archive -> ChatListMode.ARCHIVE
         else -> ChatListMode.ALL
     }
 
     fun groupsOf(conversations: List<Conversation>): List<Conversation> =
-        conversations.filter { it.isGroup }
+        conversations.filter { it.isGroup && !ArchiveRules.shouldHideFromMain(it) }
 
     fun callsOf(conversations: List<Conversation>): List<Conversation> =
-        conversations.filter { it.last?.kind == MessageKind.CALL }
+        conversations.filter { it.last?.kind == MessageKind.CALL && !ArchiveRules.shouldHideFromMain(it) }
 
     fun peopleOf(devices: List<DirectoryDevice>, selfId: String?): List<DirectoryDevice> =
         devices.filter { it.deviceId != selfId }
@@ -135,5 +138,6 @@ object NavRules {
             screen == Screen.Groups ||
             screen == Screen.Calls ||
             screen == Screen.Home ||
-            screen == Screen.People
+            screen == Screen.People ||
+            screen == Screen.Archive
 }

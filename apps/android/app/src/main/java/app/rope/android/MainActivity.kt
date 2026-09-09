@@ -249,6 +249,8 @@ class MainActivity : AppCompatActivity() {
                     onMessageQuery = repo::setMessageQuery,
                     onPinChat = repo::togglePinChat,
                     onMuteChat = repo::toggleMuteChat,
+                    onArchiveChat = repo::archiveChat,
+                    onUnarchiveChat = repo::unarchiveChat,
                     onCopy = repo::copyMessage,
                     onPinMessage = repo::togglePinMessage,
                     onJump = repo::jumpToMessage,

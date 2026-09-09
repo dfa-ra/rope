@@ -17,7 +17,10 @@ object ChatListEmptyRules {
     const val COPY_MAX = 80
 
     fun showFab(mode: ChatListMode, query: String, forwarding: Boolean): Boolean =
-        !forwarding && mode != ChatListMode.CALLS && !ChatListRules.searching(query)
+        !forwarding &&
+            mode != ChatListMode.CALLS &&
+            mode != ChatListMode.ARCHIVE &&
+            !ChatListRules.searching(query)
 
     fun copy(
         mode: ChatListMode,
@@ -36,6 +39,7 @@ object ChatListEmptyRules {
         val title = when (mode) {
             ChatListMode.GROUPS -> "Групп пока нет"
             ChatListMode.CALLS -> "Звонков ещё не было"
+            ChatListMode.ARCHIVE -> ArchiveRules.EMPTY_TITLE
             ChatListMode.ALL -> "Пока никого нет"
         }
         val body = when {
@@ -46,6 +50,7 @@ object ChatListEmptyRules {
             }
             mode == ChatListMode.GROUPS -> RoleRules.groupsEmptyBody()
             mode == ChatListMode.CALLS -> RoleRules.callsEmptyBody(role)
+            mode == ChatListMode.ARCHIVE -> ArchiveRules.DEVICE_ONLY
             else -> RoleRules.chatsEmptyBody(role)
         }
         val actionLabel = if (mode == ChatListMode.GROUPS && !forwarding) "Новая группа" else null
@@ -62,7 +67,7 @@ object ChatListEmptyRules {
         val noun = when (mode) {
             ChatListMode.GROUPS -> "групп"
             ChatListMode.CALLS -> "звонков"
-            ChatListMode.ALL -> "чатов"
+            ChatListMode.ALL, ChatListMode.ARCHIVE -> "чатов"
         }
         val full = "Нет $noun по запросу «$q»."
         return if (full.length <= COPY_MAX) full else SEARCH_BODY_FALLBACK

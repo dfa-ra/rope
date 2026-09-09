@@ -19,6 +19,7 @@ class NavRulesTest {
         val signedIn = listOf(
             Screen.Chats, Screen.Chat, Screen.Groups, Screen.Calls, Screen.Status,
             Screen.People, Screen.Invite, Screen.Settings, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile,
+            Screen.Archive,
         )
         signedIn.forEach { screen ->
             assertTrue(screen.name, NavRules.canOpenHome(screen, signedIn = true))
@@ -52,6 +53,9 @@ class NavRulesTest {
         assertTrue(NavRules.isMessengerShell(Screen.People))
         assertTrue(NavRules.isMessengerShell(Screen.PeerProfile))
         assertFalse(NavRules.showsBottomBar(Screen.PeerProfile, true))
+        assertTrue(NavRules.isMessengerShell(Screen.Archive))
+        assertTrue(NavRules.showsBottomBar(Screen.Archive, true))
+        assertEquals(Screen.Chats, NavRules.selectedTab(Screen.Archive))
     }
 
     @Test
@@ -73,6 +77,7 @@ class NavRulesTest {
         assertEquals(ChatListMode.GROUPS, NavRules.listMode(Screen.Groups))
         assertEquals(ChatListMode.CALLS, NavRules.listMode(Screen.Calls))
         assertEquals(ChatListMode.ALL, NavRules.listMode(Screen.Chats))
+        assertEquals(ChatListMode.ARCHIVE, NavRules.listMode(Screen.Archive))
         val call = ChatMessage("m", "p", true, "звонок", MessageStatus.DELIVERED_TO_DEVICE, 1L, kind = MessageKind.CALL)
         val group = Conversation("g:1", "Команда", "привет", true, false, null)
         val dm = Conversation("dev", "Анна", "ок", false, true, call)
@@ -155,6 +160,7 @@ class NavRulesTest {
         assertEquals("Статус", NavRules.chromeTitle(Screen.Status))
         assertEquals("Настройки", NavRules.chromeTitle(Screen.Settings))
         assertEquals("Профиль", NavRules.chromeTitle(Screen.PeerProfile))
+        assertEquals("Архив", NavRules.chromeTitle(Screen.Archive))
         assertEquals("офлайн", NavRules.chromeTitle(Screen.Home, offline = true))
         Screen.entries.forEach { screen ->
             val title = NavRules.chromeTitle(screen)

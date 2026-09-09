@@ -169,6 +169,8 @@ fun RopeScaffold(
     onMessageQuery: (String) -> Unit,
     onPinChat: (String) -> Unit,
     onMuteChat: (String) -> Unit,
+    onArchiveChat: (String) -> Unit = {},
+    onUnarchiveChat: (String) -> Unit = {},
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
@@ -287,7 +289,7 @@ fun RopeScaffold(
                         Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onBack() }
                         Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onBack() }
                         Screen.Home -> HomePane(state, onGo, onStatus, onInvite)
-                        Screen.Chats, Screen.Groups -> app.rope.android.ui.ChatsPane(
+                        Screen.Chats, Screen.Groups, Screen.Archive -> app.rope.android.ui.ChatsPane(
                             state,
                             onOpenConversation,
                             { onGo(Screen.NewGroup) },
@@ -296,6 +298,9 @@ fun RopeScaffold(
                             onChatQuery,
                             onPinChat,
                             onMuteChat,
+                            onArchiveChat,
+                            onUnarchiveChat,
+                            { onGo(Screen.Archive) },
                             listMode = NavRules.listMode(screen),
                         )
                         Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)

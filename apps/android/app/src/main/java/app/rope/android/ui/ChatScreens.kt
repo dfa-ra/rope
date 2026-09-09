@@ -65,6 +65,8 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Call
@@ -141,6 +143,8 @@ import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
+import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -201,6 +205,9 @@ fun ChatsPane(
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
+    onArchiveChat: (String) -> Unit = {},
+    onUnarchiveChat: (String) -> Unit = {},
+    onOpenArchive: () -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -259,20 +266,26 @@ fun ChatsPane(
             placeholder = when (listMode) {
                 ChatListMode.GROUPS -> "Поиск групп"
                 ChatListMode.CALLS -> "Поиск звонков"
+                ChatListMode.ARCHIVE -> ArchiveRules.SEARCH_PLACEHOLDER
                 ChatListMode.ALL -> "Поиск"
             },
         )
-        val rows = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
+        val isForwarding = state.forwarding != null
+        val archived = ArchiveRules.archivedOf(state.conversations)
+        val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
+        val rows = ChatListRules.rows(source, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
+        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
+        val inArchive = listMode == ChatListMode.ARCHIVE
         val empty = ChatListEmptyRules.copy(
             listMode,
             state.chatQuery,
-            state.forwarding != null,
+            isForwarding,
             state.profile?.role,
         )
         Box(Modifier.weight(1f).fillMaxSize()) {
-            if (rows.isEmpty()) {
+            if (rows.isEmpty() && !showArchiveRow) {
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
@@ -281,6 +294,14 @@ fun ChatsPane(
                 )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
+                    if (showArchiveRow) {
+                        item(key = "archive-row") {
+                            ArchiveHeaderRow(
+                                archived = archived,
+                                onClick = onOpenArchive,
+                            )
+                        }
+                    }
                     if (pinnedRows.isNotEmpty()) {
                         itemsIndexed(pinnedRows, key = { _, c -> c.id }) { _, c ->
                             FadeIn(0) {
@@ -290,6 +311,8 @@ fun ChatsPane(
                                     onPin = { onPinChat(c.id) },
                                     onMute = { onMuteChat(c.id) },
                                     query = state.chatQuery,
+                                    onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
+                                    onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
                                 )
                             }
                         }
@@ -310,6 +333,18 @@ fun ChatsPane(
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
                                 query = state.chatQuery,
+                                onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
+                                onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                            )
+                        }
+                    }
+                    if (inArchive) {
+                        item(key = "archive-footer") {
+                            Text(
+                                ArchiveRules.DEVICE_ONLY,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                             )
                         }
                     }
@@ -425,12 +460,94 @@ private fun HighlightedText(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+private fun ArchiveHeaderRow(
+    archived: List<Conversation>,
+    onClick: () -> Unit,
+) {
+    val badge = ArchiveRules.badgeKind(archived)
+    val unread = ArchiveRules.unreadSum(archived)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (pressed) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+        animationSpec = tween(120),
+        label = "archiveRow",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick,
+                onLongClick = {},
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Outlined.Archive,
+                contentDescription = ArchiveRules.TITLE,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(ArchiveRules.TITLE, style = MaterialTheme.typography.titleMedium)
+            Text(
+                ArchiveRules.preview(archived),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (badge != UnreadBadgeKind.NONE) {
+            val badgeBg = when (badge) {
+                UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.primary
+                UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.onSurfaceVariant
+                UnreadBadgeKind.NONE -> Color.Transparent
+            }
+            val badgeFg = when (badge) {
+                UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.onPrimary
+                UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.surface
+                UnreadBadgeKind.NONE -> Color.Transparent
+            }
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(badgeBg)
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    UnreadBadgeRules.label(unread),
+                    color = badgeFg,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 internal fun ConversationRow(
     c: Conversation,
     onClick: () -> Unit,
     onPin: () -> Unit,
     onMute: () -> Unit,
     query: String = "",
+    onArchive: (() -> Unit)? = null,
+    onUnarchive: (() -> Unit)? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -446,6 +563,13 @@ internal fun ConversationRow(
         label = "chatRow",
     )
     val scale by animateFloatAsState(if (pressed) 0.985f else 1f, tween(120), label = "chatRowS")
+    val swipeAction = onUnarchive ?: onArchive
+    val swipeEnabled = swipeAction != null && ArchiveSwipeRules.canSwipe(c.id, header = false)
+    SwipeArchiveRow(
+        enabled = swipeEnabled,
+        unarchive = onUnarchive != null,
+        onCommit = { swipeAction?.invoke(); menu = false },
+    ) {
     Column(
         Modifier
             .graphicsLayer {
@@ -567,14 +691,26 @@ internal fun ConversationRow(
                 Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                TextButton(onClick = { onPin(); menu = false }) {
-                    Text(if (c.pinned) "Открепить" else "Закрепить")
+                if (onUnarchive != null) {
+                    TextButton(onClick = { onUnarchive(); menu = false }) {
+                        Text(ArchiveRules.UNARCHIVE)
+                    }
+                } else if (ArchiveRules.canPin(c)) {
+                    TextButton(onClick = { onPin(); menu = false }) {
+                        Text(if (c.pinned) "Открепить" else "Закрепить")
+                    }
                 }
                 TextButton(onClick = { onMute(); menu = false }) {
                     Text(if (c.muted) "Включить звук" else "Без звука")
                 }
+                if (onArchive != null && ArchiveRules.canArchive(c.id)) {
+                    TextButton(onClick = { onArchive(); menu = false }) {
+                        Text(ArchiveRules.ARCHIVE)
+                    }
+                }
             }
         }
+    }
     }
 }
 
@@ -1036,6 +1172,95 @@ fun ChatPane(
             },
             onDismiss = { showAttach = false },
         )
+    }
+}
+
+@Composable
+private fun SwipeArchiveRow(
+    enabled: Boolean,
+    unarchive: Boolean,
+    onCommit: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var dragging by remember { mutableStateOf(false) }
+    var liveOffset by remember { mutableFloatStateOf(0f) }
+    val settle by animateFloatAsState(
+        targetValue = if (dragging) liveOffset else 0f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
+        label = "swipeArchiveSettle",
+    )
+    val offsetDp = if (dragging) liveOffset else settle
+    val progress = ArchiveSwipeRules.progress(offsetDp)
+    val density = LocalDensity.current
+    val view = LocalView.current
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .pointerInput(enabled, unarchive) {
+                if (!enabled) return@pointerInput
+                val pxPerDp = density.density
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var locked = false
+                    var prev = 0f
+                    liveOffset = 0f
+                    dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val dxDp = (change.position.x - down.position.x) / pxPerDp
+                        val dyDp = (change.position.y - down.position.y) / pxPerDp
+                        if (!change.pressed) {
+                            val commit = locked && ArchiveSwipeRules.shouldCommit(liveOffset)
+                            dragging = false
+                            liveOffset = 0f
+                            if (commit) onCommit()
+                            break
+                        }
+                        if (!locked) {
+                            when {
+                                ArchiveSwipeRules.shouldAbort(dxDp, dyDp) -> break
+                                ArchiveSwipeRules.shouldLock(dxDp, dyDp) -> {
+                                    locked = true
+                                    dragging = true
+                                }
+                                else -> continue
+                            }
+                        }
+                        event.changes.forEach { it.consume() }
+                        val now = ArchiveSwipeRules.offset(dxDp)
+                        if (ArchiveSwipeRules.crossedCommit(prev, now)) {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        }
+                        prev = now
+                        liveOffset = now
+                    }
+                    dragging = false
+                    liveOffset = 0f
+                }
+            },
+    ) {
+        Icon(
+            if (unarchive) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 10.dp)
+                .graphicsLayer {
+                    alpha = ArchiveSwipeRules.iconAlpha(progress)
+                    val s = ArchiveSwipeRules.iconScale(progress)
+                    scaleX = s
+                    scaleY = s
+                },
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .offset { IntOffset((offsetDp * density.density).roundToInt(), 0) },
+        ) {
+            content()
+        }
     }
 }
 

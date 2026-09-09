@@ -44,6 +44,7 @@ import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
+import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -186,7 +187,7 @@ data class UiState(
     val pendingAttachments: List<Uri> = emptyList(),
 )
 
-enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
+enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
 
 private data class ReplyPack(
     val id: String? = null,
@@ -737,7 +738,23 @@ class RopeRepository(private val app: Application) {
 
     fun togglePinChat(id: String) {
         val cur = store.chatPrefs(id)
+        if (!ArchiveRules.canPin(cur)) return
         store.saveChatPrefs(id, cur.copy(pinned = !cur.pinned))
+        refreshConversations()
+    }
+
+    fun archiveChat(id: String) {
+        if (!ArchiveRules.canArchive(id)) return
+        val cur = store.chatPrefs(id)
+        if (cur.archived) return
+        store.saveChatPrefs(id, ArchiveRules.archivePrefs(cur))
+        refreshConversations()
+    }
+
+    fun unarchiveChat(id: String) {
+        val cur = store.chatPrefs(id)
+        if (!cur.archived) return
+        store.saveChatPrefs(id, ArchiveRules.unarchivePrefs(cur))
         refreshConversations()
     }
 
@@ -2466,6 +2483,7 @@ class RopeRepository(private val app: Application) {
                 pinned = p.pinned,
                 muted = p.muted,
                 unread = p.unread,
+                archived = p.archived,
             )
         }
         val gs = groups.map { g ->
@@ -2489,6 +2507,7 @@ class RopeRepository(private val app: Application) {
                 pinned = p.pinned,
                 muted = p.muted,
                 unread = p.unread,
+                archived = p.archived,
             )
         }
         val leftover = lastBy.keys
@@ -2517,6 +2536,7 @@ class RopeRepository(private val app: Application) {
                     pinned = p.pinned,
                     muted = p.muted,
                     unread = p.unread,
+                    archived = p.archived,
                 )
             }
         val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])

@@ -410,6 +410,7 @@ data class ChatPrefs(
     val lastReadMs: Long = 0,
     val draft: String = "",
     val pinnedMessageId: String? = null,
+    val archived: Boolean = false,
 ) {
     fun toJson(): String = JSONObject()
         .put("pinned", pinned)
@@ -418,6 +419,7 @@ data class ChatPrefs(
         .put("last_read_ms", lastReadMs)
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
+        .put("archived", archived)
         .toString()
 
     companion object {
@@ -432,6 +434,7 @@ data class ChatPrefs(
                     lastReadMs = o.optLong("last_read_ms"),
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
+                    archived = o.optBoolean("archived"),
                 )
             } catch (_: Exception) {
                 ChatPrefs()
@@ -440,7 +443,7 @@ data class ChatPrefs(
     }
 }
 
-enum class ChatListMode { ALL, GROUPS, CALLS }
+enum class ChatListMode { ALL, GROUPS, CALLS, ARCHIVE }
 
 enum class ChatListHit(val rank: Int) {
     NONE(0),
@@ -487,7 +490,7 @@ object ChatListRules {
     }
 
     fun visible(c: Conversation, mode: ChatListMode): Boolean = when (mode) {
-        ChatListMode.ALL -> true
+        ChatListMode.ALL, ChatListMode.ARCHIVE -> true
         ChatListMode.GROUPS -> c.isGroup
         ChatListMode.CALLS -> c.last?.kind == MessageKind.CALL
     }

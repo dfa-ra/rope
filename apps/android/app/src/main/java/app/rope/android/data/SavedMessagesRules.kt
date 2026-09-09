@@ -57,6 +57,7 @@ object SavedMessagesRules {
             pinned = prefs.pinned,
             muted = prefs.muted,
             unread = 0,
+            archived = prefs.archived,
         )
     }
 }
