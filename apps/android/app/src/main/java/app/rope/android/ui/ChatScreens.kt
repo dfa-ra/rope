@@ -167,11 +167,13 @@ import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
+import app.rope.android.media.VideoCodec
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -1234,6 +1236,7 @@ private fun MessageBubble(
                         } else {
                             ImageBubble(m, onEnsureMedia, overlayMeta = true)
                         }
+                        MediaCaptionLine(MediaSendRules.captionOf(m))
                     }
                     Box(
                         Modifier
@@ -1679,6 +1682,7 @@ private fun AlbumBubble(
                 )
             }
         }
+        MediaCaptionLine(MediaSendRules.albumCaption(members))
         if (last.reactions.isNotEmpty()) {
             ReactionRow(last, state.profile?.deviceId.orEmpty(), mine, onReact)
         }
@@ -1698,7 +1702,11 @@ private fun MosaicTile(
     onLongClick: () -> Unit,
 ) {
     LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
-    val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+    val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
+    val video = m.kind == MessageKind.VIDEO
+    val bmp = m.localPath?.let { path ->
+        if (video) VideoCodec.poster(path) else runCatching { ImageCodec.decodePreview(path) }.getOrNull()
+    }
     Box(
         Modifier
             .offset(x = tile.xDp.dp, y = tile.yDp.dp)
@@ -1710,7 +1718,7 @@ private fun MosaicTile(
         if (bmp != null) {
             Image(
                 bitmap = bmp.asImageBitmap(),
-                contentDescription = "Фото",
+                contentDescription = if (video) "Видео" else "Фото",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -1720,6 +1728,19 @@ private fun MosaicTile(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        if (video) {
+            Text(
+                extra?.durationMs?.takeIf { it > 0 }?.let { MediaPayload.formatDuration(it) } ?: "видео",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
         if (overlayMeta) {
@@ -1787,6 +1808,19 @@ private fun ImageBubble(
 }
 
 @Composable
+private fun MediaCaptionLine(caption: String?) {
+    val text = caption?.trim().orEmpty()
+    if (text.isEmpty()) return
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier
+            .widthIn(max = PhotoLayout.MAX_WIDTH_DP.dp)
+            .padding(start = 4.dp, end = 4.dp, top = 4.dp),
+    )
+}
+
+@Composable
 private fun FileBubble(m: ChatMessage) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
@@ -1840,7 +1874,12 @@ private fun ComposerBar(
             showEmoji = false
         }
     }
-    val showSend = ComposerRules.showSendButton(localText, state.recording, recordingLocked)
+    val showSend = ComposerRules.showSendButton(
+        localText,
+        state.recording,
+        recordingLocked,
+        pendingMedia = state.pendingAttachments.isNotEmpty(),
+    )
     val micScale by animateFloatAsState(
         targetValue = if (state.recording && !recordingLocked) 1.18f else 1f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
@@ -1869,6 +1908,12 @@ private fun ComposerBar(
                     sourceText = target.preview(),
                     span = state.replySpan,
                     onSpan = onReplySpan.takeIf { QuoteSpanRules.canSelect(target) },
+                )
+            }
+            if (state.pendingAttachments.isNotEmpty()) {
+                ComposerHint(
+                    copy = MediaSendRules.hint(state.pendingAttachments.size),
+                    onCancel = onCancelComposer,
                 )
             }
             if (showEmoji && !state.recording) {
@@ -1940,7 +1985,11 @@ private fun ComposerBar(
                                     Box {
                                         if (localText.isEmpty()) {
                                             Text(
-                                                "Сообщение",
+                                                if (state.pendingAttachments.isNotEmpty()) {
+                                                    MediaSendRules.PLACEHOLDER
+                                                } else {
+                                                    "Сообщение"
+                                                },
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )

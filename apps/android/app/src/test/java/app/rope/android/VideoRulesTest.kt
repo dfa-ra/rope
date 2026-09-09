@@ -21,7 +21,8 @@ class VideoRulesTest {
         assertTrue(VideoRules.looksLikeVideo("clip.mp4", "video/mp4"))
         assertFalse(VideoRules.looksLikeVideo("a.jpg", "image/jpeg"))
         assertTrue(VideoRules.albumEligible("image"))
-        assertFalse(VideoRules.albumEligible("video"))
+        assertTrue(VideoRules.albumEligible("video"))
+        assertFalse(VideoRules.albumEligible("file"))
     }
 
     @Test
@@ -45,6 +46,11 @@ class VideoRulesTest {
         assertEquals("Видео · 0:03", got.preview())
         assertEquals(3400, got.durationMs)
         assertFalse(got.toJson().contains("album_id"))
+        val grouped = p.copy(albumId = "alb", albumIndex = 0, albumCount = 2, caption = "клип")
+        val groupedGot = MediaPayload.parse(grouped.toJson())
+        assertEquals("alb", groupedGot.albumId)
+        assertEquals("клип", groupedGot.caption)
+        assertEquals("клип", groupedGot.preview())
         val clip = ChatMessage(
             id = "v1",
             peerDeviceId = "p",

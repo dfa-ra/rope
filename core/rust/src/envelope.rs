@@ -433,6 +433,29 @@ mod tests {
     }
 
     #[test]
+    fn typed_media_caption_and_video_album_json_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let captioned = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1,"caption":"hi"}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, captioned).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, captioned);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"caption\":\"hi\""));
+        let mixed = br#"{"kind":"video","object_id":"o","sha256":"ab","key_b64":"k","mime":"video/mp4","name":"c.mp4","size":1,"duration_ms":3400,"album_id":"alb-1","album_index":1,"album_count":2}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, mixed).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, mixed);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"kind\":\"video\""));
+        assert!(json.contains("\"album_id\":\"alb-1\""));
+        let empty = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, empty).unwrap();
+        let json = std::str::from_utf8(&decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap().body).unwrap();
+        assert!(!json.contains("caption"));
+    }
+
+    #[test]
     fn typed_text_forwarded_from_json_roundtrip() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();

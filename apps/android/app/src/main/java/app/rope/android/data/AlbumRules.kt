@@ -3,7 +3,7 @@ package app.rope.android.data
 import java.util.UUID
 
 /**
- * Telegram-like grouped photo albums. Each photo is still its own type=2 envelope;
+ * Telegram-like grouped photo/video albums. Each item is still its own type=2 envelope;
  * [albumId] lives inside the encrypted object JSON (not visible to Go).
  */
 object AlbumRules {
@@ -20,7 +20,7 @@ object AlbumRules {
     fun cap(size: Int): Int = size.coerceIn(0, MAX_PHOTOS)
 
     /**
-     * One slot per outgoing photo. A single photo is a normal image (no album_id).
+     * One slot per outgoing photo or video. A single item is a normal image/video (no album_id).
      * Two to [MAX_PHOTOS] share one [albumId] with 0-based index order.
      */
     fun slots(count: Int, albumId: String? = null): List<Slot> {
@@ -31,8 +31,11 @@ object AlbumRules {
         return (0 until n).map { Slot(id, it, n) }
     }
 
+    fun isMemberKind(kind: MessageKind): Boolean =
+        kind == MessageKind.IMAGE || kind == MessageKind.VIDEO
+
     fun albumId(msg: ChatMessage): String? {
-        if (msg.deleted || msg.kind != MessageKind.IMAGE || msg.extra.isBlank()) return null
+        if (msg.deleted || !isMemberKind(msg.kind) || msg.extra.isBlank()) return null
         return runCatching { JsonIds.optional(MediaPayload.parse(msg.extra).albumId) }.getOrNull()
     }
 
@@ -46,7 +49,7 @@ object AlbumRules {
     }
 
     fun siblings(messages: List<ChatMessage>, msg: ChatMessage): List<ChatMessage> {
-        if (msg.kind != MessageKind.IMAGE || msg.deleted) return emptyList()
+        if (!isMemberKind(msg.kind) || msg.deleted) return emptyList()
         val id = albumId(msg) ?: return listOf(msg)
         val found = members(messages, id)
         return found.ifEmpty { listOf(msg) }
@@ -101,8 +104,11 @@ object AlbumRules {
         return key.hashCode()
     }
 
-    fun preview(count: Int): String = when {
+    fun preview(count: Int, videoCount: Int = 0): String = when {
+        count <= 1 && videoCount >= 1 -> "Видео"
         count <= 1 -> "Фото"
-        else -> "Альбом · $count фото"
+        videoCount <= 0 -> "Альбом · $count фото"
+        videoCount >= count -> "Альбом · $count видео"
+        else -> "Альбом · $count"
     }
 }

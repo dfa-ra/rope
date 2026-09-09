@@ -17,6 +17,7 @@ data class MediaPayload(
     val albumIndex: Int = 0,
     val albumCount: Int = 1,
     val forwardedFrom: String? = null,
+    val caption: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("kind", kind)
@@ -36,6 +37,7 @@ data class MediaPayload(
                 put("album_count", albumCount)
             }
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
+            JsonIds.optional(caption)?.let { put("caption", it) }
         }
         .toString()
 
@@ -47,16 +49,23 @@ data class MediaPayload(
         else -> MessageKind.UNKNOWN
     }
 
-    fun preview(): String = when (kind) {
-        "voice" -> "Голосовое · ${formatDuration(durationMs)}"
-        "image" -> if (!albumId.isNullOrBlank() && albumCount > 1) {
-            "Альбом · $albumCount фото"
-        } else {
-            "Фото"
+    fun preview(): String {
+        val cap = JsonIds.optional(caption)
+        return when (kind) {
+            "voice" -> "Голосовое · ${formatDuration(durationMs)}"
+            "image" -> cap ?: if (!albumId.isNullOrBlank() && albumCount > 1) {
+                AlbumRules.preview(albumCount, videoCount = 0)
+            } else {
+                "Фото"
+            }
+            "video" -> cap ?: if (!albumId.isNullOrBlank() && albumCount > 1) {
+                AlbumRules.preview(albumCount, videoCount = albumCount)
+            } else {
+                VideoRules.preview(durationMs)
+            }
+            "file" -> name.ifBlank { "Файл" }
+            else -> cap ?: "Вложение"
         }
-        "video" -> VideoRules.preview(durationMs)
-        "file" -> name.ifBlank { "Файл" }
-        else -> "Вложение"
     }
 
     companion object {
@@ -76,6 +85,7 @@ data class MediaPayload(
                 albumIndex = o.optInt("album_index", 0).coerceAtLeast(0),
                 albumCount = o.optInt("album_count", 1).let { if (it <= 0) 1 else it },
                 forwardedFrom = JsonIds.optional(o.optString("ff")),
+                caption = JsonIds.optional(o.optString("caption")),
             )
         }
 
@@ -641,8 +651,8 @@ object ComposerRules {
     /** Slide left this many px while holding to cancel. */
     const val VOICE_CANCEL_SLIDE_LEFT = 80f
 
-    /** Attach → pick from gallery. */
-    const val PHOTO_TAPS_TO_SEND = 2
+    /** Attach → pick from gallery → caption send. */
+    const val PHOTO_TAPS_TO_SEND = 3
 
     /** Full-screen incoming call: one tap to answer. */
     const val ANSWER_CALL_TAPS = 1
@@ -650,8 +660,13 @@ object ComposerRules {
     /** Chats FAB → name → create. */
     const val GROUP_CREATE_TAPS = 2
 
-    fun showSendButton(draft: String, recording: Boolean, recordingLocked: Boolean = false): Boolean =
-        (draft.isNotBlank() && !recording) || recordingLocked
+    fun showSendButton(
+        draft: String,
+        recording: Boolean,
+        recordingLocked: Boolean = false,
+        pendingMedia: Boolean = false,
+    ): Boolean =
+        (pendingMedia && !recording) || (draft.isNotBlank() && !recording) || recordingLocked
 
     fun showMicButton(draft: String, recording: Boolean, recordingLocked: Boolean = false): Boolean =
         (draft.isBlank() || recording) && !recordingLocked

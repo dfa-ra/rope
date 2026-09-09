@@ -1,6 +1,6 @@
 package app.rope.android.data
 
-enum class ComposerHintKind { REPLY, EDIT }
+enum class ComposerHintKind { REPLY, EDIT, MEDIA }
 
 data class ComposerHintCopy(
     val kind: ComposerHintKind,
@@ -20,6 +20,7 @@ object ComposerHintRules {
     const val EDIT_TITLE = "Редактирование"
     const val DISMISS_REPLY = "Отменить ответ"
     const val DISMISS_EDIT = "Отменить редактирование"
+    const val DISMISS_MEDIA = MediaSendRules.DISMISS
 
     fun reply(name: String, preview: String, spanText: String = ""): ComposerHintCopy = ComposerHintCopy(
         kind = ComposerHintKind.REPLY,

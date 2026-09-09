@@ -56,6 +56,6 @@ object VideoRules {
         return "mp4"
     }
 
-    /** Photos still album; each video is its own type=2 envelope. */
-    fun albumEligible(kind: String): Boolean = kind == "image"
+    /** Photos and videos share albums; voice/file stay singles. */
+    fun albumEligible(kind: String): Boolean = kind == "image" || kind == "video"
 }

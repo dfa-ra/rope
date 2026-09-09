@@ -33,6 +33,7 @@ import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
@@ -159,6 +160,7 @@ data class UiState(
     val pinnedMessageId: String? = null,
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
+    val pendingAttachments: List<Uri> = emptyList(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
@@ -547,6 +549,20 @@ class RopeRepository(private val app: Application) {
     }
 
     fun sendDraft() {
+        val pending = _state.value.pendingAttachments
+        if (pending.isNotEmpty() && !_state.value.recording) {
+            val caption = _state.value.draftText
+            _state.value = _state.value.copy(
+                draftText = "",
+                pendingAttachments = emptyList(),
+                replyTo = null,
+                replySpan = null,
+                editTarget = null,
+            )
+            persistOpenDraft()
+            sendAttachments(pending, caption = caption)
+            return
+        }
         val text = _state.value.draftText
         if (text.isBlank() || _state.value.recording) return
         val edit = _state.value.editTarget
@@ -633,7 +649,12 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelComposerExtra() {
-        _state.value = _state.value.copy(replyTo = null, replySpan = null, editTarget = null)
+        _state.value = _state.value.copy(
+            replyTo = null,
+            replySpan = null,
+            editTarget = null,
+            pendingAttachments = emptyList(),
+        )
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -747,10 +768,20 @@ class RopeRepository(private val app: Application) {
     }
 
     fun sendAttachment(uri: Uri, forcedMime: String? = null) {
+        if (forcedMime == null && looksLikeVisual(uri, null)) {
+            stageAttachments(listOf(uri))
+            return
+        }
         sendAttachments(listOf(uri), forcedMime)
     }
 
-    fun sendAttachments(uris: List<Uri>, forcedMime: String? = null) {
+    fun stageAttachments(uris: List<Uri>) {
+        val next = uris.take(AlbumRules.MAX_PHOTOS)
+        if (next.isEmpty()) return
+        _state.value = _state.value.copy(pendingAttachments = next)
+    }
+
+    fun sendAttachments(uris: List<Uri>, forcedMime: String? = null, caption: String? = null) {
         scope.launch {
             try {
                 val prepared = uris.take(AlbumRules.MAX_PHOTOS).mapNotNull { uri ->
@@ -760,6 +791,7 @@ class RopeRepository(private val app: Application) {
                 val images = prepared.filter { VideoRules.albumEligible(it.kind) }
                 val rest = prepared.filter { !VideoRules.albumEligible(it.kind) }
                 val slots = AlbumRules.slots(images.size)
+                val cap = MediaSendRules.normalize(caption)
                 images.zip(slots).forEach { (item, slot) ->
                     sendMediaBytes(
                         item.bytes,
@@ -770,6 +802,7 @@ class RopeRepository(private val app: Application) {
                         albumId = slot.albumId,
                         albumIndex = slot.index,
                         albumCount = slot.count,
+                        caption = MediaSendRules.onFirstOnly(slot.index, cap),
                     )
                 }
                 rest.forEach { item ->
@@ -1288,6 +1321,7 @@ class RopeRepository(private val app: Application) {
         albumId: String? = null,
         albumIndex: Int = 0,
         albumCount: Int = 1,
+        caption: String? = null,
     ) {
         val id = identity ?: return
         val group = _state.value.group
@@ -1297,6 +1331,8 @@ class RopeRepository(private val app: Application) {
         }
         val saved = SavedMessagesRules.isSaved(peer?.deviceId) && group == null
         val enc = encryptObject(bytes)
+        val grouped = VideoRules.albumEligible(kind)
+        val cap = MediaSendRules.normalize(caption)
         if (saved) {
             val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
             val payload = MediaPayload(
@@ -1308,9 +1344,10 @@ class RopeRepository(private val app: Application) {
                 name = name,
                 size = bytes.size.toLong(),
                 durationMs = durationMs,
-                albumId = if (kind == "image") albumId else null,
-                albumIndex = if (kind == "image") albumIndex else 0,
-                albumCount = if (kind == "image") albumCount else 1,
+                albumId = if (grouped) albumId else null,
+                albumIndex = if (grouped) albumIndex else 0,
+                albumCount = if (grouped) albumCount else 1,
+                caption = cap,
             )
             val cache = persistPlain(objectId, name, mime, bytes)
             insertLocalSaved(
@@ -1335,9 +1372,10 @@ class RopeRepository(private val app: Application) {
             size = bytes.size.toLong(),
             durationMs = durationMs,
             groupId = if (inKnownGroup) group?.groupId else null,
-            albumId = if (kind == "image") albumId else null,
-            albumIndex = if (kind == "image") albumIndex else 0,
-            albumCount = if (kind == "image") albumCount else 1,
+            albumId = if (grouped) albumId else null,
+            albumIndex = if (grouped) albumIndex else 0,
+            albumCount = if (grouped) albumCount else 1,
+            caption = cap,
         )
         val cache = persistPlain(objectId, name, mime, bytes)
         if (inKnownGroup && group != null) {
@@ -1503,6 +1541,12 @@ class RopeRepository(private val app: Application) {
         val n = name.lowercase()
         return mime.startsWith("image/") || n.endsWith(".jpg") || n.endsWith(".jpeg") ||
             n.endsWith(".png") || n.endsWith(".webp") || n.endsWith(".heic") || n.endsWith(".gif")
+    }
+
+    private fun looksLikeVisual(uri: Uri, forcedMime: String?): Boolean {
+        val mime = forcedMime ?: app.contentResolver.getType(uri) ?: "application/octet-stream"
+        val name = attachmentName(uri, mime)
+        return VideoRules.looksLikeVideo(name, mime) || looksLikeImage(name, mime)
     }
 
     private fun sendControl(type: UByte, body: ByteArray) {

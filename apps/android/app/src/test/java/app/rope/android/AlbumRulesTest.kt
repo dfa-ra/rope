@@ -130,6 +130,40 @@ class AlbumRulesTest {
         assertEquals("Фото", single.preview())
     }
 
+    @Test
+    fun videoMembersCollapseIntoTheSameMosaic() {
+        val photo = photo("a", extra = albumJson("alb", 0, 2), ts = 1)
+        val clip = ChatMessage(
+            id = "v",
+            peerDeviceId = "p",
+            outgoing = false,
+            text = "Видео",
+            status = MessageStatus.DELIVERED_TO_DEVICE,
+            timestampMs = 2,
+            kind = MessageKind.VIDEO,
+            extra = MediaPayload(
+                kind = "video",
+                objectId = "o-v",
+                sha256 = "ab",
+                keyB64 = "KEY",
+                mime = "video/mp4",
+                name = "c.mp4",
+                size = 1,
+                durationMs = 3400,
+                albumId = "alb",
+                albumIndex = 1,
+                albumCount = 2,
+            ).toJson(),
+        )
+        val collapsed = AlbumRules.collapse(
+            listOf(ChatThreadItem.Bubble(photo), ChatThreadItem.Bubble(clip)),
+        )
+        val album = collapsed.single() as ChatThreadItem.Album
+        assertEquals(listOf("a", "v"), album.members.map { it.id })
+        assertEquals("alb", AlbumRules.albumId(clip))
+        assertEquals("Альбом · 2", AlbumRules.preview(2, videoCount = 1))
+    }
+
     private fun photo(id: String, extra: String, ts: Long = 1L) = ChatMessage(
         id = id,
         peerDeviceId = "p",

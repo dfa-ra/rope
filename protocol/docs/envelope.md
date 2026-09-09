@@ -62,13 +62,16 @@ UTF-8 JSON inside the AEAD (not visible to the server):
   "group_id": null,
   "album_id": null,
   "album_index": 0,
-  "album_count": 1
+  "album_count": 1,
+  "caption": null
 }
 ```
 
-Optional `album_id` / `album_index` / `album_count` group 2–10 photos into one album. Each photo is still its own type=2 envelope and object blob; the relay does not see album linkage. A single photo omits these keys and renders as a normal image.
+Optional `album_id` / `album_index` / `album_count` group 2–10 photos and/or videos into one album. Each item is still its own type=2 envelope and object blob; the relay does not see album linkage. A single photo or video omits these keys and renders as a normal image/video.
 
-`kind=video` is the same type=2 object JSON (duration in `duration_ms`). The client compresses the clip to the existing 25 MiB object cap before `encryptObject`. Videos are not album members in this slice. No new envelope type.
+`kind=video` is the same type=2 object JSON (duration in `duration_ms`). The client compresses the clip to the existing 25 MiB object cap before `encryptObject`. Videos may be album members (`album_id` shared with photos). No new envelope type.
+
+Optional `caption` is UTF-8 text on a photo or video send (one caption per album, on the first member). Empty caption omits the key. Kotlin packs this JSON; the existing Rust `encrypt_typed` / `encryptObject` path encrypts it. The relay never sees plaintext.
 
 Optional `ff` is the attributed-forward origin display name («Переслано от …»). It is not a reply quote. Forwards must not set reply fields (`r` / `rp` / `rn`). Local Saved Messages / Избранное (`peer_id=saved:`) stays in the client LocalStore and never becomes a mailbox envelope or object on the VPS.
 
