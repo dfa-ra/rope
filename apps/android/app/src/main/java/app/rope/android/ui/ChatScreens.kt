@@ -62,6 +62,7 @@ import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -136,6 +137,7 @@ import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
+import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
@@ -442,7 +444,7 @@ internal fun ConversationRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            InitialsAvatar(c.title, c.isGroup, c.online)
+            InitialsAvatar(c.title, c.isGroup, c.online, saved = SavedMessagesRules.isSaved(c))
             Column(Modifier.weight(1f)) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -585,13 +587,15 @@ fun ChatPane(
     onAttachUri: (Uri) -> Unit = {},
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
 ) {
-    val title = state.group?.name ?: state.peer?.displayName ?: "Чат"
+    val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
+    val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
     } ?: (state.peer?.online == true)
     val typing = state.typingName
     val subtitle = when {
         !typing.isNullOrBlank() -> typing
+        saved -> SavedMessagesRules.IDLE_SUBTITLE
         state.group != null -> "${state.group.members.size} участников · ${if (online) "кто-то в сети" else "все офлайн"}"
         else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
     }
@@ -695,11 +699,13 @@ fun ChatPane(
                         enabled = PeerProfileRules.headerClickable(
                             isGroup = state.group != null,
                             hasPeer = state.peer != null,
+                            saved = saved,
                         ),
                         onClick = {
                             if (PeerProfileRules.opensPeerProfile(
                                     isGroup = state.group != null,
                                     hasPeer = state.peer != null,
+                                    saved = saved,
                                 )
                             ) {
                                 onPeerProfile()
@@ -712,7 +718,7 @@ fun ChatPane(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                InitialsAvatar(title, state.group != null, online)
+                InitialsAvatar(title, state.group != null, online, saved = saved, showPresence = !saved)
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -724,7 +730,7 @@ fun ChatPane(
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
-                if (state.peer != null && state.group == null) {
+                if (state.peer != null && state.group == null && SavedMessagesRules.canCall(state.peer?.deviceId)) {
                     IconButton(onClick = onCall) {
                         Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
                     }
@@ -770,7 +776,7 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
-                val empty = ThreadEmptyRules.copy(state.messageQuery)
+                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved)
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
@@ -2345,11 +2351,16 @@ fun InitialsAvatar(
     size: Dp = 46.dp,
     tint: Color? = null,
     showPresence: Boolean = true,
+    saved: Boolean = false,
 ) {
     val letter = title.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     val iconSize = if (size < 40.dp) 16.dp else 22.dp
     val dot = if (size < 40.dp) 8.dp else 12.dp
-    val bg = tint ?: if (group) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+    val bg = tint ?: when {
+        saved -> MaterialTheme.colorScheme.primary
+        group -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.primary
+    }
     Box(contentAlignment = Alignment.BottomEnd) {
         Box(
             Modifier
@@ -2358,17 +2369,22 @@ fun InitialsAvatar(
                 .background(bg),
             contentAlignment = Alignment.Center,
         ) {
-            if (group) {
-                Icon(Icons.Outlined.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(iconSize))
-            } else {
-                Text(
+            when {
+                saved -> Icon(
+                    Icons.Outlined.Bookmark,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(iconSize),
+                )
+                group -> Icon(Icons.Outlined.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(iconSize))
+                else -> Text(
                     letter,
                     color = MaterialTheme.colorScheme.onPrimary,
                     style = if (size < 40.dp) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
                 )
             }
         }
-        if (showPresence) {
+        if (showPresence && !saved) {
             Box(
                 Modifier
                     .size(dot)

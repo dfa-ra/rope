@@ -41,6 +41,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
+import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
@@ -484,12 +485,18 @@ class RopeRepository(private val app: Application) {
         enterChat(ChatIds.group(group.groupId), null, group)
     }
 
+    fun openSaved() {
+        persistOpenDraft()
+        enterChat(SavedMessagesRules.ID, SavedMessagesRules.stubPeer(), null)
+    }
+
     fun openConversation(c: Conversation) {
         if (_state.value.forwarding != null) {
             completeForward(c)
             return
         }
         when {
+            SavedMessagesRules.isSaved(c.id) -> openSaved()
             c.group != null -> openGroup(c.group)
             c.peer != null -> openChat(c.peer)
             !c.isGroup -> openChat(
@@ -543,6 +550,10 @@ class RopeRepository(private val app: Application) {
             sendGroupText(group, text, reply)
             return
         }
+        if (SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(_state.value.peer?.deviceId)) {
+            saveLocalText(text, reply)
+            return
+        }
         val peer = _state.value.peer ?: return
         scope.launch {
             val id = identity ?: return@launch
@@ -592,6 +603,7 @@ class RopeRepository(private val app: Application) {
         if (!msg.outgoing || msg.deleted) return
         store.markDeleted(msg.id)
         refreshOpenChat()
+        if (SavedMessagesRules.skipNetwork(openChatId() ?: msg.peerDeviceId)) return
         sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.DELETE, msg.id).toJson().toByteArray())
     }
 
@@ -676,6 +688,10 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             try {
                 when {
+                    SavedMessagesRules.isSaved(c.id) -> {
+                        forwardToSaved(src)
+                        openSaved()
+                    }
                     c.group != null -> {
                         forwardToGroup(c.group, src)
                         openGroup(c.group)
@@ -960,7 +976,7 @@ class RopeRepository(private val app: Application) {
     fun startCall() {
         if (_state.value.group != null) return
         val hint = _state.value.peer ?: return
-        if (ChatIds.isGroup(hint.deviceId)) return
+        if (ChatIds.isGroup(hint.deviceId) || ChatIds.isSaved(hint.deviceId)) return
         val peer = resolveCallPeer(hint.deviceId, hint, fetch = true) ?: return
         callPeerName = peer.displayName.ifBlank { hint.displayName }
         applyCallEffects(
@@ -1201,13 +1217,38 @@ class RopeRepository(private val app: Application) {
         albumCount: Int = 1,
     ) {
         val id = identity ?: return
-        val api = api ?: throw IllegalStateException("нет сети")
         val group = _state.value.group
         val peer = _state.value.peer
         if (group == null && peer == null) {
             throw IllegalStateException("откройте чат, чтобы отправить вложение")
         }
+        val saved = SavedMessagesRules.isSaved(peer?.deviceId) && group == null
         val enc = encryptObject(bytes)
+        if (saved) {
+            val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
+            val payload = MediaPayload(
+                kind = kind,
+                objectId = objectId,
+                sha256 = enc.sha256,
+                keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
+                mime = mime,
+                name = name,
+                size = bytes.size.toLong(),
+                durationMs = durationMs,
+                albumId = if (kind == "image") albumId else null,
+                albumIndex = if (kind == "image") albumIndex else 0,
+                albumCount = if (kind == "image") albumCount else 1,
+            )
+            val cache = persistPlain(objectId, name, mime, bytes)
+            insertLocalSaved(
+                text = payload.preview(),
+                kind = payload.messageKind(),
+                extra = payload.toJson(),
+                localFile = cache,
+            )
+            return
+        }
+        val api = api ?: throw IllegalStateException("нет сети")
         val uploaded = api.uploadObject(enc.ciphertext, enc.sha256)
         val objectId = uploaded.getString("object_id")
         val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
@@ -1517,6 +1558,7 @@ class RopeRepository(private val app: Application) {
         if (!TypingRules.shouldSend(lastTypingSentAt, now, text)) return
         lastTypingSentAt = now
         val target = openChatId() ?: return
+        if (SavedMessagesRules.skipNetwork(target)) return
         sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.TYPING, target).toJson().toByteArray())
     }
 
@@ -1558,6 +1600,7 @@ class RopeRepository(private val app: Application) {
     private fun applyEdit(msg: ChatMessage, text: String) {
         store.editMessage(msg.id, text)
         refreshOpenChat()
+        if (SavedMessagesRules.skipNetwork(openChatId() ?: msg.peerDeviceId)) return
         sendControl(
             EnvelopeTypes.RECEIPT,
             ChatControl(ChatControl.EDIT, msg.id, text = text).toJson().toByteArray(),
@@ -1565,6 +1608,10 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun forwardToPeer(peer: DirectoryDevice, src: ChatMessage) {
+        if (SavedMessagesRules.isSaved(peer.deviceId)) {
+            forwardToSaved(src)
+            return
+        }
         val id = identity ?: return
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
@@ -1640,10 +1687,74 @@ class RopeRepository(private val app: Application) {
         )
     }
 
+    private fun forwardToSaved(src: ChatMessage) {
+        val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
+        if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
+            saveLocalText(src.text, forwardedFrom = from)
+            return
+        }
+        val payload = attributedMediaPayload(src, from, groupId = null, upload = false) ?: return
+        val cache = src.localPath?.let { File(it) }?.takeIf { it.isFile }
+        insertLocalSaved(
+            text = payload.preview(),
+            kind = payload.messageKind(),
+            extra = payload.toJson(),
+            localFile = cache,
+            forwardedFrom = from,
+        )
+    }
+
+    private fun saveLocalText(
+        text: String,
+        reply: ChatMessage? = null,
+        forwardedFrom: String? = null,
+    ) {
+        val attributed = JsonIds.optional(forwardedFrom)
+        insertLocalSaved(
+            text = text,
+            kind = MessageKind.TEXT,
+            extra = "",
+            localFile = null,
+            reply = if (attributed == null) reply else null,
+            forwardedFrom = attributed,
+        )
+    }
+
+    private fun insertLocalSaved(
+        text: String,
+        kind: MessageKind,
+        extra: String,
+        localFile: File?,
+        reply: ChatMessage? = null,
+        forwardedFrom: String? = null,
+    ) {
+        val local = ChatMessage(
+            id = store.newId(),
+            peerDeviceId = SavedMessagesRules.ID,
+            outgoing = true,
+            text = text,
+            status = MessageStatus.DELIVERED_TO_DEVICE,
+            timestampMs = System.currentTimeMillis(),
+            envelope = null,
+            kind = kind,
+            extra = extra,
+            localPath = localFile?.absolutePath,
+            senderId = identity?.deviceId().orEmpty(),
+            senderName = _state.value.profile?.displayName.orEmpty(),
+            replyToId = reply?.id,
+            replyPreview = reply?.preview().orEmpty(),
+            replyName = replyName(reply),
+            forwardedFrom = forwardedFrom,
+        )
+        store.insertMessage(local)
+        refreshMessages(SavedMessagesRules.ID)
+    }
+
     private fun attributedMediaPayload(
         src: ChatMessage,
         forwardedFrom: String,
         groupId: String?,
+        upload: Boolean = true,
     ): MediaPayload? {
         val file = src.localPath?.let { File(it) }?.takeIf { it.isFile }
         if (src.extra.isBlank() && file == null) {
@@ -1671,6 +1782,18 @@ class RopeRepository(private val app: Application) {
         if (file != null) {
             val bytes = file.readBytes()
             val enc = encryptObject(bytes)
+            if (!upload) {
+                val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
+                persistPlain(objectId, base.name.ifBlank { file.name }, base.mime, bytes)
+                return base.copy(
+                    objectId = objectId,
+                    sha256 = enc.sha256,
+                    keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
+                    size = bytes.size.toLong(),
+                    groupId = null,
+                    forwardedFrom = forwardedFrom,
+                )
+            }
             val uploaded = (api ?: throw IllegalStateException("нет сети")).uploadObject(enc.ciphertext, enc.sha256)
             persistPlain(uploaded.getString("object_id"), base.name.ifBlank { file.name }, base.mime, bytes)
             return base.copy(
@@ -1681,6 +1804,10 @@ class RopeRepository(private val app: Application) {
                 groupId = groupId,
                 forwardedFrom = forwardedFrom,
             )
+        }
+        if (!upload) {
+            notice("это вложение уже нельзя переслать")
+            return null
         }
         return base.copy(groupId = groupId, forwardedFrom = forwardedFrom)
     }
@@ -1768,7 +1895,8 @@ class RopeRepository(private val app: Application) {
             .filter { id ->
                 ChatRouting.showLeftoverThread(id) &&
                     dms.none { it.id == id } &&
-                    gs.none { it.id == id }
+                    gs.none { it.id == id } &&
+                    !SavedMessagesRules.isSaved(id)
             }
             .map { id ->
                 val p = prefs[id] ?: ChatPrefs()
@@ -1791,8 +1919,17 @@ class RopeRepository(private val app: Application) {
                     unread = p.unread,
                 )
             }
+        val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])
+        if (prefs[SavedMessagesRules.ID] == null) {
+            store.saveChatPrefs(SavedMessagesRules.ID, savedPrefs)
+        }
+        val saved = SavedMessagesRules.conversation(
+            lastBy[SavedMessagesRules.ID],
+            savedPrefs,
+            identity?.deviceId().orEmpty(),
+        )
         _state.value = _state.value.copy(
-            conversations = (dms + gs + leftover).sortedWith { a, b -> ChatListRules.compare(a, b) },
+            conversations = (listOf(saved) + dms + gs + leftover).sortedWith { a, b -> ChatListRules.compare(a, b) },
         )
     }
 
@@ -2029,6 +2166,8 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun downloadMedia(messageId: String, payload: MediaPayload) {
+        if (SavedMessagesRules.isLocalObject(payload.objectId)) return
+        if (SavedMessagesRules.skipNetwork(store.message(messageId)?.peerDeviceId)) return
         try {
             val api = api ?: return
             val (blob, headerHash) = api.downloadObject(payload.objectId)
@@ -2465,6 +2604,7 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun notifyIfHidden(title: String, body: String, chatId: String, albumId: String? = null) {
+        if (SavedMessagesRules.isSaved(chatId)) return
         val chatOpen = _state.value.screen == Screen.Chat && openChatId() == chatId
         val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val cur = store.chatPrefs(chatId)
@@ -2516,6 +2656,7 @@ class RopeRepository(private val app: Application) {
         val id = identity ?: return
         val devices = currentDevices()
         for (msg in store.pendingOutgoing()) {
+            if (SavedMessagesRules.skipNetwork(msg.peerDeviceId)) continue
             if (ChatIds.isGroup(msg.peerDeviceId)) {
                 val gid = msg.groupId ?: ChatIds.rawGroupId(msg.peerDeviceId)
                 val group = store.group(gid) ?: continue

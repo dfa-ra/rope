@@ -104,6 +104,7 @@ class Stage2UxTest {
         assertFalse(ChatIds.isOpenableGroup("g:null"))
         assertFalse(ChatRouting.showLeftoverThread("g:null"))
         assertTrue(ChatRouting.showLeftoverThread("peer-1"))
+        assertFalse(ChatRouting.showLeftoverThread("saved:"))
     }
 
     @Test

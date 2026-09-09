@@ -8,9 +8,11 @@ object PeerProfileRules {
     const val GRID_COLUMNS = 3
     const val SECTION = "Общие медиа"
 
-    fun headerClickable(isGroup: Boolean, hasPeer: Boolean): Boolean = isGroup || hasPeer
+    fun headerClickable(isGroup: Boolean, hasPeer: Boolean, saved: Boolean = false): Boolean =
+        !saved && (isGroup || hasPeer)
 
-    fun opensPeerProfile(isGroup: Boolean, hasPeer: Boolean): Boolean = !isGroup && hasPeer
+    fun opensPeerProfile(isGroup: Boolean, hasPeer: Boolean, saved: Boolean = false): Boolean =
+        !saved && !isGroup && hasPeer
 
     fun title(peerName: String?): String = peerName?.trim().orEmpty().ifBlank { "Профиль" }
 

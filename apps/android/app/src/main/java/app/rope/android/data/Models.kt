@@ -117,10 +117,13 @@ data class CallInfo(
 
 object ChatIds {
     const val GROUP_PREFIX = "g:"
+    const val SAVED = SavedMessagesRules.ID
 
     fun group(groupId: String): String = GROUP_PREFIX + groupId
 
     fun isGroup(id: String): Boolean = id.startsWith(GROUP_PREFIX)
+
+    fun isSaved(id: String?): Boolean = SavedMessagesRules.isSaved(id)
 
     fun rawGroupId(id: String): String = id.removePrefix(GROUP_PREFIX)
 
@@ -145,7 +148,7 @@ object ChatRouting {
         return if (gid != null && gid in knownGroups) ChatIds.group(gid) else senderDeviceId
     }
 
-    fun showLeftoverThread(id: String): Boolean = !ChatIds.isGroup(id)
+    fun showLeftoverThread(id: String): Boolean = !ChatIds.isGroup(id) && !ChatIds.isSaved(id)
 }
 
 /** Device / member ids on the wire are 64-hex or UUID; compare them case-insensitively. */
@@ -192,6 +195,7 @@ object PeerIds {
         onlineIds: Set<String> = emptySet(),
     ): DirectoryDevice? {
         if (ChatIds.isGroup(rawId.orEmpty()) || ChatIds.isGroup(hint?.deviceId.orEmpty())) return null
+        if (ChatIds.isSaved(rawId) || ChatIds.isSaved(hint?.deviceId)) return null
         findDevice(devices, rawId)?.let { return it }
         preferReachable(devicesForMember(devices, rawId), onlineIds)?.let { return it }
         if (hint == null) return null

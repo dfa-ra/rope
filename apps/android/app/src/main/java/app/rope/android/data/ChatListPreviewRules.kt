@@ -28,18 +28,22 @@ object ChatListPreviewRules {
         myDeviceId: String = "",
         online: Boolean = false,
         memberCount: Int = 0,
+        saved: Boolean = false,
     ): ChatListPreviewCopy {
         val clippedDraft = clip(draft)
         if (clippedDraft.isNotEmpty()) {
             return ChatListPreviewCopy("$DRAFT_LABEL: $clippedDraft", ChatListPreviewKind.DRAFT)
         }
         if (last != null) {
-            val body = if (isGroup) {
-                GroupChatUx.listPreview(last, myDeviceId) ?: last.preview()
-            } else {
-                dmLast(last, myDeviceId)
+            val body = when {
+                saved -> last.preview()
+                isGroup -> GroupChatUx.listPreview(last, myDeviceId) ?: last.preview()
+                else -> dmLast(last, myDeviceId)
             }
             return ChatListPreviewCopy(body, ChatListPreviewKind.LAST)
+        }
+        if (saved) {
+            return ChatListPreviewCopy(SavedMessagesRules.IDLE_SUBTITLE, ChatListPreviewKind.PRESENCE)
         }
         if (isGroup) {
             return ChatListPreviewCopy("$memberCount участников", ChatListPreviewKind.PRESENCE)
