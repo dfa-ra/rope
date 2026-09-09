@@ -115,6 +115,14 @@ object NavRules {
         else -> ChatListMode.ALL
     }
 
+    /** Archive search is independent of the chats query. Opening a chat keeps it. */
+    fun clearsChatQuery(from: Screen, to: Screen): Boolean =
+        to == Screen.Archive ||
+            (from == Screen.Archive &&
+                to != Screen.Archive &&
+                to != Screen.Chat &&
+                to != Screen.PeerProfile)
+
     fun groupsOf(conversations: List<Conversation>): List<Conversation> =
         conversations.filter { it.isGroup && !ArchiveRules.shouldHideFromMain(it) }
 

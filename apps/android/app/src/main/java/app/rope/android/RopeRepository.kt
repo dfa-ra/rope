@@ -288,8 +288,7 @@ class RopeRepository(private val app: Application) {
         val from = _state.value.screen
         if (screen != Screen.Chat) persistOpenDraft()
         var next = applyNav(screen, if (tab) NavMode.SwitchTab else NavMode.Push).copy(error = null)
-        // Archive has its own search; do not carry the chats query in or out.
-        if (screen == Screen.Archive || (from == Screen.Archive && screen != Screen.Archive)) {
+        if (NavRules.clearsChatQuery(from, screen)) {
             next = next.copy(chatQuery = "")
         }
         _state.value = next
