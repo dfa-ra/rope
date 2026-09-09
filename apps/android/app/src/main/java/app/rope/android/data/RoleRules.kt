@@ -48,7 +48,7 @@ object RoleRules {
 
     /**
      * Add/remove others: organizer or server owner.
-     * REST still accepts any member; the UI follows Telegram/WhatsApp.
+     * REST matches: any member may leave themselves.
      */
     fun canManageGroupMembers(
         isMember: Boolean,

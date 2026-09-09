@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -33,24 +34,45 @@ func (s *Server) listGroups(w http.ResponseWriter, _ *http.Request, a authed, _ 
 		return
 	}
 	type gJSON struct {
-		GroupID string   `json:"group_id"`
-		Name    string   `json:"name"`
-		Epoch   uint32   `json:"epoch"`
-		Members []string `json:"members"`
+		GroupID   string   `json:"group_id"`
+		Name      string   `json:"name"`
+		Epoch     uint32   `json:"epoch"`
+		Members   []string `json:"members"`
+		CreatedBy string   `json:"created_by"`
 	}
 	out := []gJSON{}
 	for _, g := range groups {
 		members, _ := s.Store.GroupMembers(g.ID)
-		out = append(out, gJSON{g.ID, g.Name, g.Epoch, members})
+		out = append(out, gJSON{g.ID, g.Name, g.Epoch, members, g.CreatedBy})
 	}
 	writeJSON(w, 200, map[string]any{"groups": out})
 }
 
-func (s *Server) groupAdd(w http.ResponseWriter, r *http.Request, a authed, body []byte) {
-	gid := chi.URLParam(r, "id")
+func (s *Server) canManageGroup(a authed, gid string) (bool, error) {
 	ok, err := s.Store.IsGroupMember(gid, a.Device.ID)
 	if err != nil || !ok {
+		return false, err
+	}
+	if a.Member.Role == "owner" {
+		return true, nil
+	}
+	g, err := s.Store.Group(gid)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(g.CreatedBy, a.Device.ID), nil
+}
+
+func (s *Server) groupAdd(w http.ResponseWriter, r *http.Request, a authed, body []byte) {
+	gid := chi.URLParam(r, "id")
+	member, err := s.Store.IsGroupMember(gid, a.Device.ID)
+	if err != nil || !member {
 		writeJSON(w, 403, map[string]string{"error": "not a member"})
+		return
+	}
+	ok, err := s.canManageGroup(a, gid)
+	if err != nil || !ok {
+		writeJSON(w, 403, map[string]string{"error": "organizer only"})
 		return
 	}
 	var req struct {
@@ -74,8 +96,8 @@ func (s *Server) groupAdd(w http.ResponseWriter, r *http.Request, a authed, body
 
 func (s *Server) groupRemove(w http.ResponseWriter, r *http.Request, a authed, body []byte) {
 	gid := chi.URLParam(r, "id")
-	ok, err := s.Store.IsGroupMember(gid, a.Device.ID)
-	if err != nil || !ok {
+	member, err := s.Store.IsGroupMember(gid, a.Device.ID)
+	if err != nil || !member {
 		writeJSON(w, 403, map[string]string{"error": "not a member"})
 		return
 	}
@@ -85,6 +107,14 @@ func (s *Server) groupRemove(w http.ResponseWriter, r *http.Request, a authed, b
 	if err := json.Unmarshal(body, &req); err != nil || req.DeviceID == "" {
 		writeJSON(w, 400, map[string]string{"error": "device_id"})
 		return
+	}
+	self := strings.EqualFold(req.DeviceID, a.Device.ID)
+	if !self {
+		ok, err := s.canManageGroup(a, gid)
+		if err != nil || !ok {
+			writeJSON(w, 403, map[string]string{"error": "organizer only"})
+			return
+		}
 	}
 	if err := s.Store.RemoveGroupMember(gid, req.DeviceID); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
@@ -105,9 +135,10 @@ func (s *Server) writeGroup(w http.ResponseWriter, id string) {
 		members = []string{}
 	}
 	writeJSON(w, 200, map[string]any{
-		"group_id": g.ID,
-		"name":     g.Name,
-		"epoch":    g.Epoch,
-		"members":  members,
+		"group_id":   g.ID,
+		"name":       g.Name,
+		"epoch":      g.Epoch,
+		"members":    members,
+		"created_by": g.CreatedBy,
 	})
 }
