@@ -355,6 +355,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         return plain.takeIf { it.isNotBlank() }
     }
 
+    fun saveHour24(enabled: Boolean) {
+        put("hour24", if (enabled) "1" else "0")
+    }
+
+    fun hour24(): Boolean = get("hour24") != "0"
+
     fun saveSshTarget(t: SshTarget) {
         put(
             "ssh_target",

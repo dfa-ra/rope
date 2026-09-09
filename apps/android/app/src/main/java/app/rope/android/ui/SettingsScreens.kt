@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.ClockRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleHour24: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -142,6 +144,32 @@ fun SettingsPane(
                         selected = state.theme == ThemeMode.LIGHT,
                         onClick = { onSetTheme(ThemeMode.LIGHT) },
                         label = { Text("Светлая") },
+                    )
+                }
+            }
+        }
+        FadeIn(165) {
+            SectionCard {
+                Text(ClockRules.SECTION, style = MaterialTheme.typography.titleMedium)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(ClockRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            ClockRules.hint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.hour24,
+                        onCheckedChange = { checked ->
+                            if (checked != state.hour24) onToggleHour24()
+                        },
+                        modifier = Modifier.semantics { contentDescription = ClockRules.TITLE },
                     )
                 }
             }

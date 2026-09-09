@@ -235,6 +235,7 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onToggleHour24 = repo::toggleHour24,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,

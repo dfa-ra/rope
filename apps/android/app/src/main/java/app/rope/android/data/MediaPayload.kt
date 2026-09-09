@@ -683,11 +683,11 @@ data class ReactionPayload(
 }
 
 object MessageTime {
-    fun label(ms: Long, now: Long = System.currentTimeMillis()): String {
+    fun label(ms: Long, now: Long = System.currentTimeMillis(), hour24: Boolean = ClockRules.hour24): String {
         if (ms <= 0L) return ""
         val cal = java.util.Calendar.getInstance().apply { timeInMillis = ms }
         val today = java.util.Calendar.getInstance().apply { timeInMillis = now }
-        val hm = "%02d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
+        val hm = ClockRules.hm(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), hour24)
         val sameDay = cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
             cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
         return if (sameDay) hm else "${cal.get(java.util.Calendar.DAY_OF_MONTH)}.${cal.get(java.util.Calendar.MONTH) + 1} $hm"

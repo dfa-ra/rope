@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ClockRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -175,6 +176,7 @@ data class UiState(
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
+    val hour24: Boolean = true,
     val chatQuery: String = "",
     val messageQuery: String = "",
     val typingName: String? = null,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    hour24 = store.hour24().also { ClockRules.hour24 = it },
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -578,6 +581,13 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun toggleHour24() {
+        val next = !_state.value.hour24
+        ClockRules.hour24 = next
+        store.saveHour24(next)
+        _state.value = _state.value.copy(hour24 = next)
     }
 
     fun toggleNotificationsMuted() {
