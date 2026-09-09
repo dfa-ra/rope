@@ -1208,6 +1208,29 @@ func drainHello(t *testing.T, ctx context.Context, c *websocket.Conn) {
 	}
 }
 
+func TestRecovererWritesJSON(t *testing.T) {
+	s := &Server{Log: log.New(io.Discard, "", 0)}
+	h := s.recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("test-panic")
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/panic", nil))
+	if rec.Code != 500 {
+		t.Fatalf("code %d", rec.Code)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/json") {
+		t.Fatalf("content-type %q", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"error":"internal"`) {
+		t.Fatalf("body %q", body)
+	}
+	if strings.Contains(body, "test-panic") {
+		t.Fatalf("leaked panic %q", body)
+	}
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
