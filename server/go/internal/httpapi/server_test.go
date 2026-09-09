@@ -939,6 +939,113 @@ func TestRejectUnknownAuth(t *testing.T) {
 	resp.Body.Close()
 }
 
+func wsQuery(hs *httptest.Server, deviceID, ts, sig string) string {
+	return hs.URL + "/v1/ws?device_id=" + deviceID + "&ts=" + ts + "&sig=" + sig
+}
+
+func getWSAuth(t *testing.T, url string) (int, string) {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func assertWSUnauthorized(t *testing.T, code int, body, label string) {
+	t.Helper()
+	if code != 401 {
+		t.Fatalf("%s want 401 got %d body=%q", label, code, body)
+	}
+	if !strings.Contains(body, "unauthorized") {
+		t.Fatalf("%s want unauthorized got %q", label, body)
+	}
+	for _, leak := range []string{"missing auth", "skew", "unknown device", "revoked", "bad sig"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("%s leaked %q in %q", label, leak, body)
+		}
+	}
+}
+
+func TestWsUnauthorizedIsUniform(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	guest := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	code, body := getWSAuth(t, hs.URL+"/v1/ws")
+	assertWSUnauthorized(t, code, body, "no creds")
+
+	dummy := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 64))
+	now := itoa(time.Now().Unix())
+	code, body = getWSAuth(t, wsQuery(hs, strings.Repeat("ab", 32), now, dummy))
+	assertWSUnauthorized(t, code, body, "unknown device")
+
+	bad := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{2}, 64))
+	code, body = getWSAuth(t, wsQuery(hs, owner.id, now, bad))
+	assertWSUnauthorized(t, code, body, "bad sig")
+
+	old := itoa(time.Now().Add(-20 * time.Minute).Unix())
+	sig := base64.RawURLEncoding.EncodeToString(ed25519.Sign(owner.priv, []byte(authz.WSMessage(time.Now().Add(-20*time.Minute).Unix()))))
+	code, body = getWSAuth(t, wsQuery(hs, owner.id, old, sig))
+	assertWSUnauthorized(t, code, body, "skew")
+
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, guest, "guest")
+
+	dirReq := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, owner)
+	dirResp, err := http.DefaultClient.Do(dirReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dir struct {
+		Members []struct {
+			MemberID    string `json:"member_id"`
+			DisplayName string `json:"display_name"`
+		} `json:"members"`
+	}
+	if err := json.NewDecoder(dirResp.Body).Decode(&dir); err != nil {
+		t.Fatal(err)
+	}
+	dirResp.Body.Close()
+	var guestMember string
+	for _, m := range dir.Members {
+		if m.DisplayName == "guest" {
+			guestMember = m.MemberID
+		}
+	}
+	if guestMember == "" {
+		t.Fatal("guest member missing")
+	}
+	revBody, _ := json.Marshal(map[string]string{"member_id": guestMember})
+	revReq := authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-member", "/v1/admin/revoke-member", revBody, owner)
+	revResp, err := http.DefaultClient.Do(revReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, revResp.Body)
+	revResp.Body.Close()
+	if revResp.StatusCode != 200 {
+		t.Fatalf("revoke guest %d", revResp.StatusCode)
+	}
+
+	ts := time.Now().Unix()
+	okSig := base64.RawURLEncoding.EncodeToString(ed25519.Sign(guest.priv, []byte(authz.WSMessage(ts))))
+	code, body = getWSAuth(t, wsQuery(hs, guest.id, itoa(ts), okSig))
+	assertWSUnauthorized(t, code, body, "revoked member")
+}
+
 func dialWS(t *testing.T, ctx context.Context, hs *httptest.Server, d testDevice) *websocket.Conn {
 	t.Helper()
 	return dialWSMode(t, ctx, hs, d, "query")

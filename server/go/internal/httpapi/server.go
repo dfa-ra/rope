@@ -570,30 +570,34 @@ type wsOut struct {
 	Payload   string   `json:"payload,omitempty"`
 }
 
+func wsUnauthorized(w http.ResponseWriter) {
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
+}
+
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	parts, err := authz.WsCreds(r.Header.Get(authz.WsAuthHeader), q.Get("device_id"), q.Get("ts"), q.Get("sig"))
 	if err != nil {
-		http.Error(w, "missing auth", 401)
+		wsUnauthorized(w)
 		return
 	}
 	if err := authz.CheckTimestamp(parts.Timestamp, time.Now()); err != nil {
-		http.Error(w, "skew", 401)
+		wsUnauthorized(w)
 		return
 	}
 	deviceID := parts.DeviceID
 	dev, err := s.Store.Device(deviceID)
 	if err != nil || dev.Revoked {
-		http.Error(w, "unknown device", 401)
+		wsUnauthorized(w)
 		return
 	}
 	mem, err := s.Store.Member(dev.MemberID)
 	if err != nil || mem.Revoked {
-		http.Error(w, "revoked", 401)
+		wsUnauthorized(w)
 		return
 	}
 	if err := authz.Verify(dev.SignPublic, authz.WSMessage(parts.Timestamp), parts.Signature); err != nil {
-		http.Error(w, "bad sig", 401)
+		wsUnauthorized(w)
 		return
 	}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
