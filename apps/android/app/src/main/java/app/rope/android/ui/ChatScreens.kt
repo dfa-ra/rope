@@ -2097,7 +2097,7 @@ private fun ComposerBar(
                     onCancel = onCancelPendingMedia,
                 )
             }
-            state.composerPreview?.takeIf { state.editTarget == null && !state.recording }?.let { preview ->
+            state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
                 ComposerLinkPreview(
                     preview = preview,
                     onDismiss = onDismissLinkPreview,

@@ -994,6 +994,7 @@ class RopeRepository(private val app: Application) {
 
     fun startVideoNote() {
         if (_state.value.recording || _state.value.recordingVideoNote || _state.value.call != null) return
+        unfurlJob?.cancel()
         _state.value = _state.value.copy(recordingVideoNote = true, recordMs = 0, error = null)
     }
 
@@ -1779,7 +1780,11 @@ class RopeRepository(private val app: Application) {
         if (url != dismissed && url != null) {
             _state.value = _state.value.copy(composerPreviewDismissedUrl = null)
         }
-        if (!LinkPreviewRules.shouldFetch(_state.value.linkPreviewsEnabled, _state.value.recording, text) ||
+        if (!LinkPreviewRules.shouldFetch(
+                _state.value.linkPreviewsEnabled,
+                _state.value.recording || _state.value.recordingVideoNote,
+                text,
+            ) ||
             url == null ||
             url == dismissed
         ) {
@@ -1791,7 +1796,7 @@ class RopeRepository(private val app: Application) {
         if (_state.value.composerPreview?.url == url) return
         unfurlJob = scope.launch {
             delay(LinkPreviewRules.UNFURL_DEBOUNCE_MS)
-            if (_state.value.recording) return@launch
+            if (_state.value.recording || _state.value.recordingVideoNote) return@launch
             if (!LinkPreviewRules.shouldFetch(_state.value.linkPreviewsEnabled, false, _state.value.draftText)) {
                 return@launch
             }
