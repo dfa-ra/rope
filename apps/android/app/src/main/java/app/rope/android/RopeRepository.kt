@@ -171,7 +171,6 @@ data class UiState(
     val composerPreview: PackedLinkPreview? = null,
     val sendTypingEnabled: Boolean = true,
     val composerPreviewDismissedUrl: String? = null,
-    val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
     val latestAppVersion: String = "",
     val replyTo: ChatMessage? = null,
