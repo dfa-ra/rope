@@ -4,23 +4,23 @@ PO-owned live snapshot. Not a changelog.
 
 ## Product Goal
 
-**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. Trunk is `main` at tagged **v0.3.9** (`7432f81`). Next slice **0.3.10** is already-revoked `revoke-member` 404 (same as revoke-device). Tags **v0.2.15**, **v0.3.0**, **v0.3.1**, **v0.3.2**, **v0.3.3**, **v0.3.4**, **v0.3.5**, **v0.3.6**, **v0.3.7**, **v0.3.8**, and **v0.3.9** stay published; do not retag them.
+**CONFIRMED:** Rope is a private self-hosted Android E2EE messenger. Trunk is `main` at tagged **v0.3.10** (`f7d1f96`). Next slice **0.3.11** is chat-list **word-prefix** search (REV-01: "Мария Анна" + "анн" is TITLE_PREFIX). Tags **v0.2.15**, **v0.3.0**, **v0.3.1**, **v0.3.2**, **v0.3.3**, **v0.3.4**, **v0.3.5**, **v0.3.6**, **v0.3.7**, **v0.3.8**, **v0.3.9**, and **v0.3.10** stay published; do not retag them.
 
 ## Current Phase
 
-**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-076 landed. Slice **0.3.10** is already-revoked `POST /v1/admin/revoke-member` 404 (D-023).
+**Delivery law in force (D-015):** PR → review → merge to `main` → tagged GitHub Release. PO is Product Owner of Rope. CG-081 landed. Next: **0.3.11** chat-list word-prefix search (D-024). User sprint is core + UI; revoke thread is enough.
 
 ## Staffing this cycle
 
 ```
 User
  └── PO (this run; integrator)
-      └── GO-01 / AND-01 — already-revoked member 404 on cursor/revoke-member-404-e272
+      └── AND-01 — chat-list word-prefix search on cursor/chat-search-word-prefix-8af6
 ```
 
 ## Canonical git
 
-- Default: **`main`** = tag `v0.3.9` (`7432f81f99a029faddb865e5d69a99833dbe2c61`)
-- Working: `cursor/revoke-member-404-e272`
-- GitHub Release: https://github.com/dfa-ra/rope/releases/tag/v0.3.9
-- Next ship: **v0.3.10** (do not retag v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9)
+- Default: **`main`** = tag `v0.3.10` (`f7d1f9657f7d3f88686ac76d7cc02e4c987917c0`)
+- Working: `cursor/chat-search-word-prefix-8af6`
+- GitHub Release: https://github.com/dfa-ra/rope/releases/tag/v0.3.10
+- Next ship: **v0.3.11** (do not retag v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10)
