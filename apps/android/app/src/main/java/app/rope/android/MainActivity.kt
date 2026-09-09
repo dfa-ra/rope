@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.rope.android.data.CallMediaStart
 import app.rope.android.data.VideoCallRules
+import app.rope.android.ui.LocalReduceMotionPref
 import app.rope.android.update.ApkInstaller
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -152,6 +154,7 @@ class MainActivity : AppCompatActivity() {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 }
             }
+            CompositionLocalProvider(LocalReduceMotionPref provides state.reduceMotion) {
             RopeTheme(mode = state.theme) {
                 RopeScaffold(
                     state = state,
@@ -235,6 +238,7 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onToggleReduceMotion = repo::toggleReduceMotion,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,
@@ -261,6 +265,7 @@ class MainActivity : AppCompatActivity() {
                     onBack = repo::goBack,
                     onTab = { repo.go(it, tab = true) },
                 )
+            }
             }
         }
     }

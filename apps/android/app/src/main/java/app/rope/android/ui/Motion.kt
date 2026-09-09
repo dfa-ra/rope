@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,17 +63,22 @@ import app.rope.android.RopeBlack
 import app.rope.android.RopeGrayDark
 import app.rope.android.RopeGrayLight
 import app.rope.android.RopeShapes
+import app.rope.android.data.ReduceMotionRules
 import kotlinx.coroutines.delay
+
+val LocalReduceMotionPref = staticCompositionLocalOf { false }
 
 @Composable
 fun rememberReduceMotion(): Boolean {
     val context = LocalContext.current
-    return remember(context) {
+    val pref = LocalReduceMotionPref.current
+    val system = remember(context) {
         val resolver = context.contentResolver
         val animator = Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
         val transition = Settings.Global.getFloat(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f)
         SplashTiming.isReduceMotion(animator, transition)
     }
+    return ReduceMotionRules.shouldReduce(system, pref)
 }
 
 fun ropeKnotPath(): Path = Path().apply {

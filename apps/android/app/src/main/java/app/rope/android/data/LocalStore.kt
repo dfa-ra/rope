@@ -431,6 +431,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         }
     }
 
+    fun saveReduceMotion(enabled: Boolean) {
+        put("reduce_motion", if (enabled) "1" else "0")
+    }
+
+    fun reduceMotion(): Boolean = get("reduce_motion") == "1"
+
     fun rehomeMisroutedMedia() {
         val c = readableDatabase.rawQuery(
             """

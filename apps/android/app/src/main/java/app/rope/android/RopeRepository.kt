@@ -171,6 +171,7 @@ data class UiState(
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
     val latestAppVersion: String = "",
+    val reduceMotion: Boolean = false,
     val replyTo: ChatMessage? = null,
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    reduceMotion = store.reduceMotion(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -578,6 +580,12 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun toggleReduceMotion() {
+        val next = !_state.value.reduceMotion
+        store.saveReduceMotion(next)
+        _state.value = _state.value.copy(reduceMotion = next)
     }
 
     fun toggleNotificationsMuted() {
