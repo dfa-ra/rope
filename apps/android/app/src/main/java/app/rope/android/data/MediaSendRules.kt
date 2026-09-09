@@ -35,7 +35,8 @@ object MediaSendRules {
     fun freezeChatId(peerId: String?, groupId: String?): String =
         if (!groupId.isNullOrBlank()) ChatIds.group(groupId) else peerId.orEmpty()
 
-    fun sendToFrozenChat(frozenChatId: String, liveChatId: String): String = frozenChatId
+    fun sendToFrozenChat(frozenChatId: String, liveChatId: String): String =
+        frozenChatId.ifBlank { liveChatId }
 
     /** Tab-away / remount of the same thread keeps staged URIs; a different chat wipes. */
     fun keepPendingOnEnter(previousChatId: String?, nextChatId: String): Boolean =
