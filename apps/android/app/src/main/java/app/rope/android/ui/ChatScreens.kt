@@ -59,6 +59,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -158,6 +161,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SendEnterRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -2395,6 +2399,29 @@ private fun ComposerBar(
                                 ),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                 maxLines = 5,
+                                keyboardOptions = KeyboardOptions(
+                                    imeAction = if (SendEnterRules.imeIsSend(state.sendEnter)) {
+                                        ImeAction.Send
+                                    } else {
+                                        ImeAction.Default
+                                    },
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onSend = {
+                                        if (SendEnterRules.imeSends(
+                                                state.sendEnter,
+                                                localText,
+                                                state.recording,
+                                                recordingLocked,
+                                                state.pendingAttachments.isNotEmpty(),
+                                            )
+                                        ) {
+                                            debounce?.cancel()
+                                            onDraft(localText)
+                                            onSend()
+                                        }
+                                    },
+                                ),
                                 decorationBox = { inner ->
                                     Box {
                                         if (localText.isEmpty()) {
