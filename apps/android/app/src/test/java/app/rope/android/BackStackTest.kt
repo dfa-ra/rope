@@ -175,15 +175,9 @@ class BackStackTest {
             BackStack.decide(base.copy(screen = Screen.Chats, backStack = listOf(Screen.Chats), forwarding = photo)),
         )
         assertEquals(BackLayer.CancelComposer, BackStack.decide(base.copy(replyTo = photo)))
-        val staged = listOf(android.net.Uri.parse("content://rope/pending"))
-        assertEquals(
-            BackLayer.CancelPendingMedia,
-            BackStack.decide(base.copy(pendingAttachments = staged)),
-        )
-        assertEquals(
-            BackLayer.CancelComposer,
-            BackStack.decide(base.copy(replyTo = photo, pendingAttachments = staged)),
-        )
+        assertEquals(BackLayer.CancelComposer, BackStack.composerBack(hasReply = true, hasEdit = false, pendingCount = 2))
+        assertEquals(BackLayer.CancelPendingMedia, BackStack.composerBack(hasReply = false, hasEdit = false, pendingCount = 1))
+        assertEquals(null, BackStack.composerBack(hasReply = false, hasEdit = false, pendingCount = 0))
         assertEquals(BackLayer.Pop, BackStack.decide(base))
     }
 

@@ -83,6 +83,12 @@ object BackStack {
         NavMode.Reset -> reset(dest)
     }
 
+    fun composerBack(hasReply: Boolean, hasEdit: Boolean, pendingCount: Int): BackLayer? = when {
+        hasReply || hasEdit -> BackLayer.CancelComposer
+        pendingCount > 0 -> BackLayer.CancelPendingMedia
+        else -> null
+    }
+
     fun decide(state: UiState, hints: OverlayHints = OverlayHints()): BackLayer = when {
         state.viewingImage != null -> BackLayer.CloseImage
         state.call != null -> BackLayer.DismissCall
@@ -93,10 +99,11 @@ object BackStack {
         state.messageQuery.isNotBlank() -> BackLayer.ClearMessageQuery
         state.chatQuery.isNotBlank() -> BackLayer.ClearChatQuery
         state.forwarding != null -> BackLayer.CancelForward
-        state.replyTo != null || state.editTarget != null -> BackLayer.CancelComposer
-        state.pendingAttachments.isNotEmpty() -> BackLayer.CancelPendingMedia
-        canPop(currentStack(state.backStack, state.screen)) -> BackLayer.Pop
-        else -> BackLayer.Exit
+        else -> composerBack(
+            state.replyTo != null,
+            state.editTarget != null,
+            state.pendingAttachments.size,
+        ) ?: if (canPop(currentStack(state.backStack, state.screen))) BackLayer.Pop else BackLayer.Exit
     }
 
     fun consumesSystemBack(state: UiState, hints: OverlayHints = OverlayHints()): Boolean =
