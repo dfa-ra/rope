@@ -6,11 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze lifted for 0.3.33 Voice notes 2.0 on cursor/ui-next-ae19 | — |
-| CG-172 | Slice: Voice notes 2.0 as 0.3.33 | PO | IN_PROGRESS | 1.5x/2x, seekable waveform, кружок; D-047; do not merge/tag | CG-007 |
-| CG-173 | Android: Voice notes 2.0 + round video notes | AND-01 | IN_PROGRESS | D-047; Kotlin never crypto; in-call camera untouched | CG-172 |
-| CG-174 | Independent review | REV-01 | QUEUED | independent of implementer and Android UI lead | CG-173 |
-| CG-175 | Ship **0.3.33** | PO | QUEUED | tag only after PASS + CI + ff-merge; do not retag v0.3.32 | CG-174 |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; Voice notes 2.0 tagged v0.3.33; do not merge 0.3.34 in this record | — |
+| CG-172 | Slice: Voice notes 2.0 as 0.3.33 | PO | DONE | shipped v0.3.33; D-047; 1.5x/2x, seekable waveform, кружок; D-031 stays org law | CG-007 |
+| CG-173 | Android: Voice notes 2.0 + round video notes | AND-01 | DONE | D-047; Kotlin never crypto; in-call camera untouched | CG-172 |
+| CG-174 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; Voice notes 2.0 tagged; do not merge 0.3.34 in this record | CG-173 |
+| CG-175 | Ship **0.3.33** | PO | DONE | tag v0.3.33 = 52178aa; versionCode 57; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32 unchanged | CG-174 |
 | CG-168 | Slice: camera TextureView + stable ring as 0.3.32 | PO | DONE | shipped v0.3.32; D-046; TextureView EGL sink + stable ring; D-031 stays org law | CG-007 |
 | CG-169 | Android: TextureView EGL sink + stable ring | AND-01 | DONE | D-046; Kotlin never crypto | CG-168 |
 | CG-170 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; user camera/tones tagged; do not start 0.3.33 | CG-169 |
@@ -148,4 +148,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, or `v0.3.32`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, or `v0.3.33`.**
