@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; leftover 0.3.31 tagged; user call task is v0.3.30; do not start 0.3.32 / voice-2.0 / link-previews | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; camera/tones tagged v0.3.32; do not start 0.3.33 | — |
+| CG-168 | Slice: camera TextureView + stable ring as 0.3.32 | PO | DONE | shipped v0.3.32; D-046; TextureView EGL sink + stable ring; D-031 stays org law | CG-007 |
+| CG-169 | Android: TextureView EGL sink + stable ring | AND-01 | DONE | D-046; Kotlin never crypto | CG-168 |
+| CG-170 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; user camera/tones tagged; do not start 0.3.33 | CG-169 |
+| CG-171 | Ship **0.3.32** | PO | DONE | tag v0.3.32 = a681bb7; versionCode 56; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 unchanged | CG-170 |
 | CG-164 | Slice: remaining-bug QA as 0.3.31 | PO | DONE | shipped v0.3.31; D-045; glare + callNotice + profile Back; D-031 stays org law | CG-007 |
 | CG-165 | Android: callee glare + callNotice + profile Back | AND-01 | DONE | D-045; Kotlin never crypto | CG-164 |
 | CG-166 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; leftovers are not 0.3.32; user call task stays v0.3.30 | CG-165 |
@@ -140,4 +144,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, or `v0.3.31`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, or `v0.3.32`.**
