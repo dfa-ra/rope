@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.20 peer profile + shared media (not 0.3.19) | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.21 in-thread unread separator (not 0.3.20) | — |
+| CG-120 | Slice: peer profile + shared media as 0.3.20 | PO | DONE | shipped v0.3.20; D-034; D-031 stays org law | CG-007 |
+| CG-121 | Android: PeerProfileRules + 1:1 header → photo grid | AND-01 | DONE | D-034; LocalStore IMAGE rows; Kotlin never crypto | CG-120 |
+| CG-122 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; empty grid copy; initials avatar; photos-only; no compose click test; flat pager not album mosaic | CG-121 |
+| CG-123 | Ship **0.3.20** | PO | DONE | tag v0.3.20 = f024b13; versionCode 44; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 unchanged | CG-122 |
 | CG-116 | Slice: attributed forwards as 0.3.19 | PO | DONE | shipped v0.3.19; D-033; D-031 stays org law | CG-007 |
 | CG-117 | Android: ForwardRules + «Переслано от» header | AND-01 | DONE | D-033; origin in encrypted JSON ff; Kotlin never crypto | CG-116 |
 | CG-118 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; re-forward uses last senderName; no hide-sender; re-seal only with localPath; forwarding one album photo can keep album_id | CG-117 |
@@ -92,4 +96,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, or `v0.3.19`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, or `v0.3.20`.**
