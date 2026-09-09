@@ -149,6 +149,8 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.GlobalSearchHit
+import app.rope.android.data.GlobalSearchRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
@@ -201,6 +203,7 @@ fun ChatsPane(
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
+    onOpenHit: (GlobalSearchHit) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -265,6 +268,11 @@ fun ChatsPane(
         val rows = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
+        val hits = if (GlobalSearchRules.shouldSearch(state.chatQuery, state.forwarding != null, listMode)) {
+            state.globalHits
+        } else {
+            emptyList()
+        }
         val empty = ChatListEmptyRules.copy(
             listMode,
             state.chatQuery,
@@ -272,7 +280,7 @@ fun ChatsPane(
             state.profile?.role,
         )
         Box(Modifier.weight(1f).fillMaxSize()) {
-            if (rows.isEmpty()) {
+            if (rows.isEmpty() && hits.isEmpty()) {
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
@@ -313,6 +321,19 @@ fun ChatsPane(
                             )
                         }
                     }
+                    if (hits.isNotEmpty()) {
+                        item(key = "global-search-section") {
+                            Text(
+                                GlobalSearchRules.SECTION,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                        itemsIndexed(hits, key = { _, hit -> "hit-${hit.chatId}-${hit.messageId}" }) { _, hit ->
+                            GlobalSearchHitRow(hit, onClick = { onOpenHit(hit) })
+                        }
+                    }
                 }
             }
             if (ChatListEmptyRules.showFab(listMode, state.chatQuery, state.forwarding != null)) {
@@ -326,6 +347,37 @@ fun ChatsPane(
                     Icon(Icons.Outlined.Add, contentDescription = "Новая группа")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun GlobalSearchHitRow(hit: GlobalSearchHit, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        InitialsAvatar(hit.title, group = hit.isGroup, online = false)
+        Column(Modifier.weight(1f)) {
+            Text(hit.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                hit.snippet,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (hit.timestampMs > 0L) {
+            Text(
+                MessageTime.label(hit.timestampMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

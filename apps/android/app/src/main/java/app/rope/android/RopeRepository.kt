@@ -42,8 +42,11 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
+import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
+import app.rope.android.data.GlobalSearchHit
+import app.rope.android.data.GlobalSearchRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -175,6 +178,7 @@ data class UiState(
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
     val chatQuery: String = "",
+    val globalHits: List<GlobalSearchHit> = emptyList(),
     val messageQuery: String = "",
     val typingName: String? = null,
     val viewingImage: ChatMessage? = null,
@@ -375,7 +379,13 @@ class RopeRepository(private val app: Application) {
     }
 
     fun setChatQuery(query: String) {
-        _state.value = _state.value.copy(chatQuery = query)
+        val titles = _state.value.conversations.associate { it.id to it.title }
+        val hits = if (GlobalSearchRules.shouldSearch(query, forwarding = false, mode = ChatListMode.ALL)) {
+            GlobalSearchRules.hits(store.recentMessages(GlobalSearchRules.SCAN_LIMIT), titles, query)
+        } else {
+            emptyList()
+        }
+        _state.value = _state.value.copy(chatQuery = query, globalHits = hits)
     }
 
     fun setMessageQuery(query: String) {
@@ -558,6 +568,37 @@ class RopeRepository(private val app: Application) {
             else -> _state.value = _state.value.copy(
                 error = "Этой группы нет. Голосовые и фото вернулись в личный чат.",
             )
+        }
+    }
+
+    fun openGlobalHit(chatId: String, messageId: String) {
+        if (chatId.isBlank() || messageId.isBlank()) return
+        persistOpenDraft()
+        val state = _state.value
+        val conv = state.conversations.find { it.id == chatId }
+        when {
+            SavedMessagesRules.isSaved(chatId) ->
+                enterChat(chatId, SavedMessagesRules.stubPeer(), null, jumpId = messageId)
+            conv?.group != null ->
+                enterChat(chatId, null, conv.group, jumpId = messageId)
+            conv?.peer != null ->
+                enterChat(chatId, conv.peer, null, jumpId = messageId)
+            ChatIds.isGroup(chatId) -> {
+                val group = state.groups.find { ChatIds.group(it.groupId) == chatId }
+                if (group != null) enterChat(chatId, null, group, jumpId = messageId)
+            }
+            else -> {
+                val peer = state.devices.find { it.deviceId == chatId }
+                    ?: DirectoryDevice(
+                        chatId,
+                        "",
+                        conv?.title.orEmpty().ifBlank { chatId.take(8) },
+                        ByteArray(0),
+                        "",
+                        false,
+                    )
+                enterChat(chatId, peer, null, jumpId = messageId)
+            }
         }
     }
 
@@ -2098,7 +2139,7 @@ class RopeRepository(private val app: Application) {
         return _state.value.peer?.deviceId
     }
 
-    private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?) {
+    private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?, jumpId: String? = null) {
         val prefs = store.chatPrefs(chatId)
         val messages = store.messages(chatId)
         val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
@@ -2118,8 +2159,8 @@ class RopeRepository(private val app: Application) {
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
-            unreadAnchorId = anchorId,
-            scrollToMessageId = anchorId,
+            unreadAnchorId = if (jumpId.isNullOrBlank()) anchorId else null,
+            scrollToMessageId = jumpId?.takeIf { it.isNotBlank() } ?: anchorId,
             pendingAttachments = pending,
             composerPreview = null,
             composerPreviewDismissedUrl = null,

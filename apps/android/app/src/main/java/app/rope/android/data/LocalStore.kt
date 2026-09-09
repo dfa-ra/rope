@@ -274,6 +274,26 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         return out
     }
 
+    /** Newest-first scan for global search. Does not change the schema. */
+    fun recentMessages(limit: Int): List<ChatMessage> {
+        val n = limit.coerceIn(1, 2000)
+        val c = readableDatabase.rawQuery(
+            """
+            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
+                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
+            FROM messages ORDER BY ts DESC LIMIT ?
+            """.trimIndent(),
+            arrayOf(n.toString()),
+        )
+        val out = mutableListOf<ChatMessage>()
+        c.use {
+            while (it.moveToNext()) {
+                out += row(it)
+            }
+        }
+        return out
+    }
+
     fun conversations(): List<Pair<String, ChatMessage?>> {
         val c = readableDatabase.rawQuery("SELECT DISTINCT peer_id FROM messages", null)
         val ids = mutableListOf<String>()

@@ -1,0 +1,66 @@
+package app.rope.android
+
+import app.rope.android.data.ChatListMode
+import app.rope.android.data.ChatMessage
+import app.rope.android.data.GlobalSearchRules
+import app.rope.android.data.MessageStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class GlobalSearchRulesTest {
+    @Test
+    fun shortQueryDoesNotSearch() {
+        assertFalse(GlobalSearchRules.shouldSearch("а", forwarding = false, mode = ChatListMode.ALL))
+        assertTrue(GlobalSearchRules.shouldSearch("ан", forwarding = false, mode = ChatListMode.ALL))
+        assertFalse(GlobalSearchRules.shouldSearch("анна", forwarding = true, mode = ChatListMode.ALL))
+        assertFalse(GlobalSearchRules.shouldSearch("анна", forwarding = false, mode = ChatListMode.GROUPS))
+    }
+
+    @Test
+    fun skipsDeletedAndBlankIds() {
+        val ok = msg("m1", "dev", "привет Анна")
+        assertTrue(GlobalSearchRules.matches(ok, "анна"))
+        assertFalse(GlobalSearchRules.matches(ok.copy(deleted = true), "анна"))
+        assertFalse(GlobalSearchRules.matches(ok.copy(id = ""), "анна"))
+        assertFalse(GlobalSearchRules.matches(ok.copy(peerDeviceId = ""), "анна"))
+    }
+
+    @Test
+    fun newestFirstCappedAndTitled() {
+        val older = msg("m1", "dev-a", "секретный план", ts = 10L)
+        val newer = msg("m2", "dev-b", "ещё секрет", ts = 50L)
+        val filler = (1..50).map { msg("x$it", "dev-c", "секрет $it", ts = 20L + it) }
+        val hits = GlobalSearchRules.hits(
+            listOf(older, newer) + filler,
+            mapOf("dev-a" to "Анна", "dev-b" to "Борис"),
+            "секрет",
+        )
+        assertEquals(GlobalSearchRules.MAX_HITS, hits.size)
+        assertEquals("m2", hits.first().messageId)
+        assertEquals("Борис", hits.first().title)
+        assertTrue(hits.none { it.messageId == "m1" })
+        assertTrue(hits.first().timestampMs >= hits.last().timestampMs)
+    }
+
+    @Test
+    fun snippetCollapsesWhitespace() {
+        val hit = GlobalSearchRules.hits(
+            listOf(msg("m", "dev", "строка\n  два")),
+            emptyMap(),
+            "строка",
+        ).single()
+        assertEquals("строка два", hit.snippet)
+        assertEquals("dev", hit.title)
+    }
+
+    private fun msg(id: String, peer: String, text: String, ts: Long = 1L) = ChatMessage(
+        id = id,
+        peerDeviceId = peer,
+        outgoing = false,
+        text = text,
+        status = MessageStatus.DELIVERED_TO_DEVICE,
+        timestampMs = ts,
+    )
+}

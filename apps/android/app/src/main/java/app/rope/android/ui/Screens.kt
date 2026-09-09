@@ -169,6 +169,7 @@ fun RopeScaffold(
     onMessageQuery: (String) -> Unit,
     onPinChat: (String) -> Unit,
     onMuteChat: (String) -> Unit,
+    onOpenGlobalHit: (String, String) -> Unit = { _, _ -> },
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
@@ -296,6 +297,7 @@ fun RopeScaffold(
                             onChatQuery,
                             onPinChat,
                             onMuteChat,
+                            onOpenHit = { repoHit -> onOpenGlobalHit(repoHit.chatId, repoHit.messageId) },
                             listMode = NavRules.listMode(screen),
                         )
                         Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)
