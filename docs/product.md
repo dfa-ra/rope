@@ -10,11 +10,11 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.41**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, `v0.3.33`, `v0.3.34`, `v0.3.35`, `v0.3.36`, `v0.3.37`, `v0.3.38`, `v0.3.39`, and `v0.3.40` remain published history.
+The product trunk is **`main`**, shipping **0.3.42**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, `v0.3.33`, `v0.3.34`, `v0.3.35`, `v0.3.36`, `v0.3.37`, `v0.3.38`, `v0.3.39`, `v0.3.40`, and `v0.3.41` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.41` / `versionCode=65`, plus CryptoGalera operating layer |
+| **`main`** | Shipped tree: Android `versionName=0.3.42` / `versionCode=66`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
 | **GitHub Release `v0.3.0`** | Previous line. Do not retag `v0.3.0`. |
 | **GitHub Release `v0.3.1`** | Previous line. Do not retag `v0.3.1`. |
@@ -56,7 +56,8 @@ The product trunk is **`main`**, shipping **0.3.41**. GitHub Releases `v0.2.15`,
 | **GitHub Release `v0.3.37`** | Previous line. Do not retag `v0.3.37`. |
 | **GitHub Release `v0.3.38`** | Previous line. Do not retag `v0.3.38`. |
 | **GitHub Release `v0.3.39`** | Previous line. Do not retag `v0.3.39`. |
-| **GitHub Release `v0.3.40`** | Previous Latest until `v0.3.41` publishes. Do not retag `v0.3.40`. |
+| **GitHub Release `v0.3.40`** | Previous line. Do not retag `v0.3.40`. |
+| **GitHub Release `v0.3.41`** | Previous Latest until `v0.3.42` publishes. Do not retag `v0.3.41`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -66,7 +67,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.41`).
+1. Install the Android app (this cycle ships `v0.3.42`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).
@@ -95,6 +96,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 - **0.3.39 security:** DeviceBackup wrap API (`RODB` + Keystore AES-GCM) exists for a future identity export writer; `toBytes()` still emits clear JSON (identity + `github_token`) and must not be written to shared storage; leftover v1 JSON is not auto-applied.
 - **0.3.40 calls:** remote 1:1 video — no Compose `graphicsLayer` around TextureView; EGL waits for a positive surface size; remote tracks bind from `onAddStream`; SDP is CRLF-normalized for setRemote without truncating the 16 KiB cap. Same-peer RING flood is dropped for 2s (Go RING/RELAY 6/30s); overlay `нет видео пира` after 4s one-way; flip is a no-op when camera is muted; rotate does not destroy the in-call TextureView.
 - **0.3.41 security:** RECEIPT edit/delete apply only for the message author (sender device id); pin/react only in a shared thread (1:1 peer or local group membership). Same `message_id` from a different sender does not replace the row. Typing for unknown groups is ignored.
+- **0.3.42 calls:** per-session remote ICE is capped at 64 candidates before setRemote; local PIP un-mirrors after flipping to the rear camera. 16 KiB SDP cap unchanged (refuse, do not truncate).
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator
