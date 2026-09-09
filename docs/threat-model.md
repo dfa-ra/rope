@@ -44,7 +44,7 @@
 - Self-signed TLS plus fingerprint pinning does not replace a public CA after a user ignores a mismatch warning.
 - There is no forward-secrecy ratchet (Signal/X3DH) in MVP. Compromise of a device ECDH key exposes future messages to that device until keys are rotated (out of scope).
 - Offline mailbox blobs live on disk until delivery ack or TTL expiry. They remain encrypted, but metadata remains.
-- WSS connect still authenticates with `device_id`/`ts`/`sig` query parameters. Moving `sig` into a header needs a paired client+server cut so an updated APK can still reach an older VPS. Left for a later slice.
+- WSS connect still puts `sig` on the query string (proxy logs). Phase A also accepts `X-Rope-Ws-Auth`; dropping the query is Phase B after every VPS is upgraded.
 
 ## Abuse controls
 

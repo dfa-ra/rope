@@ -765,14 +765,61 @@ func TestRejectUnknownAuth(t *testing.T) {
 
 func dialWS(t *testing.T, ctx context.Context, hs *httptest.Server, d testDevice) *websocket.Conn {
 	t.Helper()
+	return dialWSMode(t, ctx, hs, d, "query")
+}
+
+func dialWSMode(t *testing.T, ctx context.Context, hs *httptest.Server, d testDevice, mode string) *websocket.Conn {
+	t.Helper()
 	ts := time.Now().Unix()
 	sig := ed25519.Sign(d.priv, []byte(authz.WSMessage(ts)))
-	u := strings.Replace(hs.URL, "http", "ws", 1) + "/v1/ws?device_id=" + d.id + "&ts=" + itoa(ts) + "&sig=" + base64.RawURLEncoding.EncodeToString(sig)
-	c, _, err := websocket.Dial(ctx, u, nil)
+	b64 := base64.RawURLEncoding.EncodeToString(sig)
+	base := strings.Replace(hs.URL, "http", "ws", 1)
+	opts := &websocket.DialOptions{}
+	u := base + "/v1/ws"
+	switch mode {
+	case "query":
+		u += "?device_id=" + d.id + "&ts=" + itoa(ts) + "&sig=" + b64
+	case "header":
+		opts.HTTPHeader = http.Header{authz.WsAuthHeader: []string{d.id + "." + itoa(ts) + "." + b64}}
+	case "both":
+		u += "?device_id=" + d.id + "&ts=" + itoa(ts) + "&sig=" + b64
+		opts.HTTPHeader = http.Header{authz.WsAuthHeader: []string{d.id + "." + itoa(ts) + "." + b64}}
+	default:
+		t.Fatalf("mode %s", mode)
+	}
+	c, _, err := websocket.Dial(ctx, u, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return c
+}
+
+func TestWsAuthHeaderOnlyAndBoth(t *testing.T) {
+	_, hs, setup := testServer(t)
+	d := newDevice(t)
+	bootstrap(t, hs, setup, d, "owner")
+	ctx := context.Background()
+	for _, mode := range []string{"query", "header", "both"} {
+		c := dialWSMode(t, ctx, hs, d, mode)
+		drainHello(t, ctx, c)
+		_ = c.Close(websocket.StatusNormalClosure, "")
+	}
+}
+
+func TestWsAuthRejectsGarbageHeader(t *testing.T) {
+	_, hs, setup := testServer(t)
+	d := newDevice(t)
+	bootstrap(t, hs, setup, d, "owner")
+	ts := time.Now().Unix()
+	sig := ed25519.Sign(d.priv, []byte(authz.WSMessage(ts)))
+	b64 := base64.RawURLEncoding.EncodeToString(sig)
+	u := strings.Replace(hs.URL, "http", "ws", 1) + "/v1/ws?device_id=" + d.id + "&ts=" + itoa(ts) + "&sig=" + b64
+	_, _, err := websocket.Dial(context.Background(), u, &websocket.DialOptions{
+		HTTPHeader: http.Header{authz.WsAuthHeader: []string{"nope"}},
+	})
+	if err == nil {
+		t.Fatal("garbage header must not fall back to query")
+	}
 }
 
 func readSkipPresence(t *testing.T, ctx context.Context, c *websocket.Conn) wsOut {

@@ -22,7 +22,6 @@ import (
 	"github.com/dfa-ra/rope/server/go/internal/login"
 	"github.com/dfa-ra/rope/server/go/internal/ratelimit"
 	"github.com/go-chi/chi/v5"
-	"strconv"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -542,22 +541,16 @@ type wsOut struct {
 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	deviceID := strings.ToLower(q.Get("device_id"))
-	ts := q.Get("ts")
-	sig := q.Get("sig")
-	if deviceID == "" || ts == "" || sig == "" {
+	parts, err := authz.WsCreds(r.Header.Get(authz.WsAuthHeader), q.Get("device_id"), q.Get("ts"), q.Get("sig"))
+	if err != nil {
 		http.Error(w, "missing auth", 401)
 		return
 	}
-	tsi, err := strconv.ParseInt(ts, 10, 64)
-	if err != nil {
-		http.Error(w, "bad ts", 401)
-		return
-	}
-	if err := authz.CheckTimestamp(tsi, time.Now()); err != nil {
+	if err := authz.CheckTimestamp(parts.Timestamp, time.Now()); err != nil {
 		http.Error(w, "skew", 401)
 		return
 	}
+	deviceID := parts.DeviceID
 	dev, err := s.Store.Device(deviceID)
 	if err != nil || dev.Revoked {
 		http.Error(w, "unknown device", 401)
@@ -568,12 +561,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "revoked", 401)
 		return
 	}
-	sigb, err := authz.DecodeB64URL(sig)
-	if err != nil {
-		http.Error(w, "bad sig", 401)
-		return
-	}
-	if err := authz.Verify(dev.SignPublic, authz.WSMessage(tsi), sigb); err != nil {
+	if err := authz.Verify(dev.SignPublic, authz.WSMessage(parts.Timestamp), parts.Signature); err != nil {
 		http.Error(w, "bad sig", 401)
 		return
 	}

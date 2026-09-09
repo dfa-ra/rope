@@ -168,9 +168,15 @@ class ServerApi(
     fun openSocket(listener: WebSocketListener): WebSocket {
         val ts = uniffi.rope_core.unixTimestamp()
         val sig = identity.wsSignature(ts)
-        val url = "$baseWs/v1/ws?device_id=${identity.deviceId()}&ts=$ts&sig=$sig"
+        val id = identity.deviceId()
+        val tsStr = ts.toString()
+        val url = "$baseWs/v1/ws?device_id=$id&ts=$tsStr&sig=$sig"
         val wsClient = client.newBuilder().pingInterval(20, TimeUnit.SECONDS).build()
-        return wsClient.newWebSocket(Request.Builder().url(url).build(), listener)
+        val req = Request.Builder()
+            .url(url)
+            .header(WsAuth.HEADER, WsAuth.value(id, tsStr, sig))
+            .build()
+        return wsClient.newWebSocket(req, listener)
     }
 
     fun sendAuthHeader(method: String, path: String, body: ByteArray): String =

@@ -4,6 +4,8 @@ URL: `wss://<host>:<port>/v1/ws?device_id=<hex>&ts=<unix>&sig=<base64url>`
 
 `sig` is Ed25519 over `rope-ws-v1\n<unix_seconds>`.
 
+**Phase A (this slice):** the same three fields may also be sent as header `X-Rope-Ws-Auth: <device_id>.<unix>.<base64url-sig>`. The server prefers the header when it is present; otherwise it uses the query. Do **not** reuse REST `Authorization: Rope` (different transcript). Old clients that only send the query still work. **Phase B** (later) drops `sig=` from the URL after every VPS is on Phase A — do not ship that in the same tag.
+
 On connect the server:
 
 1. Authenticates the device
