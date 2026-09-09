@@ -2,8 +2,10 @@ package app.rope.android.net
 
 import app.rope.android.BuildConfig
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.OgDnsRules
 import app.rope.android.media.ImageCodec
 import okhttp3.CookieJar
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -25,6 +27,7 @@ fun interface LinkOgFetcher {
 
 /**
  * Phone-only Open Graph fetch. Dedicated OkHttp client — never the VPS pin.
+ * OkHttp DNS drops loopback / RFC1918 / link-local / ULA.
  * Tests inject [fetcher]; production uses [NetworkLinkOgFetcher].
  */
 object LinkUnfurl {
@@ -117,6 +120,7 @@ object OgHtml {
 object NetworkLinkOgFetcher : LinkOgFetcher {
     private val http: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .dns { hostname -> OgDnsRules.lookup(hostname) { Dns.SYSTEM.lookup(it) } }
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .callTimeout(5, TimeUnit.SECONDS)
