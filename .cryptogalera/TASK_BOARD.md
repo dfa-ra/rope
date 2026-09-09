@@ -4,11 +4,11 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.11 chat-list word-prefix search | — |
-| CG-082 | Slice: chat-list word-prefix search as 0.3.11 | PO | IN_PROGRESS | REV-01: Мария Анна + анн is TITLE_PREFIX | CG-007 |
-| CG-083 | Android: TITLE_PREFIX on any title word | AND-01 | IN_PROGRESS | D-024; no 0.3.2 tap/long-press redo | CG-082 |
-| CG-084 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-083 |
-| CG-085 | Ship **0.3.11** | PO | IN_PROGRESS | versionCode 35; do not retag v0.3.10 | CG-084 |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.12 chat-list unread badge | — |
+| CG-082 | Slice: chat-list word-prefix search as 0.3.11 | PO | DONE | shipped v0.3.11 | CG-007 |
+| CG-083 | Android: TITLE_PREFIX on any title word | AND-01 | DONE | D-024; no 0.3.2 tap/long-press redo | CG-082 |
+| CG-084 | Independent review | REV-01 | DONE | PASS; word-prefix + İ highlight shipped in 0.3.11 | CG-083 |
+| CG-085 | Ship **0.3.11** | PO | DONE | tag v0.3.11 = 8fb333d; versionCode 35; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 unchanged | CG-084 |
 | CG-077 | Slice: already-revoked revoke-member 404 as 0.3.10 | PO | DONE | shipped v0.3.10 | CG-007 |
 | CG-078 | Go: RevokeMemberGuarded already-revoked → ErrNotFound | GO-01 | DONE | same as RevokeDeviceGuarded | CG-077 |
 | CG-079 | Android: revoke-member 404 is already-revoked | AND-01 | DONE | idempotent; no crypto | CG-077 |
@@ -58,4 +58,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, or `v0.3.10`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, or `v0.3.11`.**
