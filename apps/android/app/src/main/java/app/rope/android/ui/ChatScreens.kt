@@ -499,12 +499,12 @@ internal fun ConversationRow(
                     )
                     val badge = UnreadBadgeRules.kind(c.unread, c.muted)
                     if (badge != UnreadBadgeKind.NONE) {
-                        val bg = when (badge) {
+                        val badgeBg = when (badge) {
                             UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.primary
                             UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.onSurfaceVariant
                             UnreadBadgeKind.NONE -> Color.Transparent
                         }
-                        val fg = when (badge) {
+                        val badgeFg = when (badge) {
                             UnreadBadgeKind.ACCENT -> MaterialTheme.colorScheme.onPrimary
                             UnreadBadgeKind.MUTED -> MaterialTheme.colorScheme.surface
                             UnreadBadgeKind.NONE -> Color.Transparent
@@ -513,13 +513,13 @@ internal fun ConversationRow(
                             Modifier
                                 .padding(start = 8.dp)
                                 .clip(CircleShape)
-                                .background(bg)
+                                .background(badgeBg)
                                 .padding(horizontal = 7.dp, vertical = 3.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 UnreadBadgeRules.label(c.unread),
-                                color = fg,
+                                color = badgeFg,
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }
