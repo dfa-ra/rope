@@ -480,6 +480,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun joinDevHttp(host: String, port: Int, token: String, displayName: String) {
+        if (!JoinDebugRules.showHttpJoin(BuildConfig.DEBUG)) return
         scope.launch {
             if (!LoginRules.isValid(displayName)) {
                 notice(UserFacing.LOGIN)

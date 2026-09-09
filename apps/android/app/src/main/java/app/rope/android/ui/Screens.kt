@@ -754,26 +754,28 @@ private fun JoinPane(
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
-            TextButton(onClick = { debug = !debug }, enabled = enabled) {
-                Text(if (debug) "Скрыть отладку" else "Отладка: HTTP / эмулятор")
-            }
-            if (debug) {
-                OutlinedTextField(host, { host = it }, label = { Text("Host") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    port,
-                    { port = it },
-                    label = { Text("Port") },
-                    singleLine = true,
-                    enabled = enabled,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(token, { token = it }, label = { Text("setup / invite token") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
-                OutlinedButton(
-                    onClick = { onJoinDev(host, port.toIntOrNull() ?: 8443, token, name) },
-                    enabled = enabled && LoginRules.isValid(name),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Войти по HTTP") }
+            if (JoinDebugRules.showHttpJoin(BuildConfig.DEBUG)) {
+                TextButton(onClick = { debug = !debug }, enabled = enabled) {
+                    Text(if (debug) "Скрыть отладку" else "Отладка: HTTP / эмулятор")
+                }
+                if (debug) {
+                    OutlinedTextField(host, { host = it }, label = { Text("Host") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        port,
+                        { port = it },
+                        label = { Text("Port") },
+                        singleLine = true,
+                        enabled = enabled,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(token, { token = it }, label = { Text("setup / invite token") }, singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth())
+                    OutlinedButton(
+                        onClick = { onJoinDev(host, port.toIntOrNull() ?: 8443, token, name) },
+                        enabled = enabled && LoginRules.isValid(name),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Войти по HTTP") }
+                }
             }
         }
         HorizontalDivider()

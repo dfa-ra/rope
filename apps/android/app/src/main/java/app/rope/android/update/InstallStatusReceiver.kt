@@ -36,8 +36,7 @@ class InstallStatusReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE_CONFLICT,
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE,
             -> repo.onApkInstallFailed(
-                "Старая сборка подписана другим ключом CI. Ключ и логин лежат в Загрузках как ${DeviceBackup.FILE_NAME}. " +
-                    "Удалите Rope, поставьте APK из Загрузок и на старте нажмите «Восстановить устройство».",
+                InstallStatusRules.signingKeyConflictMessage(),
                 status,
             )
             else -> repo.onApkInstallFailed(

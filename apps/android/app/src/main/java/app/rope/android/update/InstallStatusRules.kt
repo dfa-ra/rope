@@ -14,4 +14,12 @@ object InstallStatusRules {
         if (a == CONFIRM_INSTALL) return true
         return a.startsWith("android.content.pm.") && pkg.contains("packageinstaller")
     }
+
+    /**
+     * Signing-key conflict. APK may still be in Downloads; identity is not
+     * ([PublicBackupRules.allowIdentityDump] is false).
+     */
+    fun signingKeyConflictMessage(): String =
+        "Старая сборка подписана другим ключом CI. Удалите Rope и поставьте APK из Загрузок. " +
+            "Ключ устройства туда больше не пишется — восстановите его из файла, который вы сохраняли сами."
 }

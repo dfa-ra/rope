@@ -1,5 +1,6 @@
 package app.rope.android
 
+import app.rope.android.update.DeviceBackup
 import app.rope.android.update.InstallStatusRules
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,5 +39,14 @@ class InstallStatusRulesTest {
                 "com.google.android.packageinstaller",
             ),
         )
+    }
+
+    @Test
+    fun signingKeyConflictDoesNotClaimIdentityInDownloads() {
+        val msg = InstallStatusRules.signingKeyConflictMessage()
+        assertFalse(msg.contains(DeviceBackup.FILE_NAME))
+        assertFalse(msg.contains("лежат в Загрузках"))
+        assertTrue(msg.contains("APK из Загрузок"))
+        assertTrue(msg.contains("больше не пишется"))
     }
 }
