@@ -127,6 +127,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.QueryHighlight
+import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.ChatMessage
@@ -142,7 +143,6 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
-import app.rope.android.data.RoleRules
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import kotlinx.coroutines.Job
@@ -715,13 +715,10 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
+                val empty = ThreadEmptyRules.copy(state.messageQuery)
                 RopeEmptyState(
-                    title = if (state.messageQuery.isNotBlank()) "Ничего не нашли" else "Начните переписку",
-                    body = if (state.messageQuery.isNotBlank()) {
-                        "Другой запрос — или очистите поиск."
-                    } else {
-                        RoleRules.threadEmptyBody()
-                    },
+                    title = empty.title,
+                    body = empty.body,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {

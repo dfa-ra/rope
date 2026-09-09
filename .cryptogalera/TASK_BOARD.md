@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.16 in-thread search empty copy | — |
+| CG-102 | Slice: in-thread search empty as 0.3.16 | PO | IN_PROGRESS | Telegram Ничего не найдено; unify from Ничего не нашли | CG-007 |
+| CG-103 | Android: ThreadEmptyRules search miss | AND-01 | IN_PROGRESS | D-029; no 0.3.2 tap/long-press redo | CG-102 |
+| CG-104 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-103 |
+| CG-105 | Ship **0.3.16** | PO | IN_PROGRESS | versionCode 40; do not retag v0.3.15 | CG-104 |
 | CG-098 | Slice: composer / reply bar as 0.3.15 | PO | DONE | shipped v0.3.15 | CG-007 |
 | CG-099 | Android: ComposerHintRules + hint chrome | AND-01 | DONE | D-028; no 0.3.2 tap/long-press redo | CG-098 |
 | CG-100 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; stripe vs X height; possible double ellipsis; reply/edit targeting intact | CG-099 |
