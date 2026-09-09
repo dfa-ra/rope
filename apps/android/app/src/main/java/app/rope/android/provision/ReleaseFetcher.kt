@@ -33,7 +33,7 @@ class ReleaseFetcher(
 
     private fun tryDirect(url: String, dest: File, token: String?): Boolean {
         val req = Request.Builder().url(url).apply {
-            if (token != null) header("Authorization", "Bearer $token")
+            GitHubAuth.bearerFor(url, token)?.let { header("Authorization", "Bearer $it") }
         }.build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return false
