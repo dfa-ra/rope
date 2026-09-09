@@ -26,7 +26,7 @@ object MediaSendRules {
     fun albumCaption(members: List<ChatMessage>): String? =
         members.asSequence().mapNotNull { captionOf(it) }.firstOrNull()
 
-    fun hint(count: Int, videos: Int = 0, photos: Int = 0): ComposerHintCopy {
+    fun hint(count: Int, videos: Int = 0): ComposerHintCopy {
         val n = count.coerceAtLeast(1)
         val title = when {
             n == 1 && videos >= 1 -> "Видео"

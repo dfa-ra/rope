@@ -78,7 +78,7 @@ class MediaSendRulesTest {
         assertTrue(ComposerRules.showSendButton("", false, pendingMedia = true))
         assertFalse(ComposerRules.showSendButton("", false, pendingMedia = false))
         assertEquals(3, ComposerRules.PHOTO_TAPS_TO_SEND)
-        val hint = MediaSendRules.hint(3, videos = 1, photos = 2)
+        val hint = MediaSendRules.hint(3, videos = 1)
         assertEquals(ComposerHintKind.MEDIA, hint.kind)
         assertEquals("Альбом · 3", hint.title)
         assertEquals(MediaSendRules.DISMISS, hint.dismissContentDescription)

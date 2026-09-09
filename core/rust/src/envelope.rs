@@ -451,7 +451,8 @@ mod tests {
         assert!(json.contains("\"album_id\":\"alb-1\""));
         let empty = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1}"#;
         let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, empty).unwrap();
-        let json = std::str::from_utf8(&decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap().body).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        let json = std::str::from_utf8(&got.body).unwrap();
         assert!(!json.contains("caption"));
     }
 
