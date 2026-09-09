@@ -151,7 +151,11 @@ class WebRtcSession(
         override fun onSignalingChange(p0: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionReceivingChange(p0: Boolean) = Unit
         override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>) = Unit
-        override fun onAddStream(p0: MediaStream) = Unit
+        override fun onAddStream(stream: MediaStream) {
+            if (!VideoCallRules.bindRemoteFromAddStream()) return
+            stream.audioTracks.forEach { enableRemoteTrack(it) }
+            stream.videoTracks.forEach { enableRemoteTrack(it) }
+        }
         override fun onRemoveStream(p0: MediaStream) = Unit
         override fun onDataChannel(p0: DataChannel) = Unit
         override fun onRenegotiationNeeded() {
@@ -320,7 +324,11 @@ class WebRtcSession(
         if (closed) return
         remoteSink?.let { remoteVideo?.removeSink(it) }
         remoteSink = sink
-        remoteVideo?.addSink(sink)
+        if (remoteVideo == null) attachExistingRemoteTracks()
+        remoteVideo?.let { vt ->
+            runCatching { vt.removeSink(sink) }
+            vt.addSink(sink)
+        }
     }
 
     fun detachLocalSink(sink: VideoSink) {
@@ -461,7 +469,7 @@ class WebRtcSession(
         } else {
             SessionDescription.Type.ANSWER
         }
-        val desc = SessionDescription(type, signal.sdp)
+        val desc = SessionDescription(type, VideoCallRules.sdpForPeerConnection(signal.sdp))
         if (signal.kind == CallSignal.OFFER && VideoCallRules.sdpHasVideo(signal.sdp)) {
             videoWanted = true
             if (sendCamera && videoTrack == null && !startCameraLocked()) {
@@ -477,6 +485,7 @@ class WebRtcSession(
                 remoteSet = true
                 makingOffer = false
                 flushIce()
+                attachExistingRemoteTracks()
                 if (signal.kind == CallSignal.OFFER) {
                     callee = true
                     pc?.createAnswer(sdpSink { answer ->
@@ -516,10 +525,20 @@ class WebRtcSession(
         }
         if (track is VideoTrack || track.kind() == MediaStreamTrack.VIDEO_TRACK_KIND) {
             val vt = track as? VideoTrack ?: return
-            remoteVideo = vt
-            remoteSink?.let { vt.addSink(it) }
+            if (remoteVideo !== vt) {
+                remoteSink?.let { sink -> runCatching { remoteVideo?.removeSink(sink) } }
+                remoteVideo = vt
+            }
+            remoteSink?.let { sink ->
+                runCatching { vt.removeSink(sink) }
+                vt.addSink(sink)
+            }
             Log.i("rope-webrtc", "remote video ${vt.id()} enabled")
         }
+    }
+
+    private fun attachExistingRemoteTracks() {
+        pc?.transceivers?.forEach { enableRemoteTrack(it.receiver.track()) }
     }
 
     private fun startCameraLocked(): Boolean {

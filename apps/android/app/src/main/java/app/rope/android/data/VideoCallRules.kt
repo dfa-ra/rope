@@ -44,7 +44,27 @@ object VideoCallRules {
     }
 
     fun sdpHasVideo(sdp: String): Boolean =
-        sdp.lineSequence().any { it.startsWith("m=video") }
+        sdp.lineSequence().any { it.trim().startsWith("m=video") }
+
+    /**
+     * libwebrtc's SDP parser is CRLF-strict. JSON roundtrip and
+     * [JsonIds.optional] trim can leave LF-only or a missing trailing CRLF.
+     * Never truncate — 16 KiB refusal stays at send time.
+     */
+    fun sdpForPeerConnection(sdp: String): String {
+        if (sdp.isEmpty()) return sdp
+        val lf = sdp.replace("\r\n", "\n").replace("\r", "\n").trimEnd() + "\n"
+        return lf.replace("\n", "\r\n")
+    }
+
+    /** Compose `graphicsLayer` (FadeIn) makes TextureView draw black. */
+    fun callOverlayUsesOffscreenLayer(): Boolean = false
+
+    /** FillMaxSize TextureView often reports 0×0 before the first layout. */
+    fun rendererSurfaceReady(width: Int, height: Int): Boolean = width > 0 && height > 0
+
+    /** Plan-B onAddStream still carries the remote video track on some devices. */
+    fun bindRemoteFromAddStream(): Boolean = true
 
     fun offerToReceiveAudio(): String = "true"
 

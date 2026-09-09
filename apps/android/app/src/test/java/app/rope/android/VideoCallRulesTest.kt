@@ -38,6 +38,11 @@ class VideoCallRulesTest {
     fun sdpVideoLineAndWssCap() {
         assertFalse(VideoCallRules.sdpHasVideo("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"))
         assertTrue(VideoCallRules.sdpHasVideo("v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\nm=video 9 UDP/TLS/RTP/SAVPF 96 97\n"))
+        assertTrue(
+            VideoCallRules.sdpHasVideo(
+                "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n",
+            ),
+        )
         val offer = CallSignal(
             CallSignal.OFFER,
             sdp = representativeVideoSdp(),
@@ -270,6 +275,36 @@ class VideoCallRulesTest {
                 "WebRTC · ищем путь…",
             ),
         )
+    }
+
+    @Test
+    fun remoteVideoRendererAndSdpRtcRules() {
+        assertFalse(VideoCallRules.callOverlayUsesOffscreenLayer())
+        assertFalse(VideoCallRules.rendererSurfaceReady(0, 0))
+        assertFalse(VideoCallRules.rendererSurfaceReady(1080, 0))
+        assertFalse(VideoCallRules.rendererSurfaceReady(0, 1920))
+        assertTrue(VideoCallRules.rendererSurfaceReady(1080, 1920))
+        assertTrue(VideoCallRules.bindRemoteFromAddStream())
+        val lf = "v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\nm=video 9 UDP/TLS/RTP/SAVPF 96\n"
+        val rtc = VideoCallRules.sdpForPeerConnection(lf)
+        assertTrue(rtc.contains("\r\n"))
+        assertTrue(rtc.endsWith("\r\n"))
+        assertTrue(VideoCallRules.sdpHasVideo(rtc))
+        assertEquals("", VideoCallRules.sdpForPeerConnection(""))
+        val already = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"
+        val normalized = VideoCallRules.sdpForPeerConnection(already)
+        assertEquals("v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n", normalized)
+        val huge = "v=0\n" + "a=x:" + "a".repeat(20_000) + "\nm=video 9 UDP/TLS/RTP/SAVPF 96\n"
+        val kept = VideoCallRules.sdpForPeerConnection(huge)
+        assertTrue(kept.contains("m=video"))
+        assertTrue(kept.contains("a".repeat(20_000)))
+        assertTrue(kept.length >= huge.length)
+        val json = CallSignal(CallSignal.OFFER, sdp = already).toJson()
+        val parsed = CallSignal.parse(json)!!
+        assertTrue(VideoCallRules.sdpHasVideo(parsed.sdp))
+        val applied = VideoCallRules.sdpForPeerConnection(parsed.sdp)
+        assertTrue(applied.contains("\r\n"))
+        assertTrue(applied.contains("m=video"))
     }
 
     /**

@@ -556,6 +556,26 @@ class CallSignalingTest {
     }
 
     @Test
+    fun crlfVideoOfferRoundTripStillHasVideoMLine() {
+        val sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"
+        val json = CallSignal(CallSignal.OFFER, sdp = sdp).toJson()
+        val parsed = CallSignal.parse(json)!!
+        assertEquals(CallSignal.OFFER, parsed.kind)
+        assertTrue(VideoCallRules.sdpHasVideo(parsed.sdp))
+        val rtc = VideoCallRules.sdpForPeerConnection(parsed.sdp)
+        assertTrue(rtc.contains("m=video"))
+        assertTrue(rtc.contains("\r\n"))
+        assertTrue(VideoCallRules.fitsWss(json))
+        val m = CallMachine()
+        m.onWire("alice", CallSignal.RING, "c1", VideoCallRules.ringPayload(true), "bob")
+        m.localAccept()
+        m.onSessionAttached()
+        val off = m.media("alice", CallSignal.OFFER, "c1", parsed, "bob")
+        assertTrue(off.any { it is CallEffect.DeliverRemote })
+        assertTrue(m.state.video)
+    }
+
+    @Test
     fun sdpAndIceRejectCrLfAndFileSchemeInjection() {
         val crlfIce = JSONObject()
             .put("kind", "ice")

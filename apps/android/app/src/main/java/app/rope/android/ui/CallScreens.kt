@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CallEnd
@@ -49,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.NavRules
@@ -201,37 +201,37 @@ fun CallOverlay(
         media = call.media,
         rtcReady = rtcReady,
     )
-    FadeIn(0) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    if (liveVideo) Color.Black else MaterialTheme.colorScheme.background,
-                ),
-        ) {
-            if (showVideo) {
+    // FadeIn uses graphicsLayer; TextureView draws black inside an offscreen layer.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(
+                if (liveVideo) Color.Black else MaterialTheme.colorScheme.background,
+            ),
+    ) {
+        if (showVideo) {
+            CallVideoView(
+                modifier = Modifier.fillMaxSize(),
+                mirror = false,
+                eglContext = eglContext,
+                onBind = onBindRemote,
+                onUnbind = onUnbindRemote,
+            )
+            if (!camMuted) {
                 CallVideoView(
-                    modifier = Modifier.fillMaxSize(),
-                    mirror = false,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .width(112.dp)
+                        .height(160.dp),
+                    mirror = true,
                     eglContext = eglContext,
-                    onBind = onBindRemote,
-                    onUnbind = onUnbindRemote,
+                    onBind = onBindLocal,
+                    onUnbind = onUnbindLocal,
+                    cornerRadiusDp = 12f,
                 )
-                if (!camMuted) {
-                    CallVideoView(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(16.dp)
-                            .width(112.dp)
-                            .height(160.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        mirror = true,
-                        eglContext = eglContext,
-                        onBind = onBindLocal,
-                        onUnbind = onUnbindLocal,
-                    )
-                }
             }
+        }
             Column(
                 Modifier
                     .fillMaxSize()
@@ -366,7 +366,6 @@ fun CallOverlay(
                     }
                 }
             }
-        }
     }
 }
 
@@ -377,12 +376,15 @@ private fun CallVideoView(
     eglContext: () -> EglBase.Context?,
     onBind: (VideoSink) -> Unit,
     onUnbind: (VideoSink) -> Unit,
+    cornerRadiusDp: Float = 0f,
 ) {
     val egl = eglContext() ?: return
+    val radiusPx = with(LocalDensity.current) { cornerRadiusDp.dp.toPx() }
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
             CallVideoRenderer(ctx).apply {
+                if (radiusPx > 0f) roundCorners(radiusPx)
                 init(egl, mirror)
                 onBind(this)
             }
