@@ -71,8 +71,8 @@ class DateSeparatorRulesTest {
         val prevTz = TimeZone.getDefault()
         TimeZone.setDefault(utc)
         try {
-            val t0 = utcMs(2026, Calendar.SEPTEMBER, 8, 23, 50)
-            val t1 = utcMs(2026, Calendar.SEPTEMBER, 9, 0, 10)
+            val t0 = utcMs(2026, Calendar.SEPTEMBER, 8, 23, 58)
+            val t1 = utcMs(2026, Calendar.SEPTEMBER, 9, 0, 2)
             val a = msg("a", t0, senderId = "d2")
             val b = msg("b", t1, senderId = "d2")
             assertTrue(kotlin.math.abs(t1 - t0) < GroupChatUx.CLUSTER_GAP_MS)
