@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -97,6 +98,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -110,9 +112,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -121,6 +126,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.rope.android.RopeDarkBg
@@ -138,6 +144,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
@@ -158,6 +165,7 @@ import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -831,6 +839,7 @@ fun ChatPane(
                                             reactionExpanded = false
                                         }
                                     },
+                                    onSwipeReply = { onReply(m) },
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -862,6 +871,7 @@ fun ChatPane(
                                         menuMessage = m
                                         reactionExpanded = false
                                     },
+                                    onSwipeReply = { target -> onReply(target) },
                                 )
                             }
                         }
@@ -983,6 +993,94 @@ fun ChatPane(
     }
 }
 
+@Composable
+private fun SwipeReplyRow(
+    enabled: Boolean,
+    onCommit: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var dragging by remember { mutableStateOf(false) }
+    var liveOffset by remember { mutableFloatStateOf(0f) }
+    val settle by animateFloatAsState(
+        targetValue = if (dragging) liveOffset else 0f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
+        label = "swipeReplySettle",
+    )
+    val offsetDp = if (dragging) liveOffset else settle
+    val progress = SwipeToReplyRules.progress(offsetDp)
+    val density = LocalDensity.current
+    val view = LocalView.current
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                val pxPerDp = density.density
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var locked = false
+                    var prev = 0f
+                    liveOffset = 0f
+                    dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val dxDp = (change.position.x - down.position.x) / pxPerDp
+                        val dyDp = (change.position.y - down.position.y) / pxPerDp
+                        if (!change.pressed) {
+                            val commit = locked && SwipeToReplyRules.shouldCommit(liveOffset)
+                            dragging = false
+                            liveOffset = 0f
+                            if (commit) onCommit()
+                            break
+                        }
+                        if (!locked) {
+                            when {
+                                SwipeToReplyRules.shouldAbort(dxDp, dyDp) -> break
+                                SwipeToReplyRules.shouldLock(dxDp, dyDp) -> {
+                                    locked = true
+                                    dragging = true
+                                }
+                                else -> continue
+                            }
+                        }
+                        event.changes.forEach { it.consume() }
+                        val now = SwipeToReplyRules.offset(dxDp)
+                        if (SwipeToReplyRules.crossedCommit(prev, now)) {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        }
+                        prev = now
+                        liveOffset = now
+                    }
+                    dragging = false
+                    liveOffset = 0f
+                }
+            },
+    ) {
+        Icon(
+            Icons.AutoMirrored.Outlined.Reply,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 10.dp)
+                .graphicsLayer {
+                    alpha = SwipeToReplyRules.iconAlpha(progress)
+                    val s = SwipeToReplyRules.iconScale(progress)
+                    scaleX = s
+                    scaleY = s
+                },
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .offset { IntOffset((offsetDp * density.density).roundToInt(), 0) },
+        ) {
+            content()
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
@@ -1001,6 +1099,7 @@ private fun MessageBubble(
     onToggleSelect: () -> Unit = {},
     onEnterSelect: () -> Unit = {},
     onTap: () -> Unit = {},
+    onSwipeReply: () -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1038,6 +1137,10 @@ private fun MessageBubble(
     val corner = RopeShapes.bubble
     val tight = 8.dp
     val tail = RopeShapes.bubbleTail
+    SwipeReplyRow(
+        enabled = SwipeToReplyRules.canSwipe(m, selecting),
+        onCommit = onSwipeReply,
+    ) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -1205,6 +1308,7 @@ private fun MessageBubble(
         if (m.reactions.isNotEmpty() && !m.deleted) {
             ReactionRow(m, me, mine, onReact)
         }
+    }
     }
 }
 
@@ -1490,6 +1594,7 @@ private fun AlbumBubble(
     onToggleSelect: () -> Unit,
     onEnterSelect: () -> Unit,
     onLongPressMember: (ChatMessage) -> Unit,
+    onSwipeReply: (ChatMessage) -> Unit = {},
 ) {
     val first = members.firstOrNull() ?: return
     val last = members.last()
@@ -1501,6 +1606,11 @@ private fun AlbumBubble(
     val selectAlpha by animateFloatAsState(if (selected) 0.28f else 0f, label = "albumSelect")
     val tiles = PhotoLayout.mosaic(members.size)
     val meta = MessageTime.meta(last.status, last.outgoing, last.timestampMs, edited = last.edited)
+    val replyTarget = SwipeToReplyRules.replyTarget(members)
+    SwipeReplyRow(
+        enabled = SwipeToReplyRules.canSwipeAlbum(members, selecting),
+        onCommit = { replyTarget?.let(onSwipeReply) },
+    ) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -1559,6 +1669,7 @@ private fun AlbumBubble(
         if (last.reactions.isNotEmpty()) {
             ReactionRow(last, state.profile?.deviceId.orEmpty(), mine, onReact)
         }
+    }
     }
 }
 
