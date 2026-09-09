@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 6) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 7) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -63,6 +63,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             )
             """.trimIndent(),
         )
+        createScheduledTable(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -96,6 +97,28 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         if (oldVersion < 6) {
             db.execSQL("ALTER TABLE groups ADD COLUMN created_by TEXT NOT NULL DEFAULT ''")
         }
+        if (oldVersion < 7) {
+            createScheduledTable(db)
+        }
+    }
+
+    private fun createScheduledTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS scheduled (
+              id TEXT PRIMARY KEY,
+              peer_id TEXT NOT NULL,
+              fire_at_ms INTEGER NOT NULL,
+              silent INTEGER NOT NULL DEFAULT 0,
+              kind TEXT NOT NULL,
+              text TEXT NOT NULL DEFAULT '',
+              reply_json TEXT NOT NULL DEFAULT '',
+              media_dir TEXT NOT NULL DEFAULT ''
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS scheduled_peer ON scheduled(peer_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS scheduled_fire ON scheduled(fire_at_ms)")
     }
 
     fun saveProfile(p: ServerProfile) {
@@ -256,6 +279,87 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val ids = mutableListOf<String>()
         c.use { while (it.moveToNext()) ids += it.getString(0) }
         return ids.map { id -> id to messages(id).lastOrNull() }
+    }
+
+    fun insertScheduled(row: ScheduledSend) {
+        writableDatabase.execSQL(
+            """
+            INSERT OR REPLACE INTO scheduled(
+              id, peer_id, fire_at_ms, silent, kind, text, reply_json, media_dir
+            ) VALUES(?,?,?,?,?,?,?,?)
+            """.trimIndent(),
+            arrayOf(
+                row.id,
+                row.peerId,
+                row.fireAtMs,
+                if (row.silent) 1 else 0,
+                row.kind,
+                row.text,
+                row.replyJson,
+                row.mediaDir,
+            ),
+        )
+    }
+
+    fun scheduledForPeer(peerId: String): List<ScheduledSend> {
+        val c = readableDatabase.rawQuery(
+            "SELECT id, peer_id, fire_at_ms, silent, kind, text, reply_json, media_dir FROM scheduled WHERE peer_id = ? ORDER BY fire_at_ms ASC",
+            arrayOf(peerId),
+        )
+        return readScheduled(c)
+    }
+
+    fun scheduledDue(nowMs: Long): List<ScheduledSend> {
+        val c = readableDatabase.rawQuery(
+            "SELECT id, peer_id, fire_at_ms, silent, kind, text, reply_json, media_dir FROM scheduled WHERE fire_at_ms <= ? ORDER BY fire_at_ms ASC",
+            arrayOf(nowMs.toString()),
+        )
+        return readScheduled(c)
+    }
+
+    fun scheduledById(id: String): ScheduledSend? {
+        val c = readableDatabase.rawQuery(
+            "SELECT id, peer_id, fire_at_ms, silent, kind, text, reply_json, media_dir FROM scheduled WHERE id = ?",
+            arrayOf(id),
+        )
+        return readScheduled(c).firstOrNull()
+    }
+
+    fun deleteScheduled(id: String) {
+        writableDatabase.execSQL("DELETE FROM scheduled WHERE id = ?", arrayOf(id))
+    }
+
+    fun countScheduled(): Int {
+        val c = readableDatabase.rawQuery("SELECT COUNT(*) FROM scheduled", null)
+        c.use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    fun countScheduled(peerId: String): Int {
+        val c = readableDatabase.rawQuery("SELECT COUNT(*) FROM scheduled WHERE peer_id = ?", arrayOf(peerId))
+        c.use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    fun updateScheduledFireAt(id: String, fireAtMs: Long) {
+        writableDatabase.execSQL("UPDATE scheduled SET fire_at_ms = ? WHERE id = ?", arrayOf(fireAtMs, id))
+    }
+
+    private fun readScheduled(c: android.database.Cursor): List<ScheduledSend> {
+        val out = mutableListOf<ScheduledSend>()
+        c.use {
+            while (it.moveToNext()) {
+                out += ScheduledSend(
+                    id = it.getString(0),
+                    peerId = it.getString(1),
+                    fireAtMs = it.getLong(2),
+                    silent = it.getInt(3) == 1,
+                    kind = it.getString(4),
+                    text = it.getString(5).orEmpty(),
+                    replyJson = it.getString(6).orEmpty(),
+                    mediaDir = it.getString(7).orEmpty(),
+                )
+            }
+        }
+        return out
     }
 
     fun pendingOutgoing(): List<ChatMessage> {

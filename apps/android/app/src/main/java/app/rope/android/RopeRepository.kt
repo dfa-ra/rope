@@ -46,6 +46,9 @@ import app.rope.android.data.ChatPrefs
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ScheduleRules
+import app.rope.android.data.ScheduledSend
+import app.rope.android.data.StagedPart
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -98,6 +101,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
@@ -174,9 +178,11 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val scheduled: List<ScheduledSend> = emptyList(),
+    val scheduledCount: Int = 0,
 )
 
-enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
+enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Scheduled }
 
 private data class ReplyPack(
     val id: String? = null,
@@ -225,6 +231,9 @@ class RopeRepository(private val app: Application) {
     private var iceCachedAtMs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toneOutgoing: Boolean? = null
+    private var scheduleSweepJob: Job? = null
+    private val firingScheduled = mutableSetOf<String>()
+    private val failedStagingDirs = mutableListOf<String>()
 
     fun start(pendingLink: String?) {
         if (!sessionStarted.compareAndSet(false, true)) {
@@ -251,6 +260,8 @@ class RopeRepository(private val app: Application) {
                 if (!pendingLink.isNullOrBlank() && store.profile() == null) {
                     prepareJoin(pendingLink)
                 }
+                ensureScheduleSweep()
+                fireDueScheduled()
             } catch (e: Exception) {
                 error(e)
             } finally {
@@ -324,7 +335,7 @@ class RopeRepository(private val app: Application) {
                     error = null,
                     viewingImage = null,
                     messageQuery = "",
-                    unreadAnchorId = if (next.last() == Screen.Chat || next.last() == Screen.PeerProfile) {
+                    unreadAnchorId = if (next.last() == Screen.Chat || next.last() == Screen.PeerProfile || next.last() == Screen.Scheduled) {
                         s.unreadAnchorId
                     } else {
                         null
@@ -344,7 +355,7 @@ class RopeRepository(private val app: Application) {
     private fun applyNav(screen: Screen, mode: NavMode): UiState {
         val base = _state.value
         val stack = BackStack.apply(BackStack.currentStack(base.backStack, base.screen), screen, mode)
-        val keepUnread = stack.last() == Screen.Chat || stack.last() == Screen.PeerProfile
+        val keepUnread = stack.last() == Screen.Chat || stack.last() == Screen.PeerProfile || stack.last() == Screen.Scheduled
         return base.copy(
             screen = stack.last(),
             backStack = stack,
@@ -570,7 +581,7 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(notice = "Скопировано")
     }
 
-    fun sendDraft() {
+    fun sendDraft(silent: Boolean = false) {
         val edit = _state.value.editTarget
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
             val text = _state.value.draftText
@@ -593,7 +604,7 @@ class RopeRepository(private val app: Application) {
                 replySpan = null,
             )
             persistOpenDraft()
-            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
+            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup, silent = silent)
             return
         }
         val text = _state.value.draftText
@@ -604,7 +615,7 @@ class RopeRepository(private val app: Application) {
         persistOpenDraft()
         val group = _state.value.group
         if (group != null) {
-            sendGroupText(group, text, reply, pack)
+            sendGroupText(group, text, reply, pack, silent = silent)
             return
         }
         if (SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(_state.value.peer?.deviceId)) {
@@ -612,6 +623,10 @@ class RopeRepository(private val app: Application) {
             return
         }
         val peer = _state.value.peer ?: return
+        sendPlainTo(peer, text, pack, silent)
+    }
+
+    private fun sendPlainTo(peer: DirectoryDevice, text: String, pack: ReplyPack, silent: Boolean) {
         scope.launch {
             val id = identity ?: return@launch
             try {
@@ -623,6 +638,7 @@ class RopeRepository(private val app: Application) {
                     quoteText = pack.quoteText,
                     quoteStart = pack.quoteStart,
                     quoteEnd = pack.quoteEnd,
+                    silent = silent,
                 )
                 val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
                 val local = ChatMessage(
@@ -650,6 +666,303 @@ class RopeRepository(private val app: Application) {
                 error(e)
             }
         }
+    }
+
+    fun openScheduled() {
+        val peerId = openChatId() ?: return
+        _state.value = applyNav(Screen.Scheduled, NavMode.Push).copy(
+            scheduled = store.scheduledForPeer(peerId),
+            scheduledCount = store.countScheduled(peerId),
+        )
+    }
+
+    fun enqueueScheduled(fireAtMs: Long, silent: Boolean = false, uris: List<Uri> = emptyList()) {
+        if (_state.value.editTarget != null) return
+        val now = System.currentTimeMillis()
+        if (!ScheduleRules.inWindow(now, fireAtMs)) {
+            notice("Не раньше чем через минуту")
+            return
+        }
+        if (!ScheduleRules.canEnqueue(store.countScheduled())) {
+            notice(ScheduleRules.TOO_MANY)
+            return
+        }
+        val peerId = openChatId() ?: return
+        val pack = replyPack(_state.value.replyTo)
+        val caption = _state.value.draftText
+        val pending = uris.ifEmpty { _state.value.pendingAttachments }
+        val recording = _state.value.recording
+        val recordingNote = _state.value.recordingVideoNote
+        scope.launch {
+            try {
+                val id = store.newId()
+                val dir = ScheduleRules.stagedDir(app.filesDir, id)
+                var kind = ScheduleRules.KIND_TEXT
+                var text = caption.trim()
+                var mediaDir = ""
+                when {
+                    recording -> {
+                        val take = try { voiceRecorder.stop() } catch (_: Exception) { null }
+                        recordJob?.cancel()
+                        _state.value = _state.value.copy(recording = false, recordMs = 0)
+                        if (take == null || take.durationMs < VoiceRecorder.MIN_MS) {
+                            take?.file?.delete()
+                            notice(ScheduleRules.NEED_CONTENT)
+                            return@launch
+                        }
+                        dir.mkdirs()
+                        val dest = File(dir, "part_0")
+                        take.file.copyTo(dest, overwrite = true)
+                        take.file.delete()
+                        val wave = take.waveform.ifEmpty { VoiceWaveform.extract(dest.absolutePath) }
+                        ScheduleRules.writeManifest(
+                            dir,
+                            listOf(
+                                StagedPart("part_0", ScheduleRules.KIND_VOICE, take.file.name, "audio/mp4", take.durationMs, wave),
+                            ),
+                        )
+                        kind = ScheduleRules.KIND_VOICE
+                        mediaDir = dir.absolutePath
+                        text = ""
+                    }
+                    recordingNote -> {
+                        val take = try { videoNoteRecorder.stop() } catch (_: Exception) { null }
+                        recordJob?.cancel()
+                        _state.value = _state.value.copy(recordingVideoNote = false, recordMs = 0)
+                        if (take == null || take.durationMs < VideoNoteRules.MIN_MS) {
+                            take?.file?.delete()
+                            notice(ScheduleRules.NEED_CONTENT)
+                            return@launch
+                        }
+                        dir.mkdirs()
+                        val dest = File(dir, "part_0")
+                        take.file.copyTo(dest, overwrite = true)
+                        take.file.delete()
+                        ScheduleRules.writeManifest(
+                            dir,
+                            listOf(
+                                StagedPart("part_0", ScheduleRules.KIND_VIDEO_NOTE, take.file.name, "video/mp4", take.durationMs),
+                            ),
+                        )
+                        kind = ScheduleRules.KIND_VIDEO_NOTE
+                        mediaDir = dir.absolutePath
+                        text = ""
+                    }
+                    pending.isNotEmpty() -> {
+                        val prepared = pending.take(AlbumRules.MAX_PHOTOS).mapNotNull { prepareOutgoingMedia(it, null) }
+                        if (prepared.isEmpty()) {
+                            notice(ScheduleRules.NEED_CONTENT)
+                            return@launch
+                        }
+                        dir.mkdirs()
+                        val parts = prepared.mapIndexed { i, item ->
+                            val name = "part_$i"
+                            File(dir, name).writeBytes(item.bytes)
+                            StagedPart(name, item.kind, item.name, item.mime, item.durationMs)
+                        }
+                        ScheduleRules.writeManifest(dir, parts)
+                        kind = ScheduleRules.rowKind(parts)
+                        mediaDir = dir.absolutePath
+                    }
+                    text.isNotBlank() -> kind = ScheduleRules.KIND_TEXT
+                    else -> {
+                        notice(ScheduleRules.NEED_CONTENT)
+                        return@launch
+                    }
+                }
+                val row = ScheduledSend(
+                    id = id,
+                    peerId = peerId,
+                    fireAtMs = fireAtMs,
+                    silent = silent,
+                    kind = kind,
+                    text = text,
+                    replyJson = ScheduleRules.packReply(
+                        pack.id,
+                        pack.preview,
+                        pack.name,
+                        pack.quoteText,
+                        pack.quoteStart,
+                        pack.quoteEnd,
+                    ),
+                    mediaDir = mediaDir,
+                )
+                store.insertScheduled(row)
+                _state.value = _state.value.copy(
+                    draftText = "",
+                    pendingAttachments = emptyList(),
+                    replyTo = null,
+                    replySpan = null,
+                )
+                persistOpenDraft()
+                refreshScheduled(peerId)
+                notice(ScheduleRules.queuedToast(fireAtMs))
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun deleteScheduled(id: String) {
+        val row = store.scheduledById(id)
+        store.deleteScheduled(id)
+        row?.mediaDir?.takeIf { it.isNotBlank() }?.let { ScheduleRules.unlinkStaged(File(it)) }
+        refreshScheduled(row?.peerId ?: openChatId())
+    }
+
+    fun reschedule(id: String, fireAtMs: Long) {
+        val now = System.currentTimeMillis()
+        if (!ScheduleRules.inWindow(now, fireAtMs)) {
+            notice("Не раньше чем через минуту")
+            return
+        }
+        store.updateScheduledFireAt(id, fireAtMs)
+        refreshScheduled(store.scheduledById(id)?.peerId ?: openChatId())
+    }
+
+    private fun ensureScheduleSweep() {
+        if (scheduleSweepJob?.isActive == true) return
+        scheduleSweepJob = scope.launch {
+            fireDueScheduled()
+            while (isActive) {
+                delay(60_000)
+                fireDueScheduled()
+            }
+        }
+    }
+
+    fun fireDueScheduled() {
+        val now = System.currentTimeMillis()
+        val due = store.scheduledDue(now)
+        for (row in due) {
+            if (!firingScheduled.add(row.id)) continue
+            scope.launch {
+                try {
+                    fireOne(row)
+                } finally {
+                    firingScheduled.remove(row.id)
+                }
+            }
+        }
+    }
+
+    private suspend fun fireOne(row: ScheduledSend) {
+        if (destGone(row.peerId)) {
+            store.deleteScheduled(row.id)
+            if (row.mediaDir.isNotBlank()) failedStagingDirs += row.mediaDir
+            notice(ScheduleRules.FAILED)
+            refreshScheduled(row.peerId)
+            return
+        }
+        val dest = destFor(row.peerId) ?: return
+        val (id, preview, name) = ScheduleRules.unpackReply(row.replyJson)
+        val quote = ScheduleRules.unpackQuote(row.replyJson)
+        val pack = ReplyPack(id, preview, name, quote.first, quote.second, quote.third)
+        val silent = row.silent && ScheduleRules.usesNetwork(row.peerId)
+        try {
+            val dir = row.mediaDir.takeIf { it.isNotBlank() }?.let { File(it) }
+            val parts = dir?.takeIf { it.isDirectory }?.let { ScheduleRules.readManifest(it) }.orEmpty()
+            if (parts.isEmpty()) {
+                val text = row.text
+                if (text.isBlank()) {
+                    store.deleteScheduled(row.id)
+                    refreshScheduled(row.peerId)
+                    return
+                }
+                when {
+                    SavedMessagesRules.skipNetwork(row.peerId) -> saveLocalText(text, pack = pack)
+                    dest.second != null -> sendGroupText(dest.second!!, text, pack = pack, silent = silent)
+                    dest.first != null -> sendPlainTo(dest.first!!, text, pack, silent)
+                    else -> return
+                }
+            } else {
+                val images = parts.filter { VideoRules.albumEligible(it.kind) }
+                val rest = parts.filter { !VideoRules.albumEligible(it.kind) }
+                val slots = AlbumRules.slots(images.size)
+                val cap = MediaSendRules.normalize(row.text)
+                images.zip(slots).forEach { (part, slot) ->
+                    val bytes = File(dir, part.file).readBytes()
+                    sendMediaBytes(
+                        bytes,
+                        part.mime,
+                        part.name,
+                        part.kind,
+                        part.durationMs,
+                        albumId = slot.albumId,
+                        albumIndex = slot.index,
+                        albumCount = slot.count,
+                        caption = MediaSendRules.onFirstOnly(slot.index, cap),
+                        pack = pack,
+                        destPeer = dest.first,
+                        destGroup = dest.second,
+                        waveform = part.waveform,
+                        silent = silent,
+                    )
+                }
+                rest.forEach { part ->
+                    val bytes = File(dir, part.file).readBytes()
+                    sendMediaBytes(
+                        bytes,
+                        part.mime,
+                        part.name,
+                        part.kind,
+                        part.durationMs,
+                        pack = pack,
+                        destPeer = dest.first,
+                        destGroup = dest.second,
+                        waveform = part.waveform,
+                        silent = silent,
+                    )
+                }
+            }
+            store.deleteScheduled(row.id)
+            dir?.let { ScheduleRules.unlinkStaged(it) }
+            refreshScheduled(row.peerId)
+        } catch (e: Exception) {
+            error(e)
+        }
+    }
+
+    private fun destGone(peerId: String): Boolean {
+        if (SavedMessagesRules.skipNetwork(peerId)) return false
+        if (ChatIds.isGroup(peerId)) {
+            val gid = ChatIds.rawGroupId(peerId)
+            val known = store.groups().ifEmpty { _state.value.groups }
+            if (known.isEmpty()) return false
+            return known.none { it.groupId == gid }
+        }
+        val known = _state.value.devices
+        if (known.isEmpty()) return false
+        return known.none { it.deviceId == peerId }
+    }
+
+    private fun destFor(peerId: String): Pair<DirectoryDevice?, RopeGroup?>? {
+        if (SavedMessagesRules.skipNetwork(peerId)) return SavedMessagesRules.stubPeer() to null
+        if (ChatIds.isGroup(peerId)) {
+            val gid = ChatIds.rawGroupId(peerId)
+            val g = _state.value.groups.find { it.groupId == gid } ?: store.groups().find { it.groupId == gid }
+            return if (g == null) null else null to g
+        }
+        val peer = _state.value.devices.find { it.deviceId == peerId }
+            ?: currentDevices().find { it.deviceId == peerId }
+        return if (peer == null) null else peer to null
+    }
+
+    private fun refreshScheduled(peerId: String?) {
+        val id = peerId ?: openChatId() ?: return
+        val list = store.scheduledForPeer(id)
+        val count = list.size
+        val showing = _state.value.screen == Screen.Scheduled && openChatId() == id
+        _state.value = _state.value.copy(
+            scheduled = if (showing || openChatId() == id) list else _state.value.scheduled,
+            scheduledCount = if (openChatId() == id) count else _state.value.scheduledCount,
+        )
+    }
+
+    private fun unlinkFailedStaging() {
+        val dirs = failedStagingDirs.toList()
+        failedStagingDirs.clear()
+        dirs.forEach { ScheduleRules.unlinkStaged(File(it)) }
     }
 
     fun startReply(msg: ChatMessage, span: QuoteSpan? = null) {
@@ -773,6 +1086,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun dismissNotice() {
+        unlinkFailedStaging()
         _state.value = _state.value.copy(notice = null)
     }
 
@@ -824,6 +1138,7 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = ReplyPack(),
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
+        silent: Boolean = false,
     ) {
         val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
         if (pack.id == null && resolved.id != null) {
@@ -853,6 +1168,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        silent = silent,
                     )
                 }
                 rest.forEach { item ->
@@ -865,6 +1181,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        silent = silent,
                     )
                 }
             } catch (e: Exception) {
@@ -942,7 +1259,7 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    fun finishVoice(send: Boolean) {
+    fun finishVoice(send: Boolean, silent: Boolean = false) {
         val take = try {
             voiceRecorder.stop()
         } catch (_: Exception) {
@@ -972,6 +1289,7 @@ class RopeRepository(private val app: Application) {
                     destPeer = destPeer,
                     destGroup = destGroup,
                     waveform = wave,
+                    silent = silent,
                 )
             } catch (e: Exception) {
                 error(e)
@@ -1015,7 +1333,7 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    fun finishVideoNote(send: Boolean) {
+    fun finishVideoNote(send: Boolean, silent: Boolean = false) {
         val take = try {
             videoNoteRecorder.stop()
         } catch (_: Exception) {
@@ -1043,6 +1361,7 @@ class RopeRepository(private val app: Application) {
                     pack = pack,
                     destPeer = destPeer,
                     destGroup = destGroup,
+                    silent = silent,
                 )
             } catch (e: Exception) {
                 error(e)
@@ -1524,6 +1843,8 @@ class RopeRepository(private val app: Application) {
 
     fun resume() {
         store.profile()?.let { connectSocket(it) }
+        ensureScheduleSweep()
+        fireDueScheduled()
     }
 
     private fun sendMediaBytes(
@@ -1540,6 +1861,7 @@ class RopeRepository(private val app: Application) {
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
         waveform: List<Int> = emptyList(),
+        silent: Boolean = false,
     ) {
         val id = identity ?: return
         val group = destGroup
@@ -1566,6 +1888,7 @@ class RopeRepository(private val app: Application) {
             albumCount = if (grouped) albumCount else 1,
             caption = cap,
             waveform = waveform,
+            silent = silent && !saved,
         ).withReply(
             pack.id,
             pack.preview,
@@ -1639,6 +1962,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         pack: ReplyPack = replyPack(reply),
         forwardedFrom: String? = null,
+        silent: Boolean = false,
     ) {
         val attributed = JsonIds.optional(forwardedFrom)
         val body = GroupTextPayload(
@@ -1652,6 +1976,7 @@ class RopeRepository(private val app: Application) {
             quoteText = if (attributed == null) pack.quoteText else "",
             quoteStart = if (attributed == null) pack.quoteStart else -1,
             quoteEnd = if (attributed == null) pack.quoteEnd else -1,
+            silent = silent,
         ).toJson().toByteArray()
         sendGroupPayload(
             group,
@@ -1917,6 +2242,7 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            scheduledCount = store.countScheduled(chatId),
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
@@ -2219,6 +2545,7 @@ class RopeRepository(private val app: Application) {
                 _state.value = _state.value.copy(devices = devices, groups = stored, peer = peer, group = group)
                 refreshConversations()
                 refreshOpenChat()
+                fireDueScheduled()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(offline = true, error = e.message)
             }
@@ -2443,7 +2770,7 @@ class RopeRepository(private val app: Application) {
                 )
                 store.insertMessage(msg)
                 ack(plain.messageId)
-                notifyIfHidden(sender.displayName, packed.text, sender.deviceId)
+                notifyIfHidden(sender.displayName, packed.text, sender.deviceId, silent = packed.silent)
             }
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2475,7 +2802,7 @@ class RopeRepository(private val app: Application) {
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
-                notifyIfHidden(sender.displayName, payload.text, chatId)
+                notifyIfHidden(sender.displayName, payload.text, chatId, silent = payload.silent)
             }
             EnvelopeTypes.MEDIA -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2505,7 +2832,7 @@ class RopeRepository(private val app: Application) {
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
-                notifyIfHidden(sender.displayName, payload.preview(), chatId, payload.albumId)
+                notifyIfHidden(sender.displayName, payload.preview(), chatId, payload.albumId, silent = payload.silent)
                 scope.launch { downloadMedia(msg.id, payload) }
             }
             EnvelopeTypes.RECEIPT -> {
@@ -3071,7 +3398,7 @@ class RopeRepository(private val app: Application) {
         CallAudio.apply(app, on)
     }
 
-    private fun notifyIfHidden(title: String, body: String, chatId: String, albumId: String? = null) {
+    private fun notifyIfHidden(title: String, body: String, chatId: String, albumId: String? = null, silent: Boolean = false) {
         if (SavedMessagesRules.isSaved(chatId)) return
         val chatOpen = _state.value.screen == Screen.Chat && openChatId() == chatId
         val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -3080,7 +3407,7 @@ class RopeRepository(private val app: Application) {
             store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
             refreshConversations()
         }
-        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
+        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted, silent = silent)) {
             notifier.message(title, body, AlbumRules.notifyId(body, albumId))
         }
     }

@@ -18,7 +18,7 @@ class NavRulesTest {
     fun homeIsReachableFromEverySignedInDestination() {
         val signedIn = listOf(
             Screen.Chats, Screen.Chat, Screen.Groups, Screen.Calls, Screen.Status,
-            Screen.People, Screen.Invite, Screen.Settings, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile,
+            Screen.People, Screen.Invite, Screen.Settings, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile, Screen.Scheduled,
         )
         signedIn.forEach { screen ->
             assertTrue(screen.name, NavRules.canOpenHome(screen, signedIn = true))
@@ -51,7 +51,9 @@ class NavRulesTest {
         assertTrue(NavRules.isMessengerShell(Screen.Chat))
         assertTrue(NavRules.isMessengerShell(Screen.People))
         assertTrue(NavRules.isMessengerShell(Screen.PeerProfile))
+        assertTrue(NavRules.isMessengerShell(Screen.Scheduled))
         assertFalse(NavRules.showsBottomBar(Screen.PeerProfile, true))
+        assertFalse(NavRules.showsBottomBar(Screen.Scheduled, true))
     }
 
     @Test
@@ -62,6 +64,7 @@ class NavRulesTest {
         assertEquals(Screen.People, NavRules.selectedTab(Screen.People))
         assertEquals(Screen.Chats, NavRules.selectedTab(Screen.Chat))
         assertEquals(Screen.Chats, NavRules.selectedTab(Screen.PeerProfile))
+        assertEquals(Screen.Chats, NavRules.selectedTab(Screen.Scheduled))
         assertEquals(Screen.Groups, NavRules.selectedTab(Screen.NewGroup))
         assertEquals(Screen.Calls, NavRules.selectedTab(Screen.Calls))
         assertEquals(Screen.Status, NavRules.selectedTab(Screen.Status))
@@ -155,6 +158,7 @@ class NavRulesTest {
         assertEquals("Статус", NavRules.chromeTitle(Screen.Status))
         assertEquals("Настройки", NavRules.chromeTitle(Screen.Settings))
         assertEquals("Профиль", NavRules.chromeTitle(Screen.PeerProfile))
+        assertEquals("Отложенные", NavRules.chromeTitle(Screen.Scheduled))
         assertEquals("офлайн", NavRules.chromeTitle(Screen.Home, offline = true))
         Screen.entries.forEach { screen ->
             val title = NavRules.chromeTitle(screen)

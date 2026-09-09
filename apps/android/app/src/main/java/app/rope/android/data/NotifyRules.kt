@@ -13,7 +13,9 @@ object NotifyRules {
         appForeground: Boolean,
         muted: Boolean,
         globalMuted: Boolean = false,
+        silent: Boolean = false,
     ): Boolean {
+        if (silent) return false
         if (globalMuted || muted) return false
         return !(chatOpen && appForeground)
     }

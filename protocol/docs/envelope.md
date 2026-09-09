@@ -39,7 +39,7 @@ Inner plaintext for type=1 (`text`):
 N bytes UTF-8 text
 ```
 
-That UTF-8 text may be a JSON object for replies (`t`,`r`,`rp`,`rn`) with optional quote-span (`qt`,`qo`) or attributed forwards (`t`,`ff`). Forwards must not masquerade as replies.
+That UTF-8 text may be a JSON object for replies (`t`,`r`,`rp`,`rn`) with optional quote-span (`qt`,`qo`) or attributed forwards (`t`,`ff`). Optional `ns` is `1` for a silent send (no heads-up on the recipient). Omit `ns` when the send is normal. `ns` stays inside the AEAD plaintext — never a WSS field or envelope reserved byte. A silent send with no reply/forward must still be JSON `{"t":"...","ns":1}` so the flag survives; a plain string has no place for `ns`. Forwards must not masquerade as replies.
 
 Optional `qt` is the selected quote substring. Optional `qo` is a JSON array `[start,end]` of UTF-16 offsets into the quoted message (Kotlin `String` indices). A full-body reply omits `qt`/`qo` and keeps `rp` as the preview. Kotlin packs this JSON; the existing Rust `encrypt_message` / `encrypt_typed` path encrypts it. The relay never sees plaintext.
 
@@ -71,7 +71,7 @@ Optional `album_id` / `album_index` / `album_count` group 2–10 photos and/or v
 
 `kind=video` is the same type=2 object JSON (duration in `duration_ms`). The client compresses the clip to the existing 25 MiB object cap before `encryptObject`. Videos may be album members (`album_id` shared with photos). No new envelope type.
 
-Optional `caption` is UTF-8 text on a photo or video send (one caption per album, on the first member). Empty caption omits the key. Kotlin packs this JSON; the existing Rust `encrypt_typed` / `encryptObject` path encrypts it. The relay never sees plaintext.
+Optional `caption` is UTF-8 text on a photo or video send (one caption per album, on the first member). Empty caption omits the key. Optional `ns` is `1` for a silent send (same meaning as type=1). Kotlin packs this JSON; the existing Rust `encrypt_typed` / `encryptObject` path encrypts it. The relay never sees plaintext.
 
 Optional `ff` is the attributed-forward origin display name («Переслано от …»). It is not a reply quote. Forwards must not set reply fields (`r` / `rp` / `rn`). Local Saved Messages / Избранное (`peer_id=saved:`) stays in the client LocalStore and never becomes a mailbox envelope or object on the VPS.
 
@@ -83,7 +83,7 @@ The object store holds only ciphertext. The object key never appears in HTTP hea
 { "g": "group_id", "t": "text", "e": 2, "ff": "Анна" }
 ```
 
-Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only. Optional `qt` / `qo` are the same quote-span as type=1.
+Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only. Optional `qt` / `qo` are the same quote-span as type=1. Optional `ns` is `1` for a silent send.
 
 ### Encrypted objects (`ROCH`)
 

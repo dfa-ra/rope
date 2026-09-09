@@ -248,6 +248,14 @@ class MainActivity : AppCompatActivity() {
                     onDismissNotice = repo::dismissNotice,
                     onBack = repo::goBack,
                     onTab = { repo.go(it, tab = true) },
+                    onSilentSend = { repo.sendDraft(silent = true) },
+                    onSchedule = { fire, silent -> repo.enqueueScheduled(fire, silent) },
+                    onScheduleUris = { uris, fire, silent -> repo.enqueueScheduled(fire, silent, uris) },
+                    onOpenScheduled = repo::openScheduled,
+                    onDeleteScheduled = repo::deleteScheduled,
+                    onReschedule = repo::reschedule,
+                    onVoiceSilent = { repo.finishVoice(true, silent = true) },
+                    onVideoNoteSilent = { repo.finishVideoNote(true, silent = true) },
                 )
             }
         }

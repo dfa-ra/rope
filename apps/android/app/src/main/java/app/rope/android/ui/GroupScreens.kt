@@ -104,6 +104,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onBack: () -> Unit,
+    onScheduled: () -> Unit = {},
 ) {
     val g = state.group
     if (g == null) {
@@ -138,6 +139,9 @@ fun GroupInfoPane(
                         )
                     }
                 }
+            }
+            item {
+                ScheduledRowCard(state.scheduledCount, onScheduled)
             }
             item { Text("Участники", style = MaterialTheme.typography.titleSmall) }
             items(g.members, key = { it }) { id ->

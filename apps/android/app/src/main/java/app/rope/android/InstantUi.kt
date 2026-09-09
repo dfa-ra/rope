@@ -7,7 +7,7 @@ package app.rope.android
 object InstantUi {
     /** Global Rope AppBar. Chat / group info / peer profile own their single header. */
     fun showsAppBar(screen: Screen): Boolean = when (screen) {
-        Screen.Chat, Screen.GroupInfo, Screen.NewGroup, Screen.PeerProfile -> false
+        Screen.Chat, Screen.GroupInfo, Screen.NewGroup, Screen.PeerProfile, Screen.Scheduled -> false
         else -> true
     }
 
@@ -26,8 +26,8 @@ object InstantUi {
     fun instantTransition(from: Screen, to: Screen): Boolean {
         if (from == to) return true
         val messengerHop =
-            (NavRules.isMessengerTab(from) || from == Screen.Chat || from == Screen.GroupInfo || from == Screen.NewGroup || from == Screen.PeerProfile) &&
-                (NavRules.isMessengerTab(to) || to == Screen.Chat || to == Screen.GroupInfo || to == Screen.NewGroup || to == Screen.PeerProfile)
+            (NavRules.isMessengerTab(from) || from == Screen.Chat || from == Screen.GroupInfo || from == Screen.NewGroup || from == Screen.PeerProfile || from == Screen.Scheduled) &&
+                (NavRules.isMessengerTab(to) || to == Screen.Chat || to == Screen.GroupInfo || to == Screen.NewGroup || to == Screen.PeerProfile || to == Screen.Scheduled)
         return messengerHop
     }
 }

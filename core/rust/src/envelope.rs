@@ -475,6 +475,30 @@ mod tests {
     }
 
     #[test]
+    fn inner_json_ns_silent_flag_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let text = br#"{"t":"hi","ns":1}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_TEXT, text).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_TEXT);
+        assert_eq!(got.body, text);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"ns\":1"));
+        assert!(json.contains("\"t\":\"hi\""));
+        let media = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1,"ns":1}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, media).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, media);
+        let group = br#"{"g":"gid","t":"hi","e":1,"ns":1}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_GROUP_TEXT, group).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, group);
+        let meta = parse_envelope_meta(&env.bytes).unwrap();
+        assert_eq!(meta.msg_type, ENVELOPE_TYPE_GROUP_TEXT);
+    }
+
+    #[test]
     fn v1_text_still_works_after_typed_api() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();

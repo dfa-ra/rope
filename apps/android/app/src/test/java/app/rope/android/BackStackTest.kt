@@ -203,6 +203,7 @@ class BackStackTest {
         assertEquals(listOf(Screen.Chats), BackStack.listForForward(listOf(Screen.Chats, Screen.Chat)))
         assertEquals(listOf(Screen.Groups), BackStack.listForForward(listOf(Screen.Groups, Screen.Chat, Screen.GroupInfo)))
         assertEquals(listOf(Screen.Chats), BackStack.listForForward(listOf(Screen.Chats, Screen.Chat, Screen.PeerProfile)))
+        assertEquals(listOf(Screen.Chats), BackStack.listForForward(listOf(Screen.Chats, Screen.Chat, Screen.PeerProfile, Screen.Scheduled)))
         assertEquals(listOf(Screen.Home, Screen.Chats), BackStack.listForForward(listOf(Screen.Home)))
         assertEquals(listOf(Screen.Chats), BackStack.listForForward(emptyList()))
     }

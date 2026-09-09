@@ -176,6 +176,14 @@ fun RopeScaffold(
     onDismissNotice: () -> Unit,
     onBack: () -> Boolean = { false },
     onTab: (Screen) -> Unit = onGo,
+    onSilentSend: () -> Unit = onSend,
+    onSchedule: (Long, Boolean) -> Unit = { _, _ -> },
+    onScheduleUris: (List<Uri>, Long, Boolean) -> Unit = { _, _, _ -> },
+    onOpenScheduled: () -> Unit = {},
+    onDeleteScheduled: (String) -> Unit = {},
+    onReschedule: (String, Long) -> Unit = { _, _ -> },
+    onVoiceSilent: () -> Unit = { onVoiceFinish(true) },
+    onVideoNoteSilent: () -> Unit = { onVideoNoteFinish(true) },
 ) {
     val signedIn = state.profile != null
     val splash = rememberSplashOverlay(state)
@@ -327,6 +335,12 @@ fun RopeScaffold(
                             onVideoNoteFinish = onVideoNoteFinish,
                             onVideoNotePreview = onVideoNotePreview,
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
+                            onSilentSend = onSilentSend,
+                            onSchedule = onSchedule,
+                            onScheduleUris = onScheduleUris,
+                            onOpenScheduled = onOpenScheduled,
+                            onVoiceSilent = onVoiceSilent,
+                            onVideoNoteSilent = onVideoNoteSilent,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
@@ -341,12 +355,23 @@ fun RopeScaffold(
                             onCopyText,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(
+                            state, onAddMember, onRemoveMember, onLeaveGroup,
+                            onBack = { onBack() },
+                            onScheduled = onOpenScheduled,
+                        )
                         Screen.PeerProfile -> app.rope.android.ui.PeerProfilePane(
                             state,
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onScheduled = onOpenScheduled,
+                        )
+                        Screen.Scheduled -> app.rope.android.ui.ScheduledPane(
+                            state,
+                            onBack = { onBack() },
+                            onDelete = onDeleteScheduled,
+                            onReschedule = onReschedule,
                         )
                     }
                 }

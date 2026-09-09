@@ -25,6 +25,7 @@ data class MediaPayload(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val waveform: List<Int> = emptyList(),
+    val silent: Boolean = false,
 ) {
     fun withReply(
         replyTo: String?,
@@ -79,6 +80,7 @@ data class MediaPayload(
                 waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
                 put("wf", arr)
             }
+            SilentFlag.put(this, silent)
         }
         .toString()
 
@@ -137,6 +139,7 @@ data class MediaPayload(
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 waveform = readWaveform(o.optJSONArray("wf")),
+                silent = SilentFlag.read(o),
             )
         }
 
@@ -167,6 +170,7 @@ data class GroupTextPayload(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val silent: Boolean = false,
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
@@ -178,6 +182,7 @@ data class GroupTextPayload(
             if (replyName.isNotBlank()) put("rn", replyName)
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
             QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+            SilentFlag.put(this, silent)
         }
         .toString()
 
@@ -196,6 +201,7 @@ data class GroupTextPayload(
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                silent = SilentFlag.read(o),
             )
         }
     }
@@ -313,6 +319,7 @@ data class PackedText(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val silent: Boolean = false,
 )
 
 object TextBody {
@@ -325,18 +332,24 @@ object TextBody {
         quoteText: String = "",
         quoteStart: Int = -1,
         quoteEnd: Int = -1,
+        silent: Boolean = false,
     ): String {
         val from = JsonIds.optional(forwardedFrom)
         if (from != null) {
-            return JSONObject().put("t", text).put("ff", from).toString()
+            return JSONObject().put("t", text).put("ff", from).apply { SilentFlag.put(this, silent) }.toString()
         }
-        if (replyTo.isNullOrBlank()) return text
+        if (replyTo.isNullOrBlank() && !silent) return text
         return JSONObject()
             .put("t", text)
-            .put("r", replyTo)
-            .put("rp", replyPreview)
-            .put("rn", replyName)
-            .apply { QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd) }
+            .apply {
+                if (!replyTo.isNullOrBlank()) {
+                    put("r", replyTo)
+                    put("rp", replyPreview)
+                    put("rn", replyName)
+                    QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+                }
+                SilentFlag.put(this, silent)
+            }
             .toString()
     }
 
@@ -356,6 +369,7 @@ object TextBody {
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                silent = SilentFlag.read(o),
             )
         } catch (_: Exception) {
             PackedText(raw)

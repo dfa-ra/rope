@@ -83,6 +83,7 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -148,6 +149,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ScheduleRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -612,6 +614,12 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onSilentSend: () -> Unit = onSend,
+    onSchedule: (Long, Boolean) -> Unit = { _, _ -> },
+    onScheduleUris: (List<Uri>, Long, Boolean) -> Unit = { _, _, _ -> },
+    onOpenScheduled: () -> Unit = {},
+    onVoiceSilent: () -> Unit = { onVoiceFinish(true) },
+    onVideoNoteSilent: () -> Unit = { onVideoNoteFinish(true) },
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -648,6 +656,9 @@ fun ChatPane(
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
+    var sendMenu by remember { mutableStateOf(false) }
+    var scheduleOpen by remember { mutableStateOf(false) }
+    var scheduleUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
@@ -755,6 +766,11 @@ fun ChatPane(
                 }
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
+                }
+                if (saved) {
+                    IconButton(onClick = onOpenScheduled) {
+                        Icon(Icons.Outlined.Schedule, contentDescription = ScheduleRules.LIST_TITLE)
+                    }
                 }
                 if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
                     IconButton(onClick = onCall) {
@@ -962,6 +978,11 @@ fun ChatPane(
                 state = state,
                 onDraft = onDraft,
                 onSend = onSend,
+                onLongSend = {
+                    if (state.editTarget != null) return@ComposerBar
+                    sendMenu = true
+                },
+                onOpenScheduled = onOpenScheduled,
                 onAttach = { showAttach = true },
                 onVoiceStart = onVoiceStart,
                 onVoiceFinish = onVoiceFinish,
@@ -1000,6 +1021,7 @@ fun ChatPane(
             onPreviewReady = onVideoNotePreview,
             onPreviewGone = onVideoNotePreviewGone,
             onSend = { onVideoNoteFinish(true) },
+            onLongSend = { sendMenu = true },
             onCancel = { onVideoNoteFinish(false) },
         )
     }
@@ -1026,7 +1048,49 @@ fun ChatPane(
                 showAttach = false
                 onVideoNoteStart()
             },
+            onSchedule = { selected ->
+                showAttach = false
+                if (selected.isNotEmpty()) {
+                    scheduleUris = selected
+                    scheduleOpen = true
+                } else if (state.draftText.isNotBlank() || state.pendingAttachments.isNotEmpty()) {
+                    scheduleUris = emptyList()
+                    scheduleOpen = true
+                } else {
+                    scheduleUris = emptyList()
+                    scheduleOpen = true
+                }
+            },
             onDismiss = { showAttach = false },
+        )
+    }
+    if (sendMenu) {
+        SendOptionsSheet(
+            onSilent = {
+                sendMenu = false
+                when {
+                    state.recordingVideoNote -> onVideoNoteSilent()
+                    state.recording -> onVoiceSilent()
+                    else -> onSilentSend()
+                }
+            },
+            onSchedule = {
+                sendMenu = false
+                scheduleUris = emptyList()
+                scheduleOpen = true
+            },
+            onDismiss = { sendMenu = false },
+        )
+    }
+    if (scheduleOpen) {
+        ScheduleTimeSheet(
+            onConfirm = { fire, silent ->
+                scheduleOpen = false
+                val uris = scheduleUris
+                scheduleUris = emptyList()
+                if (uris.isNotEmpty()) onScheduleUris(uris, fire, silent) else onSchedule(fire, silent)
+            },
+            onDismiss = { scheduleOpen = false },
         )
     }
 }
@@ -1862,6 +1926,8 @@ private fun ComposerBar(
     state: UiState,
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
+    onLongSend: () -> Unit = {},
+    onOpenScheduled: () -> Unit = {},
     onAttach: () -> Unit,
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
@@ -1953,6 +2019,13 @@ private fun ComposerBar(
                     onCancel = onCancelPendingMedia,
                 )
             }
+            if (state.editTarget == null && state.scheduledCount > 0) {
+                TextButton(onClick = onOpenScheduled, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.Schedule, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(ScheduleRules.PENDING_HINT, modifier = Modifier.weight(1f))
+                }
+            }
             if (showEmoji && !state.recording) {
                 EmojiPickerPanel(
                     onPick = {
@@ -2043,6 +2116,7 @@ private fun ComposerBar(
                 if (showSend) {
                     SendActionButton(
                         locked = recordingLocked,
+                        canLongPress = state.editTarget == null,
                         onSend = {
                             if (recordingLocked || state.recording) {
                                 onVoiceFinish(true)
@@ -2050,6 +2124,15 @@ private fun ComposerBar(
                                 debounce?.cancel()
                                 onDraft(localText)
                                 onSend()
+                            }
+                        },
+                        onLongSend = {
+                            if (recordingLocked || state.recording) {
+                                onLongSend()
+                            } else {
+                                debounce?.cancel()
+                                onDraft(localText)
+                                onLongSend()
                             }
                         },
                     )
@@ -2097,10 +2180,13 @@ private fun ComposerBar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SendActionButton(
     locked: Boolean,
+    canLongPress: Boolean = true,
     onSend: () -> Unit,
+    onLongSend: () -> Unit = {},
 ) {
     var tick by remember { mutableStateOf(0) }
     val reduce = rememberReduceMotion()
@@ -2109,11 +2195,19 @@ private fun SendActionButton(
         animationSpec = spring(dampingRatio = 0.42f, stiffness = 480f),
         label = "sendPop",
     )
-    IconButton(
-        onClick = {
-            tick += 1
-            onSend()
-        },
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(48.dp)
+            .combinedClickable(
+                onClick = {
+                    tick += 1
+                    onSend()
+                },
+                onLongClick = {
+                    if (canLongPress) onLongSend()
+                },
+            ),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
             if (!reduce && tick > 0) {
@@ -2395,6 +2489,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onSchedule: (List<Uri>) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2500,6 +2595,11 @@ private fun AttachSheet(
                 Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Файл", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = { onSchedule(selected) }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Schedule, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text("Отложить", modifier = Modifier.weight(1f))
             }
             TextButton(onClick = onVideoNote, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Outlined.Videocam, contentDescription = null)

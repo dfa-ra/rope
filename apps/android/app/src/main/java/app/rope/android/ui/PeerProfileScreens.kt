@@ -45,6 +45,7 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onScheduled: () -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
@@ -93,6 +94,9 @@ fun PeerProfilePane(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                ScheduledRowCard(state.scheduledCount, onScheduled)
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
                 Text(

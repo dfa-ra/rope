@@ -33,6 +33,42 @@ class NotifyRulesTest {
     }
 
     @Test
+    fun silentSendNeverAlerts() {
+        assertFalse(
+            NotifyRules.shouldAlert(
+                chatOpen = false,
+                appForeground = false,
+                muted = false,
+                silent = true,
+            ),
+        )
+        assertFalse(
+            NotifyRules.shouldAlert(
+                chatOpen = true,
+                appForeground = false,
+                muted = false,
+                silent = true,
+            ),
+        )
+        assertTrue(
+            NotifyRules.shouldAlert(
+                chatOpen = false,
+                appForeground = false,
+                muted = false,
+                silent = false,
+            ),
+        )
+    }
+
+    @Test
+    fun mutedAndGlobalMuteStayIndependentOfSilent() {
+        assertFalse(NotifyRules.shouldAlert(false, false, muted = true, silent = false))
+        assertFalse(NotifyRules.shouldAlert(false, false, muted = false, globalMuted = true, silent = false))
+        assertFalse(NotifyRules.shouldAlert(false, false, muted = false, silent = true))
+        assertTrue(NotifyRules.shouldAlert(false, false, muted = false, globalMuted = false, silent = false))
+    }
+
+    @Test
     fun selectionTitleIsOneString() {
         assertEquals("Выбрано 1", ChatSelection.title(1))
         assertEquals("Выбрано 3", ChatSelection.title(3))

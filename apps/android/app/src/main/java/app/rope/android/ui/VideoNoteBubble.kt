@@ -6,9 +6,11 @@ import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.VideoView
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -142,12 +144,14 @@ fun VideoNoteBubble(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoNoteRecorderOverlay(
     recordMs: Long,
     onPreviewReady: (SurfaceHolder, Int) -> Unit,
     onPreviewGone: () -> Unit,
     onSend: () -> Unit,
+    onLongSend: () -> Unit = {},
     onCancel: () -> Unit,
 ) {
     Box(
@@ -229,14 +233,15 @@ fun VideoNoteRecorderOverlay(
         ) {
             Icon(Icons.Outlined.Close, contentDescription = "Отменить кружок", tint = Color.White)
         }
-        IconButton(
-            onClick = onSend,
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 36.dp)
                 .size(64.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
+                .background(MaterialTheme.colorScheme.primary)
+                .combinedClickable(onClick = onSend, onLongClick = onLongSend),
         ) {
             Icon(Icons.Outlined.Send, contentDescription = "Отправить кружок", tint = Color.White)
         }

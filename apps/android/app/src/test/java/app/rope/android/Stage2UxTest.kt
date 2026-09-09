@@ -229,6 +229,10 @@ class Stage2UxTest {
         assertEquals(null, plain.replyTo)
         val notReplyJson = TextBody.decode("""{"hello":"world"}""")
         assertEquals("""{"hello":"world"}""", notReplyJson.text)
+        val silent = TextBody.encode("ночью", null, "", "", silent = true)
+        assertTrue(silent.contains("\"ns\":1"))
+        assertEquals("ночью", TextBody.decode(silent).text)
+        assertTrue(TextBody.decode(silent).silent)
         assertEquals(null, JsonIds.optional("null"))
     }
 
