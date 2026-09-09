@@ -4,7 +4,6 @@ import android.content.Context
 import net.schmizz.sshj.DefaultConfig
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
-import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.xfer.FileSystemFile
 import java.io.File
@@ -104,15 +103,16 @@ class SshProvisioner(
     }
 
     private fun connect(host: String, port: Int): SSHClient {
+        val pin = PinningHostKeyVerifier()
         return try {
-            open(host, port, disableCurve25519 = false)
+            open(host, port, disableCurve25519 = false, pin)
         } catch (e: Exception) {
             if (!looksLikeMissingX25519(e)) throw e
-            open(host, port, disableCurve25519 = true)
+            open(host, port, disableCurve25519 = true, pin)
         }
     }
 
-    private fun open(host: String, port: Int, disableCurve25519: Boolean): SSHClient {
+    private fun open(host: String, port: Int, disableCurve25519: Boolean, verifier: PinningHostKeyVerifier): SSHClient {
         val config = DefaultConfig()
         if (disableCurve25519) {
             val kept = config.keyExchangeFactories.filter { factory ->
@@ -121,7 +121,7 @@ class SshProvisioner(
             config.keyExchangeFactories = kept
         }
         val ssh = SSHClient(config)
-        ssh.addHostKeyVerifier(PromiscuousVerifier())
+        ssh.addHostKeyVerifier(verifier)
         ssh.connect(host, port)
         return ssh
     }
