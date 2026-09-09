@@ -60,6 +60,7 @@ import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
 import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.WallpaperRules
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
@@ -165,6 +166,7 @@ data class UiState(
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
+    val chatWallpaper: String = WallpaperRules.DEFAULT,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
@@ -254,6 +256,7 @@ class RopeRepository(private val app: Application) {
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
                 _state.value = _state.value.copy(
                     theme = store.themeMode(night),
+                    chatWallpaper = store.chatWallpaper(),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
@@ -578,6 +581,13 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun setChatWallpaper(id: String) {
+        val next = WallpaperRules.parse(id)
+        if (_state.value.chatWallpaper == next) return
+        store.saveChatWallpaper(next)
+        _state.value = _state.value.copy(chatWallpaper = next)
     }
 
     fun toggleNotificationsMuted() {

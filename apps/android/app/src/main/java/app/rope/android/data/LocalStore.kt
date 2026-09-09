@@ -382,6 +382,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         put("theme", mode.name)
     }
 
+    fun saveChatWallpaper(id: String) {
+        put("chat_wallpaper", WallpaperRules.parse(id))
+    }
+
+    fun chatWallpaper(): String = WallpaperRules.parse(get("chat_wallpaper"))
+
     fun saveNotificationsMuted(muted: Boolean) {
         put("notifications_muted", if (muted) "1" else "0")
     }

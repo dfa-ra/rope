@@ -1,6 +1,7 @@
 package app.rope.android.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.WallpaperRules
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +38,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetWallpaper: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -143,6 +146,26 @@ fun SettingsPane(
                         onClick = { onSetTheme(ThemeMode.LIGHT) },
                         label = { Text("Светлая") },
                     )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Обои чата", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    WallpaperRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val current = WallpaperRules.parse(state.chatWallpaper)
+                    WallpaperRules.PRESETS.forEach { preset ->
+                        FilterChip(
+                            selected = current == preset.id,
+                            onClick = { onSetWallpaper(preset.id) },
+                            label = { Text(preset.label) },
+                        )
+                    }
                 }
             }
         }

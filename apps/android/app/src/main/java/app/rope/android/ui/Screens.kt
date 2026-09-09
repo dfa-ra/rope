@@ -153,6 +153,7 @@ fun RopeScaffold(
     onUnbindCallLocal: (org.webrtc.VideoSink) -> Unit = {},
     onToggleTheme: () -> Unit,
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
+    onSetWallpaper: (String) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
     onToggleLinkPreviews: () -> Unit = {},
     onCopyText: (String) -> Unit = {},
@@ -348,6 +349,7 @@ fun RopeScaffold(
                             onToggleNotifications,
                             onCopyText,
                             onToggleLinkPreviews,
+                            onSetWallpaper,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }

@@ -233,6 +233,7 @@ class MainActivity : AppCompatActivity() {
                     onUnbindCallLocal = { (application as RopeApp).repo.unbindCallLocal(it) },
                     onToggleTheme = repo::toggleTheme,
                     onSetTheme = repo::setTheme,
+                    onSetWallpaper = repo::setChatWallpaper,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
                     onCopyText = repo::copyText,

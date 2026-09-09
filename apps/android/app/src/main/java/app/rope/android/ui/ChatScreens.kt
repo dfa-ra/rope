@@ -161,6 +161,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.WallpaperRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -819,7 +820,17 @@ fun ChatPane(
         if (flashId == id) flashId = null
     }
     val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
-    Box(Modifier.fillMaxSize()) {
+    val wallpaperArgb = WallpaperRules.argb(
+        state.chatWallpaper,
+        dark = MaterialTheme.colorScheme.background == RopeDarkBg,
+    )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(
+                if (wallpaperArgb != null) Modifier.background(Color(wallpaperArgb)) else Modifier,
+            ),
+    ) {
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
             Row(
