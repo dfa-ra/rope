@@ -1,20 +1,29 @@
 package app.rope.android.media
 
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.media.PlaybackParams
 import android.os.Build
+import app.rope.android.data.VoicePlayback
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 data class VoiceTake(
     val file: File,
     val durationMs: Long,
+    val waveform: List<Int> = emptyList(),
 )
 
 class VoiceRecorder(private val context: Context) {
     private var recorder: MediaRecorder? = null
     private var file: File? = null
     private var startedAt = 0L
+    private val amplitudes = mutableListOf<Int>()
 
     val recording: Boolean get() = recorder != null
 
@@ -39,15 +48,28 @@ class VoiceRecorder(private val context: Context) {
         recorder = rec
         file = dest
         startedAt = System.currentTimeMillis()
+        amplitudes.clear()
         return dest
+    }
+
+    fun amplitude(): Int {
+        val v = try {
+            recorder?.maxAmplitude ?: 0
+        } catch (_: Exception) {
+            0
+        }
+        if (v > 0) amplitudes += v
+        return v
     }
 
     fun stop(): VoiceTake? {
         val dest = file ?: return null
+        val samples = amplitudes.toList()
         return try {
             recorder?.stop()
             val ms = (System.currentTimeMillis() - startedAt).coerceAtLeast(0)
-            VoiceTake(dest, ms)
+            val bars = VoicePlayback.barsFromAmplitudes(samples)
+            VoiceTake(dest, ms, VoicePlayback.encodeWaveform(bars).takeIf { bars.isNotEmpty() }.orEmpty())
         } catch (_: Exception) {
             dest.delete()
             null
@@ -73,6 +95,7 @@ class VoiceRecorder(private val context: Context) {
         recorder = null
         file = null
         startedAt = 0
+        amplitudes.clear()
     }
 
     companion object {
@@ -86,6 +109,8 @@ class VoicePlayer {
     var playingId: String? = null
         private set
     var loadedId: String? = null
+        private set
+    var speed: Float = VoicePlayback.SPEED_1X
         private set
 
     /** Playing now, or paused with a kept position. */
@@ -120,6 +145,7 @@ class VoicePlayer {
                 playingId = null
             } else {
                 try {
+                    applySpeed()
                     player?.start()
                     playingId = id
                 } catch (_: Exception) {
@@ -128,15 +154,58 @@ class VoicePlayer {
             }
             return
         }
+        prepare(id, path, start = true)
+    }
+
+    fun seek(id: String, path: String, positionMs: Long) {
+        if (loadedId != id || player == null) {
+            prepare(id, path, start = true)
+        }
+        val p = player ?: return
+        val dur = durationMs()
+        val target = positionMs.coerceIn(0L, if (dur > 0L) dur else positionMs.coerceAtLeast(0L))
+        try {
+            p.seekTo(target.toInt())
+        } catch (_: Exception) {
+        }
+    }
+
+    fun setSpeed(next: Float) {
+        speed = VoicePlayback.clampSpeed(next)
+        applySpeed()
+    }
+
+    fun cycleSpeed(): Float {
+        setSpeed(VoicePlayback.nextSpeed(speed))
+        return speed
+    }
+
+    private fun prepare(id: String, path: String, start: Boolean) {
         stop()
         val p = MediaPlayer()
         p.setDataSource(path)
         p.setOnCompletionListener { stop() }
         p.prepare()
-        p.start()
         player = p
         loadedId = id
-        playingId = id
+        applySpeed()
+        if (start) {
+            p.start()
+            playingId = id
+        }
+    }
+
+    private fun applySpeed() {
+        val p = player ?: return
+        try {
+            val params = try {
+                p.playbackParams
+            } catch (_: Exception) {
+                PlaybackParams()
+            }
+            p.playbackParams = params.setSpeed(speed)
+        } catch (_: Exception) {
+        }
     }
 
     fun stop() {
@@ -151,5 +220,96 @@ class VoicePlayer {
         player = null
         playingId = null
         loadedId = null
+    }
+}
+
+/** Decode AAC/M4A to RMS bars. Failures fall back to a seeded waveform. */
+object VoiceWaveform {
+    fun extract(path: String, bars: Int = VoicePlayback.BARS): List<Int> {
+        val file = File(path)
+        if (!file.isFile || file.length() < 16) return emptyList()
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(path)
+            val track = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME).orEmpty().startsWith("audio/")
+            } ?: return emptyList()
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: return emptyList()
+            val codec = MediaCodec.createDecoderByType(mime)
+            codec.configure(format, null, null, 0)
+            codec.start()
+            val pcm = ArrayList<Short>(16_384)
+            val info = MediaCodec.BufferInfo()
+            var inputDone = false
+            var outputDone = false
+            while (!outputDone && pcm.size < 2_000_000) {
+                if (!inputDone) {
+                    val inIx = codec.dequeueInputBuffer(8_000)
+                    if (inIx >= 0) {
+                        val buf = codec.getInputBuffer(inIx) ?: break
+                        val size = extractor.readSampleData(buf, 0)
+                        if (size < 0) {
+                            codec.queueInputBuffer(inIx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            codec.queueInputBuffer(inIx, 0, size, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+                val outIx = codec.dequeueOutputBuffer(info, 8_000)
+                if (outIx >= 0) {
+                    val out = codec.getOutputBuffer(outIx)
+                    if (out != null && info.size > 0) {
+                        appendPcm(out, info, pcm)
+                    }
+                    codec.releaseOutputBuffer(outIx, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
+                }
+            }
+            codec.stop()
+            codec.release()
+            if (pcm.isEmpty()) return emptyList()
+            val samples = ShortArray(pcm.size)
+            pcm.forEachIndexed { i, s -> samples[i] = s }
+            VoicePlayback.encodeWaveform(rmsBars(samples, bars), bars)
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
+
+    private fun appendPcm(out: ByteBuffer, info: MediaCodec.BufferInfo, pcm: MutableList<Short>) {
+        out.position(info.offset)
+        out.limit(info.offset + info.size)
+        val slice = out.slice().order(ByteOrder.LITTLE_ENDIAN)
+        while (slice.remaining() >= 2) {
+            pcm += slice.short
+        }
+    }
+
+    private fun rmsBars(samples: ShortArray, bars: Int): List<Float> {
+        if (samples.isEmpty() || bars <= 0) return emptyList()
+        val window = (samples.size / bars).coerceAtLeast(1)
+        return List(bars) { i ->
+            val start = i * window
+            val end = if (i == bars - 1) samples.size else (start + window).coerceAtMost(samples.size)
+            if (start >= end) 0.18f else {
+                var acc = 0.0
+                var n = 0
+                var j = start
+                while (j < end) {
+                    val v = samples[j].toInt()
+                    acc += v * v
+                    n++
+                    j++
+                }
+                val rms = kotlin.math.sqrt(acc / n.coerceAtLeast(1)).toFloat() / 32768f
+                rms.coerceIn(0f, 1f)
+            }
+        }
     }
 }

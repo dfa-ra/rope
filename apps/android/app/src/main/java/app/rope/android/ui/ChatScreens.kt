@@ -606,6 +606,12 @@ fun ChatPane(
     onAttachFile: () -> Unit = onAttach,
     onAttachUri: (Uri) -> Unit = {},
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
+    onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
+    onCycleVoiceSpeed: () -> Unit = {},
+    onVideoNoteStart: () -> Unit = {},
+    onVideoNoteFinish: (Boolean) -> Unit = {},
+    onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
+    onVideoNotePreviewGone: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -986,6 +992,15 @@ fun ChatPane(
             onOpen = { onOpenImage(target); menuMessage = null },
         )
     }
+    if (state.recordingVideoNote) {
+        VideoNoteRecorderOverlay(
+            recordMs = state.recordMs,
+            onPreviewReady = onVideoNotePreview,
+            onPreviewGone = onVideoNotePreviewGone,
+            onSend = { onVideoNoteFinish(true) },
+            onCancel = { onVideoNoteFinish(false) },
+        )
+    }
     }
     if (showAttach) {
         AttachSheet(
@@ -1004,6 +1019,10 @@ fun ChatPane(
             onUris = { uris ->
                 showAttach = false
                 onAttachUris(uris)
+            },
+            onVideoNote = {
+                showAttach = false
+                onVideoNoteStart()
             },
             onDismiss = { showAttach = false },
         )
@@ -1291,8 +1310,12 @@ private fun MessageBubble(
                                 playing = state.playingVoiceId == m.id,
                                 positionMs = if (state.voiceProgressId == m.id) state.voicePositionMs else 0L,
                                 playerDurationMs = if (state.voiceProgressId == m.id) state.voiceDurationMs else 0L,
+                                speed = state.voiceSpeed,
                                 onPlay = onPlay,
+                                onSeek = onSeekVoice,
+                                onCycleSpeed = onCycleVoiceSpeed,
                             )
+                            MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
                             MessageKind.FILE -> FileBubble(m)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
@@ -2367,6 +2390,7 @@ private fun AttachSheet(
     onFile: () -> Unit,
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
+    onVideoNote: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2472,6 +2496,11 @@ private fun AttachSheet(
                 Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Файл", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onVideoNote, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Videocam, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text("Видеосообщение", modifier = Modifier.weight(1f))
             }
             Spacer(Modifier.height(16.dp))
         }

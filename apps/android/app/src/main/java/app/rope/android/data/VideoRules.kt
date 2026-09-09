@@ -56,6 +56,7 @@ object VideoRules {
         return "mp4"
     }
 
-    /** Photos and videos share albums; voice/file stay singles. */
-    fun albumEligible(kind: String): Boolean = kind == "image" || kind == "video"
+    /** Photos and videos share albums; voice / file / video-note stay singles. */
+    fun albumEligible(kind: String): Boolean =
+        (kind == "image" || kind == "video") && !VideoNoteRules.isNote(kind)
 }

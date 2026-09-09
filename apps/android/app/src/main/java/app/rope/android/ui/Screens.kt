@@ -121,6 +121,12 @@ fun RopeScaffold(
     onAttachUris: (List<Uri>) -> Unit = {},
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
+    onSeekVoice: (app.rope.android.data.ChatMessage, Long) -> Unit = { _, _ -> },
+    onCycleVoiceSpeed: () -> Unit = {},
+    onVideoNoteStart: () -> Unit = {},
+    onVideoNoteFinish: (Boolean) -> Unit = {},
+    onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
+    onVideoNotePreviewGone: () -> Unit = {},
     onCall: () -> Unit,
     onVideoCall: () -> Unit = {},
     onPlay: (app.rope.android.data.ChatMessage) -> Unit,
@@ -315,6 +321,12 @@ fun RopeScaffold(
                             onAttachFile = onAttachFile,
                             onAttachUri = onAttachUri,
                             onAttachUris = onAttachUris,
+                            onSeekVoice = onSeekVoice,
+                            onCycleVoiceSpeed = onCycleVoiceSpeed,
+                            onVideoNoteStart = onVideoNoteStart,
+                            onVideoNoteFinish = onVideoNoteFinish,
+                            onVideoNotePreview = onVideoNotePreview,
+                            onVideoNotePreviewGone = onVideoNotePreviewGone,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }

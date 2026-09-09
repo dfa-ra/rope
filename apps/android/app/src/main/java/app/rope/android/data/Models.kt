@@ -11,6 +11,7 @@ enum class MessageKind {
     VOICE,
     IMAGE,
     VIDEO,
+    VIDEO_NOTE,
     FILE,
     GROUP_TEXT,
     CALL,

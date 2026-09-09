@@ -2,7 +2,6 @@ package app.rope.android
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -23,7 +22,6 @@ import androidx.lifecycle.LifecycleOwner
 import app.rope.android.data.CallMediaStart
 import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
-import app.rope.android.update.DeviceBackup
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import java.io.File
@@ -104,6 +102,17 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (cam) repo.toggleCallCamera() else repo.cameraDenied()
             }
+            "video-note" -> {
+                if (!mic) {
+                    repo.micDenied()
+                    return@registerForActivityResult
+                }
+                if (!cam) {
+                    repo.cameraDenied()
+                    return@registerForActivityResult
+                }
+                repo.startVideoNote()
+            }
         }
     }
 
@@ -120,10 +129,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         splash.setKeepOnScreenCondition { !composeReady.get() }
         val repo = (application as RopeApp).repo
-        repo.start(
-            if (intent?.action == ApkInstaller.ACTION) null else intent?.data?.toString(),
-        )
-        handleInstallResult(intent)
+        repo.start(intent?.data?.toString())
         requestNotifications()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
@@ -174,6 +180,12 @@ class MainActivity : AppCompatActivity() {
                     onAttachUris = { (application as RopeApp).repo.stageAttachments(it) },
                     onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
+                    onSeekVoice = repo::seekVoice,
+                    onCycleVoiceSpeed = repo::cycleVoiceSpeed,
+                    onVideoNoteStart = { withNoteMedia { repo.startVideoNote() } },
+                    onVideoNoteFinish = repo::finishVideoNote,
+                    onVideoNotePreview = repo::bindVideoNotePreview,
+                    onVideoNotePreviewGone = repo::unbindVideoNotePreview,
                     onCall = { withMic("call") { repo.startCall() } },
                     onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,
@@ -244,41 +256,6 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleInstallResult(intent)
-    }
-
-    private fun handleInstallResult(intent: Intent?) {
-        if (intent?.action != ApkInstaller.ACTION) return
-        val repo = (application as RopeApp).repo
-        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-        when (status) {
-            PackageInstaller.STATUS_SUCCESS -> repo.onApkInstalled()
-            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                val confirm = if (Build.VERSION.SDK_INT >= 33) {
-                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(Intent.EXTRA_INTENT)
-                }
-                if (confirm != null) {
-                    startActivity(confirm)
-                } else {
-                    repo.onApkInstallFailed("система не показала окно установки", status)
-                }
-            }
-            PackageInstaller.STATUS_FAILURE_CONFLICT,
-            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE,
-            -> repo.onApkInstallFailed(
-                "Старая сборка подписана другим ключом CI. Ключ и логин лежат в Загрузках как ${DeviceBackup.FILE_NAME}. " +
-                    "Удалите Rope, поставьте APK из Загрузок и на старте нажмите «Восстановить устройство».",
-                status,
-            )
-            else -> repo.onApkInstallFailed(
-                intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                    ?: "установка не удалась ($status)",
-                status,
-            )
-        }
     }
 
     private fun tryInstallPending() {
@@ -295,6 +272,17 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             startedInstallFor = null
             repo.onApkInstallFailed(e.message ?: "не удалось начать установку", -1)
+        }
+    }
+
+    private fun withNoteMedia(granted: () -> Unit) {
+        if (hasMic() && hasCam()) {
+            granted()
+        } else {
+            afterAudio = "video-note"
+            callMediaPerm.launch(
+                arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA),
+            )
         }
     }
 

@@ -46,6 +46,8 @@ class VoiceEmojiTest {
         assertEquals(VoicePlayback.BARS, bars.size)
         assertTrue(bars.all { it in 0.28f..1f })
         assertEquals(VoicePlayback.waveform("msg-1"), VoicePlayback.waveform("msg-1"))
+        assertEquals(1.5f, VoicePlayback.nextSpeed(1f), 0.0001f)
+        assertEquals("2x", VoicePlayback.speedLabel(2f))
     }
 
     @Test

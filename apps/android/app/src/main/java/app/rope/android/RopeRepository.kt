@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.Base64
+import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
@@ -63,11 +64,15 @@ import app.rope.android.data.NotifyRules
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
+import app.rope.android.data.VideoNoteRules
+import app.rope.android.data.VoicePlayback
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
+import app.rope.android.media.VideoNoteRecorder
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
+import app.rope.android.media.VoiceWaveform
 import app.rope.android.media.WebRtcSession
 import app.rope.android.media.WssAudioSession
 import org.webrtc.VideoSink
@@ -135,11 +140,13 @@ data class UiState(
     val draftText: String = "",
     val onlineIds: Set<String> = emptySet(),
     val recording: Boolean = false,
+    val recordingVideoNote: Boolean = false,
     val recordMs: Long = 0,
     val playingVoiceId: String? = null,
     val voiceProgressId: String? = null,
     val voicePositionMs: Long = 0,
     val voiceDurationMs: Long = 0,
+    val voiceSpeed: Float = VoicePlayback.SPEED_1X,
     val call: CallInfo? = null,
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
@@ -186,6 +193,7 @@ class RopeRepository(private val app: Application) {
     private val notifier = RopeNotifier(app)
     private val voiceRecorder = VoiceRecorder(app)
     private val voicePlayer = VoicePlayer()
+    private val videoNoteRecorder = VideoNoteRecorder(app)
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
@@ -284,7 +292,7 @@ class RopeRepository(private val app: Application) {
                 true
             }
             BackLayer.CancelRecording -> {
-                finishVoice(false)
+                if (s.recordingVideoNote) finishVideoNote(false) else finishVoice(false)
                 true
             }
             BackLayer.ClearMessageQuery -> {
@@ -911,15 +919,16 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startVoice() {
-        if (_state.value.recording) return
+        if (_state.value.recording || _state.value.recordingVideoNote) return
         try {
             voiceRecorder.start()
             _state.value = _state.value.copy(recording = true, recordMs = 0, error = null)
             recordJob?.cancel()
             recordJob = scope.launch {
                 while (_state.value.recording) {
-                    delay(200)
-                    val next = _state.value.recordMs + 200
+                    delay(80)
+                    voiceRecorder.amplitude()
+                    val next = _state.value.recordMs + 80
                     _state.value = _state.value.copy(recordMs = next)
                     if (next >= VoiceRecorder.MAX_MS) {
                         finishVoice(send = true)
@@ -951,11 +960,84 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             try {
                 val bytes = take.file.readBytes()
+                val wave = take.waveform.ifEmpty { VoiceWaveform.extract(take.file.absolutePath) }
                 sendMediaBytes(
                     bytes,
                     "audio/mp4",
                     take.file.name,
                     "voice",
+                    take.durationMs,
+                    pack = pack,
+                    destPeer = destPeer,
+                    destGroup = destGroup,
+                    waveform = wave,
+                )
+            } catch (e: Exception) {
+                error(e)
+            } finally {
+                take.file.delete()
+            }
+        }
+    }
+
+    fun startVideoNote() {
+        if (_state.value.recording || _state.value.recordingVideoNote || _state.value.call != null) return
+        _state.value = _state.value.copy(recordingVideoNote = true, recordMs = 0, error = null)
+    }
+
+    fun bindVideoNotePreview(holder: SurfaceHolder, displayRotationDeg: Int) {
+        if (!_state.value.recordingVideoNote || videoNoteRecorder.recording) return
+        try {
+            videoNoteRecorder.start(holder, displayRotationDeg)
+            recordJob?.cancel()
+            recordJob = scope.launch {
+                while (_state.value.recordingVideoNote && videoNoteRecorder.recording) {
+                    delay(200)
+                    val next = _state.value.recordMs + 200
+                    _state.value = _state.value.copy(recordMs = next)
+                    if (next >= VideoNoteRules.MAX_MS) {
+                        finishVideoNote(send = true)
+                        break
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            videoNoteRecorder.cancel()
+            _state.value = _state.value.copy(recordingVideoNote = false, recordMs = 0)
+            error(e)
+        }
+    }
+
+    fun unbindVideoNotePreview() {
+        if (_state.value.recordingVideoNote && videoNoteRecorder.recording) {
+            finishVideoNote(false)
+        }
+    }
+
+    fun finishVideoNote(send: Boolean) {
+        val take = try {
+            videoNoteRecorder.stop()
+        } catch (_: Exception) {
+            null
+        }
+        recordJob?.cancel()
+        _state.value = _state.value.copy(recordingVideoNote = false, recordMs = 0)
+        if (!send || take == null || take.durationMs < VideoNoteRules.MIN_MS) {
+            take?.file?.delete()
+            return
+        }
+        val pack = replyPack(_state.value.replyTo)
+        val destPeer = _state.value.peer
+        val destGroup = _state.value.group
+        _state.value = _state.value.copy(replyTo = null, replySpan = null)
+        scope.launch {
+            try {
+                val bytes = take.file.readBytes()
+                sendMediaBytes(
+                    bytes,
+                    "video/mp4",
+                    take.file.name,
+                    VideoNoteRules.KIND,
                     take.durationMs,
                     pack = pack,
                     destPeer = destPeer,
@@ -989,12 +1071,38 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun seekVoice(msg: ChatMessage, positionMs: Long) {
+        val path = msg.localPath
+        if (path.isNullOrBlank()) {
+            retryMedia(msg)
+            return
+        }
+        voicePlayer.seek(msg.id, path, positionMs)
+        publishVoiceProgress()
+        voiceProgressJob?.cancel()
+        if (voicePlayer.playingId != null) {
+            voiceProgressJob = scope.launch {
+                while (voicePlayer.playingId != null) {
+                    delay(80)
+                    publishVoiceProgress()
+                }
+                publishVoiceProgress()
+            }
+        }
+    }
+
+    fun cycleVoiceSpeed() {
+        voicePlayer.cycleSpeed()
+        publishVoiceProgress()
+    }
+
     private fun publishVoiceProgress() {
         _state.value = _state.value.copy(
             playingVoiceId = voicePlayer.playingId,
             voiceProgressId = voicePlayer.activeId,
             voicePositionMs = voicePlayer.positionMs(),
             voiceDurationMs = voicePlayer.durationMs(),
+            voiceSpeed = voicePlayer.speed,
         )
     }
 
@@ -1016,7 +1124,7 @@ class RopeRepository(private val app: Application) {
 
     fun ensureMedia(msg: ChatMessage, force: Boolean = false) {
         if (msg.extra.isBlank()) return
-        if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE && msg.kind != MessageKind.VIDEO) return
+        if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE && msg.kind != MessageKind.VIDEO && msg.kind != MessageKind.VIDEO_NOTE) return
         val path = msg.localPath
         if (!force && path != null && File(path).isFile && File(path).length() > 8) return
         if (!force && !mediaAttempts.add(msg.id)) return
@@ -1430,6 +1538,7 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = ReplyPack(),
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
+        waveform: List<Int> = emptyList(),
     ) {
         val id = identity ?: return
         val group = destGroup
@@ -1455,6 +1564,7 @@ class RopeRepository(private val app: Application) {
             albumIndex = if (grouped) albumIndex else 0,
             albumCount = if (grouped) albumCount else 1,
             caption = cap,
+            waveform = waveform,
         ).withReply(
             pack.id,
             pack.preview,
@@ -2041,6 +2151,7 @@ class RopeRepository(private val app: Application) {
                     MessageKind.VOICE -> "voice"
                     MessageKind.IMAGE -> "image"
                     MessageKind.VIDEO -> "video"
+                    MessageKind.VIDEO_NOTE -> VideoNoteRules.KIND
                     else -> "file"
                 },
                 objectId = "",

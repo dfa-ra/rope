@@ -24,6 +24,7 @@ data class MediaPayload(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val waveform: List<Int> = emptyList(),
 ) {
     fun withReply(
         replyTo: String?,
@@ -73,6 +74,11 @@ data class MediaPayload(
             if (replyPreview.isNotBlank()) put("rp", replyPreview)
             if (replyName.isNotBlank()) put("rn", replyName)
             QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+            if (waveform.isNotEmpty()) {
+                val arr = JSONArray()
+                waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
+                put("wf", arr)
+            }
         }
         .toString()
 
@@ -80,6 +86,7 @@ data class MediaPayload(
         "voice" -> MessageKind.VOICE
         "image" -> MessageKind.IMAGE
         "video" -> MessageKind.VIDEO
+        VideoNoteRules.KIND -> MessageKind.VIDEO_NOTE
         "file" -> MessageKind.FILE
         else -> MessageKind.UNKNOWN
     }
@@ -98,6 +105,7 @@ data class MediaPayload(
             } else {
                 VideoRules.preview(durationMs)
             }
+            VideoNoteRules.KIND -> VideoNoteRules.preview(durationMs)
             "file" -> name.ifBlank { "Файл" }
             else -> cap ?: "Вложение"
         }
@@ -128,7 +136,17 @@ data class MediaPayload(
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                waveform = readWaveform(o.optJSONArray("wf")),
             )
+        }
+
+        private fun readWaveform(arr: JSONArray?): List<Int> {
+            if (arr == null || arr.length() == 0) return emptyList()
+            return buildList {
+                for (i in 0 until arr.length().coerceAtMost(VoicePlayback.BARS)) {
+                    add(arr.optInt(i, 0).coerceIn(0, 31))
+                }
+            }
         }
 
         fun formatDuration(ms: Long): String {
