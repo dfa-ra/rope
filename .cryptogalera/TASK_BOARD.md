@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for remaining-bug QA after 0.3.28 (camera re-enable after deny; not 0.3.29; not link-previews) | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for remaining-bug QA after 0.3.29 (callee renegotiation glare; leftover callNotice; profile Back; not 0.3.30; not link-previews) | — |
+| CG-156 | Slice: remaining-bug QA as 0.3.29 | PO | DONE | shipped v0.3.29; D-043; overlay mic-deny + camera unmute + frozen send; D-031 stays org law | CG-007 |
+| CG-157 | Android: overlay mic-deny + camera unmute + frozen send | AND-01 | DONE | D-043; Kotlin never crypto | CG-156 |
+| CG-158 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; callee renegotiation glare; leftover overlay callNotice; profile Back can dump staged album | CG-157 |
+| CG-159 | Ship **0.3.29** | PO | DONE | tag v0.3.29 = 0d23501; versionCode 53; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 unchanged | CG-158 |
 | CG-152 | Slice: remaining-bug QA as 0.3.28 | PO | DONE | shipped v0.3.28; D-042; reply+media + camera-deny mute; D-031 stays org law | CG-007 |
 | CG-153 | Android: reply+media keep quote + camera-deny mute | AND-01 | DONE | D-042; Kotlin never crypto | CG-152 |
 | CG-154 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; later enabling camera after deny may not send; onRenegotiationNeeded no-op | CG-153 |
@@ -128,4 +132,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, or `v0.3.28`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, or `v0.3.29`.**
