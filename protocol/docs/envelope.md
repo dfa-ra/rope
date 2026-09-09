@@ -39,7 +39,9 @@ Inner plaintext for type=1 (`text`):
 N bytes UTF-8 text
 ```
 
-That UTF-8 text may be a JSON object for replies (`t`,`r`,`rp`,`rn`) or attributed forwards (`t`,`ff`). Forwards must not masquerade as replies.
+That UTF-8 text may be a JSON object for replies (`t`,`r`,`rp`,`rn`) with optional quote-span (`qt`,`qo`) or attributed forwards (`t`,`ff`). Forwards must not masquerade as replies.
+
+Optional `qt` is the selected quote substring. Optional `qo` is a JSON array `[start,end]` of UTF-16 offsets into the quoted message (Kotlin `String` indices). A full-body reply omits `qt`/`qo` and keeps `rp` as the preview. Kotlin packs this JSON; the existing Rust `encrypt_message` / `encrypt_typed` path encrypts it. The relay never sees plaintext.
 
 Unknown `type` values are rejected by the Rust core (`known_envelope_type`). The relay still treats the blob as opaque.
 
@@ -78,7 +80,7 @@ The object store holds only ciphertext. The object key never appears in HTTP hea
 { "g": "group_id", "t": "text", "e": 2, "ff": "Анна" }
 ```
 
-Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only.
+Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only. Optional `qt` / `qo` are the same quote-span as type=1.
 
 ### Encrypted objects (`ROCH`)
 

@@ -68,6 +68,9 @@ data class ChatMessage(
     val forwardedFrom: String? = null,
     val edited: Boolean = false,
     val deleted: Boolean = false,
+    val quoteText: String = "",
+    val quoteStart: Int = -1,
+    val quoteEnd: Int = -1,
 ) {
     fun preview(): String = when {
         deleted -> "Сообщение удалено"

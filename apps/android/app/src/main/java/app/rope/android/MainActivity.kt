@@ -153,6 +153,7 @@ class MainActivity : AppCompatActivity() {
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
+                    onReplySpan = repo::setReplySpan,
                     onEdit = repo::startEdit,
                     onDelete = repo::deleteMessage,
                     onForward = repo::startForward,

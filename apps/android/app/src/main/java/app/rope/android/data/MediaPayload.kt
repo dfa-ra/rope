@@ -94,6 +94,9 @@ data class GroupTextPayload(
     val replyPreview: String = "",
     val replyName: String = "",
     val forwardedFrom: String? = null,
+    val quoteText: String = "",
+    val quoteStart: Int = -1,
+    val quoteEnd: Int = -1,
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
@@ -104,12 +107,14 @@ data class GroupTextPayload(
             if (replyPreview.isNotBlank()) put("rp", replyPreview)
             if (replyName.isNotBlank()) put("rn", replyName)
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
+            QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
         }
         .toString()
 
     companion object {
         fun parse(raw: String): GroupTextPayload {
             val o = JSONObject(raw)
+            val quote = QuoteSpanRules.read(o)
             return GroupTextPayload(
                 groupId = o.optString("g"),
                 text = o.optString("t"),
@@ -118,6 +123,9 @@ data class GroupTextPayload(
                 replyPreview = o.optString("rp"),
                 replyName = o.optString("rn"),
                 forwardedFrom = JsonIds.optional(o.optString("ff")),
+                quoteText = quote?.text.orEmpty(),
+                quoteStart = quote?.start ?: -1,
+                quoteEnd = quote?.end ?: -1,
             )
         }
     }
@@ -130,6 +138,9 @@ data class MessageMeta(
     val forwardedFrom: String? = null,
     val edited: Boolean = false,
     val deleted: Boolean = false,
+    val quoteText: String = "",
+    val quoteStart: Int = -1,
+    val quoteEnd: Int = -1,
 ) {
     fun toJson(): String = JSONObject()
         .put("reply_to", replyToId ?: JSONObject.NULL)
@@ -138,6 +149,9 @@ data class MessageMeta(
         .put("forwarded_from", forwardedFrom ?: JSONObject.NULL)
         .put("edited", edited)
         .put("deleted", deleted)
+        .put("quote_text", quoteText)
+        .put("quote_start", quoteStart)
+        .put("quote_end", quoteEnd)
         .toString()
 
     companion object {
@@ -152,6 +166,9 @@ data class MessageMeta(
                     forwardedFrom = JsonIds.optional(o.optString("forwarded_from")),
                     edited = o.optBoolean("edited"),
                     deleted = o.optBoolean("deleted"),
+                    quoteText = o.optString("quote_text"),
+                    quoteStart = o.optInt("quote_start", -1),
+                    quoteEnd = o.optInt("quote_end", -1),
                 )
             } catch (_: Exception) {
                 MessageMeta()
@@ -165,6 +182,9 @@ data class MessageMeta(
             forwardedFrom = msg.forwardedFrom,
             edited = msg.edited,
             deleted = msg.deleted,
+            quoteText = msg.quoteText,
+            quoteStart = msg.quoteStart,
+            quoteEnd = msg.quoteEnd,
         )
     }
 }
@@ -220,6 +240,9 @@ data class PackedText(
     val replyPreview: String = "",
     val replyName: String = "",
     val forwardedFrom: String? = null,
+    val quoteText: String = "",
+    val quoteStart: Int = -1,
+    val quoteEnd: Int = -1,
 )
 
 object TextBody {
@@ -229,6 +252,9 @@ object TextBody {
         replyPreview: String,
         replyName: String,
         forwardedFrom: String? = null,
+        quoteText: String = "",
+        quoteStart: Int = -1,
+        quoteEnd: Int = -1,
     ): String {
         val from = JsonIds.optional(forwardedFrom)
         if (from != null) {
@@ -240,6 +266,7 @@ object TextBody {
             .put("r", replyTo)
             .put("rp", replyPreview)
             .put("rn", replyName)
+            .apply { QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd) }
             .toString()
     }
 
@@ -249,12 +276,16 @@ object TextBody {
         return try {
             val o = JSONObject(trimmed)
             if (!o.has("t")) return PackedText(raw)
+            val quote = QuoteSpanRules.read(o)
             PackedText(
                 text = o.optString("t"),
                 replyTo = JsonIds.optional(o.optString("r")),
                 replyPreview = o.optString("rp"),
                 replyName = o.optString("rn"),
                 forwardedFrom = JsonIds.optional(o.optString("ff")),
+                quoteText = quote?.text.orEmpty(),
+                quoteStart = quote?.start ?: -1,
+                quoteEnd = quote?.end ?: -1,
             )
         } catch (_: Exception) {
             PackedText(raw)

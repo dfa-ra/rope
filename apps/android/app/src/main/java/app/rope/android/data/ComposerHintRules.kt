@@ -21,10 +21,10 @@ object ComposerHintRules {
     const val DISMISS_REPLY = "Отменить ответ"
     const val DISMISS_EDIT = "Отменить редактирование"
 
-    fun reply(name: String, preview: String): ComposerHintCopy = ComposerHintCopy(
+    fun reply(name: String, preview: String, spanText: String = ""): ComposerHintCopy = ComposerHintCopy(
         kind = ComposerHintKind.REPLY,
         title = name.trim().ifBlank { REPLY_FALLBACK_TITLE },
-        body = clipBody(preview),
+        body = clipBody(spanText.ifBlank { preview }),
         dismissContentDescription = DISMISS_REPLY,
     )
 

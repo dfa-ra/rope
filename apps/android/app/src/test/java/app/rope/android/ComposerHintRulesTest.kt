@@ -59,6 +59,13 @@ class ComposerHintRulesTest {
     }
 
     @Test
+    fun replyChromeShowsSpanNotOnlyFullBody() {
+        val copy = ComposerHintRules.reply("Аня", "длинное исходное сообщение", "фрагмент")
+        assertEquals("фрагмент", copy.body)
+        assertEquals("Аня", copy.title)
+    }
+
+    @Test
     fun longPreviewClipsWithEllipsis() {
         val q = "я".repeat(90)
         val body = ComposerHintRules.clipBody(q)

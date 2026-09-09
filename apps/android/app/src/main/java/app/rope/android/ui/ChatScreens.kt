@@ -27,6 +27,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -99,6 +100,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -120,6 +122,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -158,6 +161,8 @@ import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
+import app.rope.android.data.QuoteSpan
+import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
@@ -580,6 +585,7 @@ fun ChatPane(
     onPeerProfile: () -> Unit = {},
     onBack: () -> Unit = {},
     onReply: (ChatMessage) -> Unit = {},
+    onReplySpan: (QuoteSpan?) -> Unit = {},
     onEdit: (ChatMessage) -> Unit = {},
     onDelete: (ChatMessage) -> Unit = {},
     onForward: (ChatMessage) -> Unit = {},
@@ -943,6 +949,7 @@ fun ChatPane(
                 onVoiceStart = onVoiceStart,
                 onVoiceFinish = onVoiceFinish,
                 onCancelComposer = onCancelComposer,
+                onReplySpan = onReplySpan,
             )
         }
     }
@@ -1322,7 +1329,7 @@ private fun AttributionChrome(msg: ChatMessage, accent: Color, onJump: (String) 
     if (!msg.deleted && !replyId.isNullOrBlank() && !ForwardRules.hidesReplyQuote(msg)) {
         ReplyQuote(
             name = GroupChatUx.replyQuoteName(msg.replyName, msg.outgoing),
-            preview = msg.replyPreview.ifBlank { "Сообщение" },
+            preview = QuoteSpanRules.displayPreview(msg.replyPreview, msg.quoteText).ifBlank { "Сообщение" },
             accent = accent,
             onClick = { onJump(replyId) },
         )
@@ -1790,6 +1797,7 @@ private fun ComposerBar(
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCancelComposer: () -> Unit,
+    onReplySpan: (QuoteSpan?) -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
@@ -1847,8 +1855,14 @@ private fun ComposerBar(
                     copy = ComposerHintRules.reply(
                         name = GroupChatUx.replyQuoteName(target.senderName, target.outgoing),
                         preview = target.preview(),
+                        spanText = QuoteSpanRules.preview(target.preview(), state.replySpan).takeIf {
+                            state.replySpan != null
+                        }.orEmpty(),
                     ),
                     onCancel = onCancelComposer,
+                    sourceText = target.preview(),
+                    span = state.replySpan,
+                    onSpan = onReplySpan.takeIf { QuoteSpanRules.canSelect(target) },
                 )
             }
             if (showEmoji && !state.recording) {
@@ -2129,7 +2143,29 @@ private fun UnreadChip() {
 }
 
 @Composable
-private fun ComposerHint(copy: ComposerHintCopy, onCancel: () -> Unit) {
+private fun ComposerHint(
+    copy: ComposerHintCopy,
+    onCancel: () -> Unit,
+    sourceText: String = "",
+    span: QuoteSpan? = null,
+    onSpan: ((QuoteSpan?) -> Unit)? = null,
+) {
+    val selectable = onSpan != null && QuoteSpanRules.canSelect(sourceText)
+    var picking by remember(sourceText) { mutableStateOf(false) }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var anchor by remember { mutableIntStateOf(-1) }
+    val highlight = span?.let { QuoteSpanRules.clamp(sourceText, it.start, it.end) }
+    val body = if (picking && selectable) sourceText else copy.body
+    val annotated = buildAnnotatedString {
+        append(body)
+        if (picking && selectable && highlight != null && highlight.end <= body.length) {
+            addStyle(
+                SpanStyle(background = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+                highlight.start,
+                highlight.end,
+            )
+        }
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -2140,7 +2176,7 @@ private fun ComposerHint(copy: ComposerHintCopy, onCancel: () -> Unit) {
         Box(
             Modifier
                 .width(3.dp)
-                .height(36.dp)
+                .height(if (picking) 64.dp else 36.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(MaterialTheme.colorScheme.primary),
         )
@@ -2153,11 +2189,38 @@ private fun ComposerHint(copy: ComposerHintCopy, onCancel: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                copy.body,
+                annotated,
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
+                maxLines = if (picking) 6 else 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                onTextLayout = { layout = it },
+                modifier = if (!selectable) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(sourceText) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                picking = true
+                                anchor = -1
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                val measured = layout ?: return@detectDragGesturesAfterLongPress
+                                if (measured.layoutInput.text.text != sourceText) return@detectDragGesturesAfterLongPress
+                                val now = measured.getOffsetForPosition(change.position)
+                                if (anchor < 0) anchor = now
+                                val start = minOf(anchor, now)
+                                val end = maxOf(anchor, now).coerceAtLeast(start + 1)
+                                onSpan?.invoke(
+                                    QuoteSpanRules.clamp(sourceText, start, end.coerceAtMost(sourceText.length)),
+                                )
+                            },
+                            onDragEnd = { picking = false },
+                            onDragCancel = { picking = false },
+                        )
+                    }
+                },
             )
         }
         IconButton(onClick = onCancel) {

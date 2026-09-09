@@ -60,6 +60,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 ## In scope (current trunk)
 
 - Android client: provision, join, chats, groups, media, call UI already in `v0.2.15`
+- **0.3.24 Replies 2.0:** left-swipe to reply plus optional quote-span (`qt` / `qo` inside encrypted JSON)
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator

@@ -42,6 +42,8 @@ import app.rope.android.data.ChatPrefs
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.QuoteSpan
+import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
@@ -143,6 +145,7 @@ data class UiState(
     val appUpdateAvailable: Boolean = false,
     val latestAppVersion: String = "",
     val replyTo: ChatMessage? = null,
+    val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
     val chatQuery: String = "",
@@ -157,6 +160,15 @@ data class UiState(
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
+
+private data class ReplyPack(
+    val id: String? = null,
+    val preview: String = "",
+    val name: String = "",
+    val quoteText: String = "",
+    val quoteStart: Int = -1,
+    val quoteEnd: Int = -1,
+)
 
 class RopeRepository(private val app: Application) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -537,28 +549,37 @@ class RopeRepository(private val app: Application) {
         if (text.isBlank() || _state.value.recording) return
         val edit = _state.value.editTarget
         if (edit != null) {
-            _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null)
+            _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null)
             persistOpenDraft()
             applyEdit(edit, text)
             return
         }
         val reply = _state.value.replyTo
-        _state.value = _state.value.copy(draftText = "", replyTo = null)
+        val pack = replyPack(reply)
+        _state.value = _state.value.copy(draftText = "", replyTo = null, replySpan = null)
         persistOpenDraft()
         val group = _state.value.group
         if (group != null) {
-            sendGroupText(group, text, reply)
+            sendGroupText(group, text, reply, pack)
             return
         }
         if (SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(_state.value.peer?.deviceId)) {
-            saveLocalText(text, reply)
+            saveLocalText(text, reply, pack = pack)
             return
         }
         val peer = _state.value.peer ?: return
         scope.launch {
             val id = identity ?: return@launch
             try {
-                val packed = TextBody.encode(text, reply?.id, reply?.preview().orEmpty(), replyName(reply))
+                val packed = TextBody.encode(
+                    text,
+                    pack.id,
+                    pack.preview,
+                    pack.name,
+                    quoteText = pack.quoteText,
+                    quoteStart = pack.quoteStart,
+                    quoteEnd = pack.quoteEnd,
+                )
                 val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
                 val local = ChatMessage(
                     id = env.messageId,
@@ -571,9 +592,12 @@ class RopeRepository(private val app: Application) {
                     kind = MessageKind.TEXT,
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
-                    replyToId = reply?.id,
-                    replyPreview = reply?.preview().orEmpty(),
-                    replyName = replyName(reply),
+                    replyToId = pack.id,
+                    replyPreview = pack.preview,
+                    replyName = pack.name,
+                    quoteText = pack.quoteText,
+                    quoteStart = pack.quoteStart,
+                    quoteEnd = pack.quoteEnd,
                 )
                 store.insertMessage(local)
                 refreshMessages(peer.deviceId)
@@ -584,19 +608,30 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    fun startReply(msg: ChatMessage) {
+    fun startReply(msg: ChatMessage, span: QuoteSpan? = null) {
         if (msg.deleted) return
-        _state.value = _state.value.copy(replyTo = msg, editTarget = null)
+        _state.value = _state.value.copy(
+            replyTo = msg,
+            editTarget = null,
+            replySpan = QuoteSpanRules.packed(msg.preview(), span)?.span(),
+        )
+    }
+
+    fun setReplySpan(span: QuoteSpan?) {
+        val reply = _state.value.replyTo ?: return
+        _state.value = _state.value.copy(
+            replySpan = QuoteSpanRules.packed(reply.preview(), span)?.span(),
+        )
     }
 
     fun startEdit(msg: ChatMessage) {
         if (!msg.outgoing || msg.deleted) return
         if (msg.kind != MessageKind.TEXT && msg.kind != MessageKind.GROUP_TEXT) return
-        _state.value = _state.value.copy(editTarget = msg, replyTo = null, draftText = msg.text)
+        _state.value = _state.value.copy(editTarget = msg, replyTo = null, replySpan = null, draftText = msg.text)
     }
 
     fun cancelComposerExtra() {
-        _state.value = _state.value.copy(replyTo = null, editTarget = null)
+        _state.value = _state.value.copy(replyTo = null, replySpan = null, editTarget = null)
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -615,6 +650,7 @@ class RopeRepository(private val app: Application) {
             screen = stack.last(),
             backStack = stack,
             replyTo = null,
+            replySpan = null,
             editTarget = null,
             viewingImage = null,
         )
@@ -964,6 +1000,7 @@ class RopeRepository(private val app: Application) {
                     group = null,
                     messages = emptyList(),
                     replyTo = null,
+                    replySpan = null,
                     editTarget = null,
                     notice = "Вы вышли из «${g.name}»",
                 )
@@ -1296,6 +1333,7 @@ class RopeRepository(private val app: Application) {
         group: RopeGroup,
         text: String,
         reply: ChatMessage? = null,
+        pack: ReplyPack = replyPack(reply),
         forwardedFrom: String? = null,
     ) {
         val attributed = JsonIds.optional(forwardedFrom)
@@ -1303,10 +1341,13 @@ class RopeRepository(private val app: Application) {
             group.groupId,
             text,
             group.epoch,
-            if (attributed == null) reply?.id else null,
-            if (attributed == null) reply?.preview().orEmpty() else "",
-            if (attributed == null) replyName(reply) else "",
+            if (attributed == null) pack.id else null,
+            if (attributed == null) pack.preview else "",
+            if (attributed == null) pack.name else "",
             forwardedFrom = attributed,
+            quoteText = if (attributed == null) pack.quoteText else "",
+            quoteStart = if (attributed == null) pack.quoteStart else -1,
+            quoteEnd = if (attributed == null) pack.quoteEnd else -1,
         ).toJson().toByteArray()
         sendGroupPayload(
             group,
@@ -1318,6 +1359,7 @@ class RopeRepository(private val app: Application) {
             null,
             if (attributed == null) reply else null,
             attributed,
+            if (attributed == null) pack else ReplyPack(),
         )
     }
 
@@ -1331,6 +1373,7 @@ class RopeRepository(private val app: Application) {
         localFile: File?,
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
+        pack: ReplyPack = ReplyPack(),
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -1374,9 +1417,12 @@ class RopeRepository(private val app: Application) {
                     localPath = localFile?.absolutePath,
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
-                    replyToId = if (forwardedFrom == null) reply?.id else null,
-                    replyPreview = if (forwardedFrom == null) reply?.preview().orEmpty() else "",
-                    replyName = if (forwardedFrom == null) replyName(reply) else "",
+                    replyToId = if (forwardedFrom == null) pack.id ?: reply?.id else null,
+                    replyPreview = if (forwardedFrom == null) pack.preview.ifBlank { reply?.preview().orEmpty() } else "",
+                    replyName = if (forwardedFrom == null) pack.name.ifBlank { replyName(reply) } else "",
+                    quoteText = if (forwardedFrom == null) pack.quoteText else "",
+                    quoteStart = if (forwardedFrom == null) pack.quoteStart else -1,
+                    quoteEnd = if (forwardedFrom == null) pack.quoteEnd else -1,
                     forwardedFrom = forwardedFrom,
                 )
                 store.insertMessage(local)
@@ -1519,6 +1565,20 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    private fun replyPack(reply: ChatMessage?, span: QuoteSpan? = _state.value.replySpan): ReplyPack {
+        if (reply == null) return ReplyPack()
+        val source = reply.preview()
+        val packed = QuoteSpanRules.packed(source, span)
+        return ReplyPack(
+            id = reply.id,
+            preview = packed?.text ?: source,
+            name = replyName(reply),
+            quoteText = packed?.text.orEmpty(),
+            quoteStart = packed?.start ?: -1,
+            quoteEnd = packed?.end ?: -1,
+        )
+    }
+
     private fun openChatId(): String? {
         _state.value.group?.let { return ChatIds.group(it.groupId) }
         return _state.value.peer?.deviceId
@@ -1535,6 +1595,7 @@ class RopeRepository(private val app: Application) {
             messages = messages,
             draftText = prefs.draft,
             replyTo = null,
+            replySpan = null,
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
@@ -1708,6 +1769,7 @@ class RopeRepository(private val app: Application) {
         text: String,
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
+        pack: ReplyPack = replyPack(reply),
     ) {
         val attributed = JsonIds.optional(forwardedFrom)
         insertLocalSaved(
@@ -1717,6 +1779,7 @@ class RopeRepository(private val app: Application) {
             localFile = null,
             reply = if (attributed == null) reply else null,
             forwardedFrom = attributed,
+            pack = if (attributed == null) pack else ReplyPack(),
         )
     }
 
@@ -1727,6 +1790,7 @@ class RopeRepository(private val app: Application) {
         localFile: File?,
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
+        pack: ReplyPack = ReplyPack(),
     ) {
         val local = ChatMessage(
             id = store.newId(),
@@ -1741,9 +1805,12 @@ class RopeRepository(private val app: Application) {
             localPath = localFile?.absolutePath,
             senderId = identity?.deviceId().orEmpty(),
             senderName = _state.value.profile?.displayName.orEmpty(),
-            replyToId = reply?.id,
-            replyPreview = reply?.preview().orEmpty(),
-            replyName = replyName(reply),
+            replyToId = pack.id ?: reply?.id,
+            replyPreview = pack.preview.ifBlank { reply?.preview().orEmpty() },
+            replyName = pack.name.ifBlank { replyName(reply) },
+            quoteText = pack.quoteText,
+            quoteStart = pack.quoteStart,
+            quoteEnd = pack.quoteEnd,
             forwardedFrom = forwardedFrom,
         )
         store.insertMessage(local)
@@ -2052,6 +2119,9 @@ class RopeRepository(private val app: Application) {
                     replyToId = packed.replyTo,
                     replyPreview = packed.replyPreview,
                     replyName = packed.replyName,
+                    quoteText = packed.quoteText,
+                    quoteStart = packed.quoteStart,
+                    quoteEnd = packed.quoteEnd,
                     forwardedFrom = packed.forwardedFrom,
                 )
                 store.insertMessage(msg)
@@ -2081,6 +2151,9 @@ class RopeRepository(private val app: Application) {
                     replyToId = payload.replyTo,
                     replyPreview = payload.replyPreview,
                     replyName = payload.replyName,
+                    quoteText = payload.quoteText,
+                    quoteStart = payload.quoteStart,
+                    quoteEnd = payload.quoteEnd,
                     forwardedFrom = payload.forwardedFrom,
                 )
                 store.insertMessage(msg)
