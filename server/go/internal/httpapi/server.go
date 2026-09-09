@@ -210,9 +210,6 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 		"protocol_version": config.ProtocolVersion,
 		"fingerprint":      s.FP,
 	}
-	if ip := s.Cfg.PublicIPv4(); ip != "" {
-		out["public_ip"] = ip
-	}
 	if r.Header.Get("Authorization") == "" {
 		writeJSON(w, 200, out)
 		return
@@ -220,6 +217,9 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.authenticate(r, nil); err != nil {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
+	}
+	if ip := s.Cfg.PublicIPv4(); ip != "" {
+		out["public_ip"] = ip
 	}
 	if ice := s.Cfg.IceServers(time.Now()); len(ice) > 0 {
 		out["ice_servers"] = ice

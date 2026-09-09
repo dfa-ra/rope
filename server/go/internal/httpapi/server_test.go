@@ -185,6 +185,12 @@ func TestInfoAdvertisesIceWhenConfigured(t *testing.T) {
 	if _, ok := anon["ice_ttl_seconds"]; ok {
 		t.Fatal("unauthenticated GET /v1/info must omit ice_ttl_seconds")
 	}
+	if _, ok := anon["public_ip"]; ok {
+		t.Fatal("unauthenticated GET /v1/info must not advertise public_ip")
+	}
+	if anon["server_id"] != "test-server" || anon["fingerprint"] == nil {
+		t.Fatalf("join still needs server_id and fingerprint: %+v", anon)
+	}
 
 	owner := newDevice(t)
 	bootstrap(t, hs, token, owner, "owner")
@@ -463,6 +469,16 @@ func TestInfoBadAuthDoesNotLeakIce(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != 401 {
 		t.Fatalf("got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["ice_servers"]; ok {
+		t.Fatalf("401 info leaked ice: %+v", body)
+	}
+	if _, ok := body["public_ip"]; ok {
+		t.Fatalf("401 info leaked public_ip: %+v", body)
 	}
 }
 
