@@ -337,10 +337,11 @@ func (s *Store) RevokeMember(id string) error {
 }
 
 // RevokeMemberGuarded revokes a live member and their devices in one IMMEDIATE
-// transaction. Unknown members return ErrNotFound. If revoking this member
-// would leave no live owner device, it returns ErrLastOwner. Two concurrent
-// two-owner revoke-member calls cannot both succeed: the write lock is taken
-// before the remaining-owner-device count and held through both UPDATEs.
+// transaction. Unknown or already-revoked members return ErrNotFound. If
+// revoking this member would leave no live owner device, it returns
+// ErrLastOwner. Two concurrent two-owner revoke-member calls cannot both
+// succeed: the write lock is taken before the remaining-owner-device count
+// and held through both UPDATEs.
 func (s *Store) RevokeMemberGuarded(id string) error {
 	ctx := context.Background()
 	conn, err := s.SQL.Conn(ctx)
@@ -370,11 +371,7 @@ func (s *Store) RevokeMemberGuarded(id string) error {
 		return err
 	}
 	if revoked.Valid {
-		if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
-			return err
-		}
-		committed = true
-		return nil
+		return ErrNotFound
 	}
 	if role == "owner" {
 		var n int

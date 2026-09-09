@@ -432,6 +432,22 @@ func postRevokeDevice(t *testing.T, base, deviceID string, actor testDevice) int
 	return resp.StatusCode
 }
 
+func postRevokeMember(t *testing.T, base, memberID string, actor testDevice) int {
+	t.Helper()
+	body := []byte(`{"member_id":"` + memberID + `"}`)
+	req := authReq(t, http.MethodPost, base+"/v1/admin/revoke-member", "/v1/admin/revoke-member", body, actor)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 && resp.StatusCode != 409 && resp.StatusCode != 404 && resp.StatusCode != 401 {
+		t.Fatalf("revoke-member %s: %d %s", memberID, resp.StatusCode, b)
+	}
+	return resp.StatusCode
+}
+
 func TestConcurrentTwoOwnerRevokeDevice(t *testing.T) {
 	s, hs, setup := testServer(t)
 	owner := newDevice(t)
@@ -585,6 +601,63 @@ func TestRevokeAlreadyRevokedSpareDevice404(t *testing.T) {
 	}
 	if code := postRevokeDevice(t, hs.URL, owner.id, owner); code != 409 {
 		t.Fatalf("last live owner device wanted 409 got %d", code)
+	}
+}
+
+func TestRevokeAlreadyRevokedMember404(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	body := []byte(`{"ttl_seconds":3600}`)
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", body, owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&inv); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	guest := newDevice(t)
+	bootstrap(t, hs, inv.Token, guest, "guest")
+
+	dirReq := authReq(t, http.MethodGet, hs.URL+"/v1/directory", "/v1/directory", nil, owner)
+	dirResp, err := http.DefaultClient.Do(dirReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dir struct {
+		Devices []struct {
+			DeviceID string `json:"device_id"`
+			MemberID string `json:"member_id"`
+		} `json:"devices"`
+	}
+	if err := json.NewDecoder(dirResp.Body).Decode(&dir); err != nil {
+		t.Fatal(err)
+	}
+	dirResp.Body.Close()
+	var guestMember string
+	for _, d := range dir.Devices {
+		if d.DeviceID == guest.id {
+			guestMember = d.MemberID
+		}
+	}
+	if guestMember == "" {
+		t.Fatal("guest member id missing")
+	}
+
+	if code := postRevokeMember(t, hs.URL, guestMember, owner); code != 200 {
+		t.Fatalf("guest revoke wanted 200 got %d", code)
+	}
+	if code := postRevokeMember(t, hs.URL, guestMember, owner); code != 404 {
+		t.Fatalf("already-revoked guest wanted 404 got %d", code)
+	}
+	if code := postRevokeMember(t, hs.URL, "missing-member", owner); code != 404 {
+		t.Fatalf("unknown member wanted 404 got %d", code)
 	}
 }
 

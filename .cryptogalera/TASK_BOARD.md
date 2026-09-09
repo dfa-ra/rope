@@ -4,7 +4,12 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.9 atomic revoke-member | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.10 already-revoked member 404 | — |
+| CG-077 | Slice: already-revoked revoke-member 404 as 0.3.10 | PO | IN_PROGRESS | REV-01: member 200 vs device 404 | CG-007 |
+| CG-078 | Go: RevokeMemberGuarded already-revoked → ErrNotFound | GO-01 | DONE | same as RevokeDeviceGuarded | CG-077 |
+| CG-079 | Android: revoke-member 404 is already-revoked | AND-01 | DONE | idempotent; no crypto | CG-077 |
+| CG-080 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-078, CG-079 |
+| CG-081 | Ship **0.3.10** | PO | IN_PROGRESS | versionCode 34; do not retag v0.3.9 | CG-080 |
 | CG-073 | Slice: atomic revoke-member last-owner 409 as 0.3.9 | PO | IN_PROGRESS | REV-01: concurrent two-owner revoke-member | CG-007 |
 | CG-074 | Go: RevokeMemberGuarded BEGIN IMMEDIATE | GO-01 | DONE | same txn as RevokeDeviceGuarded | CG-073 |
 | CG-075 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-074 |
@@ -49,4 +54,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, or `v0.3.8`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, or `v0.3.9`.**

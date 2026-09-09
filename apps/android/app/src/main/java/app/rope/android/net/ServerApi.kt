@@ -74,7 +74,8 @@ class ServerApi(
 
     fun revokeMember(memberId: String): JSONObject {
         val body = JSONObject().put("member_id", memberId).toString().toByteArray()
-        return authed("POST", "/v1/admin/revoke-member", body)
+        // 404 = unknown or already revoked (idempotent). Kotlin never implements crypto.
+        return authed("POST", "/v1/admin/revoke-member", body, allowNotFound = true)
     }
 
     fun uploadObject(ciphertext: ByteArray, sha256: String): JSONObject {
@@ -196,7 +197,12 @@ class ServerApi(
         }
     }
 
-    private fun authed(method: String, path: String, body: ByteArray): JSONObject {
+    private fun authed(
+        method: String,
+        path: String,
+        body: ByteArray,
+        allowNotFound: Boolean = false,
+    ): JSONObject {
         val header = sendAuthHeader(method, path, body)
         val builder = Request.Builder()
             .url(baseHttp + path)
@@ -204,6 +210,9 @@ class ServerApi(
         if (method == "GET") builder.get() else builder.method(method, body.toRequestBody(json))
         client.newCall(builder.build()).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
+            if (allowNotFound && resp.code == 404) {
+                return JSONObject().put("ok", true).put("already_revoked", true)
+            }
             if (!resp.isSuccessful) error("${resp.code}: $text")
             return JSONObject(text)
         }

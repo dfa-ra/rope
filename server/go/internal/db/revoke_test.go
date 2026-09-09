@@ -246,8 +246,8 @@ func TestRevokeMemberGuardedLastOwnerAndUnknown(t *testing.T) {
 	if err := s.RevokeMemberGuarded("g1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RevokeMemberGuarded("g1"); err != nil {
-		t.Fatalf("already-revoked guest wanted success got %v", err)
+	if err := s.RevokeMemberGuarded("g1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("already-revoked guest wanted ErrNotFound got %v", err)
 	}
 }
 
