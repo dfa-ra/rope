@@ -13,13 +13,14 @@ object ArchiveRules {
     const val UNARCHIVE = "Разархивировать"
     const val COUNT_SUFFIX = "чатов"
 
-    fun canArchive(id: String?): Boolean = !SavedMessagesRules.isSaved(id)
+    fun canArchive(id: String?): Boolean =
+        !id.isNullOrBlank() && !SavedMessagesRules.isSaved(id)
 
     fun shouldHideFromMain(c: Conversation): Boolean =
         c.archived && !SavedMessagesRules.isSaved(c.id)
 
     /** Always unpin on archive so a hidden chat cannot stay pinned. */
-    fun unpinOnArchive(pinned: Boolean): Boolean = true
+    fun unpinOnArchive(_pinned: Boolean): Boolean = true
 
     /** Archived chats cannot be pinned. Saved still can (it is never archived). */
     fun canPin(prefs: ChatPrefs): Boolean = !prefs.archived
