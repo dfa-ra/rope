@@ -14,13 +14,25 @@ object PinnedClient {
     }
 
     /**
-     * Fail-closed: a blank expected pin never allows TURNS/TLS.
+     * Fail-closed: only a 64-char SHA-256 hex pin may allow TURNS/TLS.
      * Hex compare only — not a crypto implementation.
      */
+    fun sha256HexPin(s: String): Boolean {
+        val h = s.trim()
+        if (h.length != 64) return false
+        return h.all { ch -> ch in '0'..'9' || ch in 'a'..'f' || ch in 'A'..'F' }
+    }
+
     fun tlsPinAllows(presentedHex: String, expectedHex: String): Boolean {
         val pin = expectedHex.trim()
-        if (pin.isEmpty()) return false
-        return presentedHex.trim().equals(pin, ignoreCase = true)
+        val got = presentedHex.trim()
+        if (!sha256HexPin(pin) || !sha256HexPin(got)) return false
+        return pin.equals(got, ignoreCase = true)
+    }
+
+    fun presentedLeafHex(chain: Array<X509Certificate>): String? {
+        if (chain.isEmpty()) return null
+        return fingerprintHex(chain[0].encoded)
     }
 
     fun http(): OkHttpClient = OkHttpClient.Builder()
@@ -32,7 +44,8 @@ object PinnedClient {
             override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
             override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                val presented = fingerprintHex(chain[0].encoded)
+                val presented = presentedLeafHex(chain)
+                    ?: throw javax.net.ssl.SSLException("empty chain")
                 if (!tlsPinAllows(presented, expectedFp)) {
                     throw javax.net.ssl.SSLException("fingerprint mismatch")
                 }
