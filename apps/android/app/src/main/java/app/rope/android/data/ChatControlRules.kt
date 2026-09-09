@@ -4,6 +4,7 @@ package app.rope.android.data
  * RECEIPT envelopes are E2EE from any org member who can message you.
  * UI already limits edit/delete to outgoing; apply the same author check
  * on the wire so a peer cannot tombstone or rewrite someone else's rows.
+ * Pin / react stay in a thread the actor shares with this device.
  * Not envelope crypto.
  */
 object ChatControlRules {
@@ -18,10 +19,16 @@ object ChatControlRules {
     fun allowDelete(actorId: String?, msg: ChatMessage?): Boolean = allowAuthorOp(actorId, msg)
 
     /**
-     * Pin the target message in its thread. 1:1: actor must be the chat peer.
-     * Group: actor must be in [groupMembers] (local membership).
+     * Pin / react on the target message in its thread. 1:1: actor must be the
+     * chat peer. Group: actor must be in [groupMembers] (local membership).
      */
-    fun allowPin(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean {
+    fun allowPin(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean =
+        allowThreadOp(actorId, msg, groupMembers)
+
+    fun allowReact(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean =
+        allowThreadOp(actorId, msg, groupMembers)
+
+    private fun allowThreadOp(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean {
         if (msg == null || msg.deleted) return false
         val group = JsonIds.optional(msg.groupId) ?: ChatIds.rawGroupId(msg.peerDeviceId).takeIf { ChatIds.isGroup(msg.peerDeviceId) }
         if (group != null) {

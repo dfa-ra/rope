@@ -58,6 +58,20 @@ class ChatControlRulesTest {
     }
 
     @Test
+    fun reactStaysInTheThreadTheActorShares() {
+        val dm = msg(alice, peer = bob)
+        assertTrue(ChatControlRules.allowReact(bob, dm, null))
+        assertFalse(ChatControlRules.allowReact(alice, dm, null))
+        val gid = "11111111-2222-3333-4444-555555555555"
+        val groupMsg = msg(alice, groupId = gid)
+        assertTrue(ChatControlRules.allowReact(bob, groupMsg, listOf(alice, bob)))
+        assertFalse(ChatControlRules.allowReact(bob, groupMsg, listOf(alice)))
+        assertFalse(ChatControlRules.allowReact(bob, groupMsg, null))
+        assertFalse(ChatControlRules.allowReact(bob, dm.copy(deleted = true), null))
+        assertFalse(ChatControlRules.allowReact(bob, null, listOf(bob)))
+    }
+
+    @Test
     fun typingIgnoresUnknownGroups() {
         val gid = "11111111-2222-3333-4444-555555555555"
         assertEquals(alice, ChatControlRules.typingChatId(alice, null, emptyList()))
