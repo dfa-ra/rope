@@ -121,6 +121,7 @@ import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.ChatActions
+import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
@@ -226,15 +227,15 @@ fun ChatsPane(
         val rows = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
+        val forwarding = state.forwarding != null
+        val empty = ChatListEmptyRules.copy(listMode, state.chatQuery, forwarding, state.profile?.role)
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty()) {
                 RopeEmptyState(
-                    title = emptyTitle(listMode, state.chatQuery),
-                    body = emptyBody(listMode, state.chatQuery, state.forwarding != null, state.profile?.role),
-                    actionLabel = if (listMode != ChatListMode.CALLS && state.forwarding == null && state.chatQuery.isBlank()) {
-                        if (listMode == ChatListMode.GROUPS) "Новая группа" else null
-                    } else null,
-                    onAction = if (listMode == ChatListMode.GROUPS) onNewGroup else null,
+                    title = empty.title,
+                    body = empty.body,
+                    actionLabel = empty.actionLabel,
+                    onAction = if (empty.actionLabel != null) onNewGroup else null,
                 )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
@@ -272,7 +273,7 @@ fun ChatsPane(
                     }
                 }
             }
-            if (state.forwarding == null && listMode != ChatListMode.CALLS && !ChatListRules.searching(state.chatQuery)) {
+            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, forwarding)) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier
@@ -340,25 +341,6 @@ private fun ChatListSearchField(
             }
         },
     )
-}
-
-private fun emptyTitle(mode: ChatListMode, query: String): String = when {
-    query.isNotBlank() -> "Ничего не нашли"
-    mode == ChatListMode.GROUPS -> "Групп пока нет"
-    mode == ChatListMode.CALLS -> "Звонков ещё не было"
-    else -> "Пока никого нет"
-}
-
-private fun emptyBody(mode: ChatListMode, query: String, forwarding: Boolean, role: String?): String = when {
-    forwarding -> if (RoleRules.canInvite(role)) {
-        "Некуда переслать. Пригласите человека или создайте группу."
-    } else {
-        "Некуда переслать. Когда появятся чаты, можно будет переслать сюда."
-    }
-    query.isNotBlank() -> "Попробуйте другое имя или текст последнего сообщения."
-    mode == ChatListMode.GROUPS -> RoleRules.groupsEmptyBody()
-    mode == ChatListMode.CALLS -> RoleRules.callsEmptyBody(role)
-    else -> RoleRules.chatsEmptyBody(role)
 }
 
 @Composable

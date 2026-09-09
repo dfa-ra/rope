@@ -5,6 +5,10 @@ PO-owned. Canonical tracker. One owner per row.
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.14 chat-list empty-search | — |
+| CG-094 | Slice: chat-list empty-search as 0.3.14 | PO | IN_PROGRESS | Telegram Ничего не найдено; search beats idle/forward | CG-007 |
+| CG-095 | Android: ChatListEmptyRules search miss | AND-01 | IN_PROGRESS | D-027; no 0.3.2 tap/long-press redo | CG-094 |
+| CG-096 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-095 |
+| CG-097 | Ship **0.3.14** | PO | IN_PROGRESS | versionCode 38; do not retag v0.3.13 | CG-096 |
 | CG-090 | Slice: chat date separators as 0.3.13 | PO | DONE | shipped v0.3.13 | CG-007 |
 | CG-091 | Android: DateSeparatorRules + day chips | AND-01 | DONE | D-026; DST daysAgo YEAR/DAY_OF_YEAR | CG-090 |
 | CG-092 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; idle midnight chip freeze acceptable; DST calendar-day math fixed | CG-091 |
