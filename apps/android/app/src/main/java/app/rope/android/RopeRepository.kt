@@ -99,6 +99,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -211,6 +212,7 @@ class RopeRepository(private val app: Application) {
     private var reconnectJob: Job? = null
     private var recordJob: Job? = null
     private var unfurlJob: Job? = null
+    @Volatile private var unfurlResult: PackedLinkPreview? = null
     private var voiceProgressJob: Job? = null
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
@@ -579,6 +581,7 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(linkPreviewsEnabled = next)
         if (!next) {
             unfurlJob?.cancel()
+            unfurlResult = null
             _state.value = _state.value.copy(composerPreview = null)
         } else {
             scheduleUnfurl(_state.value.draftText)
@@ -589,6 +592,7 @@ class RopeRepository(private val app: Application) {
         val url = _state.value.composerPreview?.url
             ?: LinkPreviewRules.firstHttps(_state.value.draftText)
         unfurlJob?.cancel()
+        unfurlResult = null
         _state.value = _state.value.copy(
             composerPreview = null,
             composerPreviewDismissedUrl = url,
@@ -934,6 +938,7 @@ class RopeRepository(private val app: Application) {
         try {
             voiceRecorder.start()
             unfurlJob?.cancel()
+            unfurlResult = null
             _state.value = _state.value.copy(recording = true, recordMs = 0, error = null)
             recordJob?.cancel()
             recordJob = scope.launch {
@@ -995,6 +1000,7 @@ class RopeRepository(private val app: Application) {
     fun startVideoNote() {
         if (_state.value.recording || _state.value.recordingVideoNote || _state.value.call != null) return
         unfurlJob?.cancel()
+        unfurlResult = null
         _state.value = _state.value.copy(recordingVideoNote = true, recordMs = 0, error = null)
     }
 
@@ -1775,6 +1781,7 @@ class RopeRepository(private val app: Application) {
 
     private fun scheduleUnfurl(text: String) {
         unfurlJob?.cancel()
+        unfurlResult = null
         val url = LinkPreviewRules.firstHttps(text)
         val dismissed = _state.value.composerPreviewDismissedUrl
         if (url != dismissed && url != null) {
@@ -1795,27 +1802,36 @@ class RopeRepository(private val app: Application) {
         }
         if (_state.value.composerPreview?.url == url) return
         unfurlJob = scope.launch {
+            val self = coroutineContext[Job]
             delay(LinkPreviewRules.UNFURL_DEBOUNCE_MS)
             if (_state.value.recording || _state.value.recordingVideoNote) return@launch
-            if (!LinkPreviewRules.shouldFetch(_state.value.linkPreviewsEnabled, false, _state.value.draftText)) {
-                return@launch
-            }
-            if (LinkPreviewRules.firstHttps(_state.value.draftText) != url) return@launch
-            val page = runCatching { LinkUnfurl.fetch(url) }.getOrNull()
-            val packed = page?.let { LinkPreviewRules.fromOg(url, it.title, it.description) }
-            if (packed == null) {
+            if (!_state.value.linkPreviewsEnabled) return@launch
+            if (!LinkPreviewRules.keepUnfurl(url, _state.value.draftText)) return@launch
+            val withThumb = fetchPackedPreview(url)
+            if (withThumb == null) {
                 if (_state.value.composerPreview?.url == url) {
                     _state.value = _state.value.copy(composerPreview = null)
                 }
                 return@launch
             }
-            val withThumb = page.imageJpeg?.takeIf { it.isNotEmpty() }?.let { jpeg ->
-                packed.copy(localPath = persistPlain("lp-${UUID.randomUUID()}", "lp.jpg", "image/jpeg", jpeg).absolutePath)
-            } ?: packed
-            if (LinkPreviewRules.firstHttps(_state.value.draftText) != url) return@launch
+            if (!isActive) return@launch
+            if (!LinkPreviewRules.keepUnfurl(url, _state.value.draftText)) return@launch
             if (_state.value.composerPreviewDismissedUrl == url) return@launch
-            _state.value = _state.value.copy(composerPreview = withThumb)
+            if (unfurlJob !== self) return@launch
+            unfurlResult = withThumb
+            if (LinkPreviewRules.writeComposerCard(url, _state.value.draftText)) {
+                _state.value = _state.value.copy(composerPreview = withThumb)
+            }
         }
+    }
+
+    private suspend fun fetchPackedPreview(url: String): PackedLinkPreview? {
+        val page = runCatching { LinkUnfurl.fetch(url) }.getOrNull() ?: return null
+        val packed = LinkPreviewRules.fromOg(url, page.title, page.description) ?: return null
+        val jpeg = page.imageJpeg?.takeIf { it.isNotEmpty() } ?: return packed
+        return packed.copy(
+            localPath = persistPlain("lp-${UUID.randomUUID()}", "lp.jpg", "image/jpeg", jpeg).absolutePath,
+        )
     }
 
     private suspend fun resolvePreviewForSend(
@@ -1825,16 +1841,30 @@ class RopeRepository(private val app: Application) {
         pendingJob: Job?,
         upload: Boolean,
     ): PackedLinkPreview? {
-        if (!_state.value.linkPreviewsEnabled) return null
-        val url = LinkPreviewRules.firstHttps(text) ?: return null
-        if (dismissedUrl == url) return null
-        var packed = attached.takeIf { it?.url == url }
-        if (packed == null && pendingJob != null && pendingJob.isActive) {
-            withTimeoutOrNull(LinkPreviewRules.SEND_WAIT_MS) { pendingJob.join() }
-            packed = _state.value.composerPreview.takeIf { it?.url == url }
-        }
+        val deadlineNs = System.nanoTime() + LinkPreviewRules.SEND_WAIT_MS * 1_000_000L
+        val packed = LinkPreviewRules.resolveSendPreview(
+            enabled = _state.value.linkPreviewsEnabled,
+            sendText = text,
+            dismissedUrl = dismissedUrl,
+            attached = attached,
+            jobResultAfterWait = {
+                if (pendingJob != null && pendingJob.isActive) {
+                    val left = remainingMs(deadlineNs)
+                    if (left > 0L) withTimeoutOrNull(left) { pendingJob.join() }
+                }
+                unfurlResult
+            },
+            fetch = { url ->
+                val left = remainingMs(deadlineNs)
+                if (left <= 0L) null
+                else withTimeoutOrNull(left) { fetchPackedPreview(url) }
+            },
+        )
         return attachThumb(packed, upload)
     }
+
+    private fun remainingMs(deadlineNs: Long): Long =
+        ((deadlineNs - System.nanoTime()) / 1_000_000L).coerceAtLeast(0L)
 
     private fun attachThumb(preview: PackedLinkPreview?, upload: Boolean): PackedLinkPreview? {
         if (preview == null) return null

@@ -123,6 +123,52 @@ object LinkPreviewRules {
         return firstHttps(text) != null
     }
 
+    /**
+     * In-flight composer unfurl keeps going when send clears [liveDraft].
+     * Abort only when the live first HTTPS URL changed to a different link.
+     */
+    fun keepUnfurl(scheduledUrl: String, liveDraft: String): Boolean {
+        val live = firstHttps(liveDraft) ?: return true
+        return live == scheduledUrl
+    }
+
+    /** Composer card stays on the live draft; send must not flash it back. */
+    fun writeComposerCard(scheduledUrl: String, liveDraft: String): Boolean =
+        firstHttps(liveDraft) == scheduledUrl
+
+    fun pickPackedForSend(
+        url: String,
+        attached: PackedLinkPreview?,
+        jobResult: PackedLinkPreview?,
+        composerAfterWait: PackedLinkPreview? = null,
+    ): PackedLinkPreview? {
+        listOf(attached, jobResult, composerAfterWait).forEach { packed ->
+            packed?.takeIf { it.url == url }?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Fast send captures [sendText] then clears composer state. Wait on the
+     * in-flight job (which may stash a result without rewriting the card);
+     * if that still yields nothing, fetch from the captured text.
+     */
+    suspend fun resolveSendPreview(
+        enabled: Boolean,
+        sendText: String,
+        dismissedUrl: String?,
+        attached: PackedLinkPreview?,
+        jobResultAfterWait: suspend () -> PackedLinkPreview?,
+        fetch: suspend (String) -> PackedLinkPreview?,
+    ): PackedLinkPreview? {
+        if (!enabled) return null
+        val url = firstHttps(sendText) ?: return null
+        if (dismissedUrl == url) return null
+        pickPackedForSend(url, attached, null)?.let { return it }
+        pickPackedForSend(url, null, jobResultAfterWait())?.let { return it }
+        return fetch(url)?.takeIf { it.url == url }
+    }
+
     fun fromOg(url: String, title: String, description: String): PackedLinkPreview? {
         val parsed = parse(url) ?: return null
         val cleanTitle = clip(title, TITLE_MAX)

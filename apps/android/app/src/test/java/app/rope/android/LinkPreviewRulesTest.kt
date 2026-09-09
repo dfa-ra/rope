@@ -176,4 +176,76 @@ class LinkPreviewRulesTest {
         assertNull(OgHtml.resolveHttps("https://example.com", "http://insecure.example/x"))
         assertNull(OgHtml.resolveHttps("https://example.com", "https://127.0.0.1/x"))
     }
+
+    @Test
+    fun keepUnfurlSurvivesSendClearingDraft() {
+        val url = "https://example.com/a"
+        assertFalse(LinkPreviewRules.shouldFetch(enabled = true, recording = false, text = ""))
+        assertTrue(LinkPreviewRules.keepUnfurl(url, ""))
+        assertTrue(LinkPreviewRules.keepUnfurl(url, "смотри $url"))
+        assertFalse(LinkPreviewRules.keepUnfurl(url, "смотри https://other.org/x"))
+        assertFalse(LinkPreviewRules.writeComposerCard(url, ""))
+        assertTrue(LinkPreviewRules.writeComposerCard(url, "смотри $url"))
+    }
+
+    @Test
+    fun fastSendPacksLpWhenUnfurlJobSeesEmptyDraft() {
+        val sendText = "смотри https://example.com/a"
+        val url = LinkPreviewRules.firstHttps(sendText)!!
+        assertNull(
+            LinkPreviewRules.pickPackedForSend(
+                url,
+                attached = null,
+                jobResult = null,
+                composerAfterWait = null,
+            ),
+        )
+        val stashed = LinkPreviewRules.fromOg(url, "Page title", "OG description")
+        assertEquals(
+            "Page title",
+            LinkPreviewRules.pickPackedForSend(url, attached = null, jobResult = stashed)!!.title,
+        )
+        val packed = runBlocking {
+            LinkPreviewRules.resolveSendPreview(
+                enabled = true,
+                sendText = sendText,
+                dismissedUrl = null,
+                attached = null,
+                jobResultAfterWait = {
+                    // Composer job saw cleared draftText and returned without a card.
+                    assertFalse(LinkPreviewRules.shouldFetch(true, false, ""))
+                    assertTrue(LinkPreviewRules.keepUnfurl(url, ""))
+                    null
+                },
+                fetch = { fetchUrl ->
+                    LinkPreviewRules.fromOg(fetchUrl, "Page title", "OG description")
+                },
+            )
+        }
+        assertEquals("Page title", packed!!.title)
+        assertEquals(url, packed.url)
+        val attached = runBlocking {
+            LinkPreviewRules.resolveSendPreview(
+                enabled = true,
+                sendText = sendText,
+                dismissedUrl = null,
+                attached = stashed,
+                jobResultAfterWait = { error("attached send must not wait") },
+                fetch = { error("attached send must not fetch") },
+            )
+        }
+        assertEquals("Page title", attached!!.title)
+        assertNull(
+            runBlocking {
+                LinkPreviewRules.resolveSendPreview(
+                    enabled = true,
+                    sendText = sendText,
+                    dismissedUrl = url,
+                    attached = null,
+                    jobResultAfterWait = { error("dismissed send must not wait") },
+                    fetch = { error("dismissed send must not fetch") },
+                )
+            },
+        )
+    }
 }
