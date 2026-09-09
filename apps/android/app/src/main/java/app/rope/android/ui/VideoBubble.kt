@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,9 +51,6 @@ fun VideoMessageBubble(
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
 ) {
-    LaunchedEffect(m.id, m.localPath) {
-        onEnsure(m)
-    }
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
     val duration = extra?.durationMs ?: 0L
     val path = m.localPath
@@ -113,7 +109,9 @@ fun VideoMessageBubble(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(enabled = !path.isNullOrBlank()) { playing = true },
+                    .clickable {
+                        if (path.isNullOrBlank()) onEnsure(m) else playing = true
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

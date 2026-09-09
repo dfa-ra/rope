@@ -15,6 +15,8 @@ import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
+import app.rope.android.data.AutoDownloadPrefs
+import app.rope.android.data.AutoDownloadRules
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
@@ -185,6 +187,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val autoDl: AutoDownloadPrefs = AutoDownloadPrefs(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -256,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    autoDl = store.autoDownload(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -578,6 +582,12 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun setAutoDownload(prefs: AutoDownloadPrefs) {
+        if (_state.value.autoDl == prefs) return
+        store.saveAutoDownload(prefs)
+        _state.value = _state.value.copy(autoDl = prefs)
     }
 
     fun toggleNotificationsMuted() {
@@ -1981,7 +1991,10 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun prefetchMedia(messages: List<ChatMessage>) {
-        messages.forEach { ensureMedia(it) }
+        val prefs = _state.value.autoDl
+        messages.forEach { m ->
+            if (AutoDownloadRules.prefetch(m.kind, prefs)) ensureMedia(m)
+        }
     }
 
     private fun attachmentName(uri: Uri, mime: String): String {

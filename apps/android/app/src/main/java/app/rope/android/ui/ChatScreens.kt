@@ -145,6 +145,8 @@ import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
+import app.rope.android.data.AutoDownloadRules
+
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -1553,7 +1555,7 @@ private fun MessageBubble(
                                 onCycleSpeed = onCycleVoiceSpeed,
                             )
                             MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
-                            MessageKind.FILE -> FileBubble(m)
+                            MessageKind.FILE -> FileBubble(m, onEnsureMedia)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                             else -> {
@@ -2098,7 +2100,6 @@ private fun MosaicTile(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
     val video = m.kind == MessageKind.VIDEO
     val bmp = m.localPath?.let { path ->
@@ -2162,9 +2163,6 @@ private fun ImageBubble(
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
 ) {
-    LaunchedEffect(m.id, m.localPath) {
-        onEnsure(m)
-    }
     val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
     if (bmp != null) {
         val box = PhotoLayout.box(bmp.width, bmp.height)
@@ -2197,7 +2195,7 @@ private fun ImageBubble(
         }
     } else {
         Text(
-            if (m.extra.isNotBlank()) "Фото · загружается…" else m.text,
+            if (m.extra.isNotBlank()) AutoDownloadRules.PLACEHOLDER else m.text,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.clickable { onEnsure(m) },
         )
@@ -2218,10 +2216,18 @@ private fun MediaCaptionLine(caption: String?) {
 }
 
 @Composable
-private fun FileBubble(m: ChatMessage) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun FileBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit) {
+    val ready = !m.localPath.isNullOrBlank()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.clickable { onEnsure(m) },
+    ) {
         Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
-        Text(m.text, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            if (ready) m.text else AutoDownloadRules.PLACEHOLDER,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

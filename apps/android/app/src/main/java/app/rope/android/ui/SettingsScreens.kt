@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.AutoDownloadRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetAutoDownload: (app.rope.android.data.AutoDownloadPrefs) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -124,6 +126,31 @@ fun SettingsPane(
                 }
             }
         }
+        FadeIn(140) {
+            SectionCard {
+                Text(AutoDownloadRules.TITLE, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    AutoDownloadRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AutoDownloadRow(
+                    label = AutoDownloadRules.PHOTOS,
+                    checked = state.autoDl.photos,
+                    onChecked = { onSetAutoDownload(state.autoDl.copy(photos = it)) },
+                )
+                AutoDownloadRow(
+                    label = AutoDownloadRules.VIDEOS,
+                    checked = state.autoDl.videos,
+                    onChecked = { onSetAutoDownload(state.autoDl.copy(videos = it)) },
+                )
+                AutoDownloadRow(
+                    label = AutoDownloadRules.FILES,
+                    checked = state.autoDl.files,
+                    onChecked = { onSetAutoDownload(state.autoDl.copy(files = it)) },
+                )
+            }
+        }
         FadeIn(160) {
             SectionCard {
                 Text("Оформление", style = MaterialTheme.typography.titleMedium)
@@ -207,5 +234,25 @@ fun SettingsPane(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun AutoDownloadRow(
+    label: String,
+    checked: Boolean,
+    onChecked: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = { if (it != checked) onChecked(it) },
+            modifier = Modifier.semantics { contentDescription = label },
+        )
     }
 }
