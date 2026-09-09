@@ -83,6 +83,7 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -144,6 +145,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.ExpireRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -165,6 +167,7 @@ import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
+import app.rope.android.data.RoleRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -612,8 +615,24 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onSetTtl: (Int) -> Unit = {},
+    onExpireMeta: (ChatMessage) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
+    val canSetTtl = ExpireRules.canSetTimer(
+        isGroup = state.group != null,
+        canManageGroup = state.group?.let { g ->
+            val me = state.profile?.deviceId
+            RoleRules.canManageGroupMembers(
+                isMember = me != null && me in g.members,
+                myId = me,
+                organizerId = GroupChatUx.organizerId(g),
+                serverRole = state.profile?.role,
+            )
+        } ?: false,
+        saved = saved,
+    )
+    var showTtl by remember { mutableStateOf(false) }
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
@@ -756,6 +775,11 @@ fun ChatPane(
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
+                if (saved) {
+                    IconButton(onClick = { showTtl = true }) {
+                        Icon(Icons.Outlined.Timer, contentDescription = ExpireRules.ROW_TITLE)
+                    }
+                }
                 if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
                     IconButton(onClick = onCall) {
                         Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
@@ -863,6 +887,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onExpireMeta = onExpireMeta,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -895,6 +920,7 @@ fun ChatPane(
                                         reactionExpanded = false
                                     },
                                     onSwipeReply = { target -> onReply(target) },
+                                    onExpireMeta = onExpireMeta,
                                 )
                             }
                         }
@@ -968,6 +994,7 @@ fun ChatPane(
                 onCancelComposer = onCancelComposer,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
+                onOpenTtl = { showTtl = true },
             )
         }
     }
@@ -1027,6 +1054,17 @@ fun ChatPane(
                 onVideoNoteStart()
             },
             onDismiss = { showAttach = false },
+        )
+    }
+    if (showTtl) {
+        DisappearSheet(
+            ttlSec = state.ttlSec,
+            canSet = canSetTtl,
+            onSelect = {
+                onSetTtl(it)
+                showTtl = false
+            },
+            onDismiss = { showTtl = false },
         )
     }
 }
@@ -1140,6 +1178,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onExpireMeta: (ChatMessage) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1333,11 +1372,29 @@ private fun MessageBubble(
                     }
                     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
                     if (meta.isNotBlank()) {
-                        Text(
-                            meta,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = if (m.expiresAtMs != null) {
+                                Modifier.clickable { onExpireMeta(m) }
+                            } else {
+                                Modifier
+                            },
+                        ) {
+                            if (m.expiresAtMs != null) {
+                                Icon(
+                                    Icons.Outlined.Timer,
+                                    contentDescription = ExpireRules.ROW_TITLE,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                meta,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 Box(
@@ -1640,6 +1697,7 @@ private fun AlbumBubble(
     onEnterSelect: () -> Unit,
     onLongPressMember: (ChatMessage) -> Unit,
     onSwipeReply: (ChatMessage) -> Unit = {},
+    onExpireMeta: (ChatMessage) -> Unit = {},
 ) {
     val first = members.firstOrNull() ?: return
     val last = members.last()
@@ -1712,6 +1770,27 @@ private fun AlbumBubble(
             }
         }
         MediaCaptionLine(MediaSendRules.albumCaption(members))
+        if (last.expiresAtMs != null && meta.isNotBlank()) {
+            Row(
+                Modifier
+                    .clickable { onExpireMeta(last) }
+                    .padding(top = 2.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Timer,
+                    contentDescription = ExpireRules.ROW_TITLE,
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         if (last.reactions.isNotEmpty()) {
             ReactionRow(last, state.profile?.deviceId.orEmpty(), mine, onReact)
         }
@@ -1868,6 +1947,7 @@ private fun ComposerBar(
     onCancelComposer: () -> Unit,
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
+    onOpenTtl: () -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
@@ -1997,6 +2077,16 @@ private fun ComposerBar(
                             if (ComposerRules.showAttach(state.editTarget != null)) {
                                 IconButton(onClick = onAttach) {
                                     Icon(Icons.Outlined.AttachFile, contentDescription = "Вложение")
+                                }
+                            }
+                            if (state.ttlSec > 0) {
+                                IconButton(onClick = onOpenTtl) {
+                                    Icon(
+                                        Icons.Outlined.Timer,
+                                        contentDescription = ExpireRules.ROW_TITLE,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp),
+                                    )
                                 }
                             }
                             IconButton(onClick = { showEmoji = !showEmoji }) {

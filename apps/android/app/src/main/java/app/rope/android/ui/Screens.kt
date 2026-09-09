@@ -176,6 +176,8 @@ fun RopeScaffold(
     onDismissNotice: () -> Unit,
     onBack: () -> Boolean = { false },
     onTab: (Screen) -> Unit = onGo,
+    onSetTtl: (Int) -> Unit = {},
+    onExpireMeta: (app.rope.android.data.ChatMessage) -> Unit = {},
 ) {
     val signedIn = state.profile != null
     val splash = rememberSplashOverlay(state)
@@ -327,6 +329,8 @@ fun RopeScaffold(
                             onVideoNoteFinish = onVideoNoteFinish,
                             onVideoNotePreview = onVideoNotePreview,
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
+                            onSetTtl = onSetTtl,
+                            onExpireMeta = onExpireMeta,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
@@ -341,12 +345,20 @@ fun RopeScaffold(
                             onCopyText,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(
+                            state,
+                            onAddMember,
+                            onRemoveMember,
+                            onLeaveGroup,
+                            onBack = { onBack() },
+                            onSetTtl = onSetTtl,
+                        )
                         Screen.PeerProfile -> app.rope.android.ui.PeerProfilePane(
                             state,
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onSetTtl = onSetTtl,
                         )
                     }
                 }

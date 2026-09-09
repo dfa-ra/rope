@@ -248,6 +248,8 @@ class MainActivity : AppCompatActivity() {
                     onDismissNotice = repo::dismissNotice,
                     onBack = repo::goBack,
                     onTab = { repo.go(it, tab = true) },
+                    onSetTtl = repo::setChatTtl,
+                    onExpireMeta = repo::showExpireCountdown,
                 )
             }
         }

@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 6) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 7) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -40,7 +40,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
               sender_id TEXT NOT NULL DEFAULT '',
               sender_name TEXT NOT NULL DEFAULT '',
               reactions TEXT NOT NULL DEFAULT '[]',
-              meta TEXT NOT NULL DEFAULT '{}'
+              meta TEXT NOT NULL DEFAULT '{}',
+              exp_ms INTEGER
             )
             """.trimIndent(),
         )
@@ -96,6 +97,9 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         if (oldVersion < 6) {
             db.execSQL("ALTER TABLE groups ADD COLUMN created_by TEXT NOT NULL DEFAULT ''")
         }
+        if (oldVersion < 7) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN exp_ms INTEGER")
+        }
     }
 
     fun saveProfile(p: ServerProfile) {
@@ -147,14 +151,16 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 forwardedFrom = msg.forwardedFrom ?: existing.forwardedFrom,
                 edited = msg.edited || existing.edited,
                 deleted = msg.deleted || existing.deleted,
+                ttlSec = if (msg.ttlSec > 0) msg.ttlSec else existing.ttlSec,
+                expiresAtMs = msg.expiresAtMs ?: existing.expiresAtMs,
             )
         }
         writableDatabase.execSQL(
             """
             INSERT OR REPLACE INTO messages(
               id, peer_id, outgoing, body_enc, status, ts, envelope,
-              kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta, exp_ms
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """.trimIndent(),
             arrayOf(
                 merged.id,
@@ -172,6 +178,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 merged.senderName,
                 ReactionCodec.toJson(merged.reactions),
                 MessageMeta.of(merged).toJson(),
+                merged.expiresAtMs,
             ),
         )
     }
@@ -179,8 +186,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     fun message(id: String): ChatMessage? {
         val c = readableDatabase.rawQuery(
             """
-            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
+            SELECT $MSG_COLS
             FROM messages WHERE id = ?
             """.trimIndent(),
             arrayOf(id),
@@ -233,11 +239,31 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         return true
     }
 
+    fun expiredMessages(nowMs: Long): List<ChatMessage> {
+        val c = readableDatabase.rawQuery(
+            """
+            SELECT $MSG_COLS
+            FROM messages WHERE exp_ms IS NOT NULL AND exp_ms > 0 AND exp_ms <= ?
+            """.trimIndent(),
+            arrayOf(nowMs.toString()),
+        )
+        val out = mutableListOf<ChatMessage>()
+        c.use {
+            while (it.moveToNext()) {
+                out += row(it)
+            }
+        }
+        return out
+    }
+
+    fun hardDeleteMessage(id: String): Boolean {
+        return writableDatabase.delete("messages", "id = ?", arrayOf(id)) > 0
+    }
+
     fun messages(peerId: String): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
             """
-            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
+            SELECT $MSG_COLS
             FROM messages WHERE peer_id = ? ORDER BY ts ASC
             """.trimIndent(),
             arrayOf(peerId),
@@ -261,8 +287,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     fun pendingOutgoing(): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
             """
-            SELECT id, peer_id, outgoing, body_enc, status, ts, envelope,
-                   kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta
+            SELECT $MSG_COLS
             FROM messages WHERE outgoing = 1 AND status = ?
             """.trimIndent(),
             arrayOf(MessageStatus.CREATED.name),
@@ -443,6 +468,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val kind = runCatching { MessageKind.valueOf(c.getString(7)) }.getOrDefault(MessageKind.TEXT)
         val meta = if (c.columnCount > 14 && !c.isNull(14)) MessageMeta.parse(c.getString(14)) else MessageMeta()
         val text = if (meta.deleted) "" else decrypt(c.getBlob(3))
+        val expMs = if (c.columnCount > 15 && !c.isNull(15)) c.getLong(15) else null
         return ChatMessage(
             id = c.getString(0),
             peerDeviceId = c.getString(1),
@@ -467,6 +493,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             forwardedFrom = meta.forwardedFrom,
             edited = meta.edited,
             deleted = meta.deleted,
+            ttlSec = meta.ttlSec,
+            expiresAtMs = expMs ?: meta.expiresAtMs,
         )
     }
 
@@ -511,5 +539,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     companion object {
         private const val PAYLOAD_ALIAS = "rope-local-payload"
+        private const val MSG_COLS =
+            "id, peer_id, outgoing, body_enc, status, ts, envelope, kind, extra, group_id, local_path, sender_id, sender_name, reactions, meta, exp_ms"
     }
 }

@@ -30,6 +30,8 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
+import app.rope.android.data.ExpireRules
+import app.rope.android.data.ExpireStamp
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
@@ -173,6 +175,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val ttlSec: Int = 0,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
@@ -223,6 +226,7 @@ class RopeRepository(private val app: Application) {
     private var boundLocal: VideoSink? = null
     private var iceCachedAtMs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var expireSweepJob: Job? = null
     private var toneOutgoing: Boolean? = null
 
     fun start(pendingLink: String?) {
@@ -247,6 +251,8 @@ class RopeRepository(private val app: Application) {
                     vault.save(it.toBytes())
                 }
                 store.profile()?.let { attached(it) }
+                startExpireSweep()
+                sweepExpired(notifyPeer = true)
                 checkAppUpdate(openStatus = false)
                 if (!pendingLink.isNullOrBlank() && store.profile() == null) {
                     prepareJoin(pendingLink)
@@ -614,6 +620,7 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             val id = identity ?: return@launch
             try {
+                val stamp = chatStamp(peer.deviceId, withMid = false)
                 val packed = TextBody.encode(
                     text,
                     pack.id,
@@ -622,6 +629,8 @@ class RopeRepository(private val app: Application) {
                     quoteText = pack.quoteText,
                     quoteStart = pack.quoteStart,
                     quoteEnd = pack.quoteEnd,
+                    ttlSec = stamp.ttlSec,
+                    expMs = stamp.expMs,
                 )
                 val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
                 val local = ChatMessage(
@@ -641,6 +650,8 @@ class RopeRepository(private val app: Application) {
                     quoteText = pack.quoteText,
                     quoteStart = pack.quoteStart,
                     quoteEnd = pack.quoteEnd,
+                    ttlSec = stamp.ttlSec,
+                    expiresAtMs = stamp.expMs,
                 )
                 store.insertMessage(local)
                 refreshMessages(peer.deviceId)
@@ -838,6 +849,9 @@ class RopeRepository(private val app: Application) {
                 val rest = prepared.filter { !VideoRules.albumEligible(it.kind) }
                 val slots = AlbumRules.slots(images.size)
                 val cap = MediaSendRules.normalize(caption)
+                val destId = destGroup?.let { ChatIds.group(it.groupId) } ?: destPeer?.deviceId
+                val now = System.currentTimeMillis()
+                val shared = destId?.let { chatStamp(it, now, withMid = false) } ?: ExpireStamp()
                 images.zip(slots).forEach { (item, slot) ->
                     sendMediaBytes(
                         item.bytes,
@@ -852,6 +866,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        stamp = albumStamp(shared, destGroup != null),
                     )
                 }
                 rest.forEach { item ->
@@ -864,6 +879,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        stamp = albumStamp(shared, destGroup != null),
                     )
                 }
             } catch (e: Exception) {
@@ -1523,6 +1539,41 @@ class RopeRepository(private val app: Application) {
 
     fun resume() {
         store.profile()?.let { connectSocket(it) }
+        startExpireSweep()
+        scope.launch { sweepExpired(notifyPeer = true) }
+    }
+
+    fun setChatTtl(ttlSec: Int) {
+        val chatId = openChatId() ?: return
+        val group = _state.value.group
+        val me = _state.value.profile?.deviceId
+        val canManage = group != null && RoleRules.canManageGroupMembers(
+            isMember = me != null && me in group.members,
+            myId = me,
+            organizerId = GroupChatUx.organizerId(group),
+            serverRole = _state.value.profile?.role,
+        )
+        if (!ExpireRules.canSetTimer(group != null, canManage, SavedMessagesRules.isSaved(chatId))) return
+        val next = ExpireRules.normalizeTtl(ttlSec)
+        val cur = store.chatPrefs(chatId)
+        store.saveChatPrefs(chatId, cur.copy(ttlSec = next, ttlSetAtMs = System.currentTimeMillis()))
+        _state.value = _state.value.copy(ttlSec = next)
+        if (!ExpireRules.shouldSendControl(chatId)) return
+        sendControl(
+            EnvelopeTypes.RECEIPT,
+            ChatControl(
+                ChatControl.TTL,
+                ExpireRules.ttlTarget(chatId),
+                op = if (next == 0) "clear" else "set",
+                text = next.toString(),
+            ).toJson().toByteArray(),
+            chatId,
+        )
+    }
+
+    fun showExpireCountdown(msg: ChatMessage) {
+        val exp = msg.expiresAtMs ?: return
+        notice(ExpireRules.remainingCopy(exp, System.currentTimeMillis()))
     }
 
     private fun sendMediaBytes(
@@ -1539,6 +1590,7 @@ class RopeRepository(private val app: Application) {
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
         waveform: List<Int> = emptyList(),
+        stamp: ExpireStamp? = null,
     ) {
         val id = identity ?: return
         val group = destGroup
@@ -1546,6 +1598,8 @@ class RopeRepository(private val app: Application) {
         if (group == null && peer == null) {
             throw IllegalStateException("откройте чат, чтобы отправить вложение")
         }
+        val destId = destGroup?.let { ChatIds.group(it.groupId) } ?: destPeer?.deviceId.orEmpty()
+        val expire = stamp ?: chatStamp(destId, withMid = destGroup != null)
         val saved = SavedMessagesRules.isSaved(peer?.deviceId) && group == null
         val enc = encryptObject(bytes)
         val grouped = VideoRules.albumEligible(kind)
@@ -1572,7 +1626,7 @@ class RopeRepository(private val app: Application) {
             pack.quoteText,
             pack.quoteStart,
             pack.quoteEnd,
-        )
+        ).withExpire(expire)
         if (saved) {
             val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
             val payload = payloadOf(objectId, null)
@@ -1602,6 +1656,7 @@ class RopeRepository(private val app: Application) {
                 payload.toJson(),
                 cache,
                 pack = pack,
+                stamp = expire,
             )
             return
         }
@@ -1626,6 +1681,8 @@ class RopeRepository(private val app: Application) {
             quoteText = pack.quoteText,
             quoteStart = pack.quoteStart,
             quoteEnd = pack.quoteEnd,
+            ttlSec = expire.ttlSec,
+            expiresAtMs = expire.expMs,
         )
         store.insertMessage(local)
         refreshMessages(dest.deviceId)
@@ -1640,6 +1697,7 @@ class RopeRepository(private val app: Application) {
         forwardedFrom: String? = null,
     ) {
         val attributed = JsonIds.optional(forwardedFrom)
+        val stamp = chatStamp(ChatIds.group(group.groupId), withMid = true)
         val body = GroupTextPayload(
             group.groupId,
             text,
@@ -1651,6 +1709,9 @@ class RopeRepository(private val app: Application) {
             quoteText = if (attributed == null) pack.quoteText else "",
             quoteStart = if (attributed == null) pack.quoteStart else -1,
             quoteEnd = if (attributed == null) pack.quoteEnd else -1,
+            ttlSec = stamp.ttlSec,
+            expiresAtMs = stamp.expMs,
+            mid = stamp.mid,
         ).toJson().toByteArray()
         sendGroupPayload(
             group,
@@ -1663,6 +1724,7 @@ class RopeRepository(private val app: Application) {
             if (attributed == null) reply else null,
             attributed,
             if (attributed == null) pack else ReplyPack(),
+            stamp = stamp,
         )
     }
 
@@ -1677,6 +1739,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
+        stamp: ExpireStamp = ExpireStamp(),
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -1706,8 +1769,9 @@ class RopeRepository(private val app: Application) {
                     return@launch
                 }
                 val chatId = ChatIds.group(group.groupId)
+                val localId = stamp.mid?.takeIf { it.isNotBlank() } ?: firstId.ifBlank { UUID.randomUUID().toString() }
                 val local = ChatMessage(
-                    id = firstId.ifBlank { UUID.randomUUID().toString() },
+                    id = localId,
                     peerDeviceId = chatId,
                     outgoing = true,
                     text = preview,
@@ -1727,6 +1791,8 @@ class RopeRepository(private val app: Application) {
                     quoteStart = if (forwardedFrom == null) pack.quoteStart else -1,
                     quoteEnd = if (forwardedFrom == null) pack.quoteEnd else -1,
                     forwardedFrom = forwardedFrom,
+                    ttlSec = stamp.ttlSec,
+                    expiresAtMs = stamp.expMs,
                 )
                 store.insertMessage(local)
                 refreshMessages(chatId)
@@ -1749,6 +1815,121 @@ class RopeRepository(private val app: Application) {
 
     private fun persistPlain(objectId: String, name: String, mime: String, bytes: ByteArray): File {
         return ImageCodec.persist(File(app.filesDir, "media"), objectId, mime, name, bytes)
+    }
+
+    private fun mediaRoot(): File = File(app.filesDir, "media")
+
+    private fun chatStamp(chatId: String, nowMs: Long = System.currentTimeMillis(), withMid: Boolean): ExpireStamp {
+        val ttl = store.chatPrefs(chatId).ttlSec
+        val mid = if (withMid && ttl > 0) UUID.randomUUID().toString() else null
+        return ExpireRules.stamp(ttl, nowMs, mid)
+    }
+
+    private fun albumStamp(shared: ExpireStamp, withMid: Boolean): ExpireStamp {
+        if (!shared.active) return ExpireStamp()
+        val mid = if (withMid) UUID.randomUUID().toString() else null
+        return shared.copy(mid = mid)
+    }
+
+    private fun incomingStamp(ttlSec: Int, expMs: Long?, timestampMs: Long, mid: String?): ExpireStamp {
+        val resolved = ExpireRules.resolveExp(expMs, ttlSec, timestampMs)
+        val ttl = if (ttlSec > 0) {
+            ttlSec
+        } else if (resolved != null && timestampMs > 0L) {
+            ((resolved - timestampMs) / 1000L).toInt().coerceAtLeast(0)
+        } else {
+            0
+        }
+        return ExpireStamp(ttl, resolved, JsonIds.optional(mid))
+    }
+
+    private fun startExpireSweep() {
+        if (expireSweepJob?.isActive == true) return
+        expireSweepJob = scope.launch {
+            while (true) {
+                sweepExpired(notifyPeer = true)
+                delay(ExpireRules.SWEEP_MS)
+            }
+        }
+    }
+
+    private fun sweepExpired(notifyPeer: Boolean) {
+        val now = System.currentTimeMillis()
+        val rows = store.expiredMessages(now)
+        if (rows.isEmpty()) return
+        for (row in rows) {
+            wipeExpired(row, notifyPeer)
+        }
+        refreshOpenChat()
+        refreshConversations()
+    }
+
+    private fun maybeExpireIncoming(msg: ChatMessage) {
+        if (ExpireRules.due(msg.expiresAtMs, System.currentTimeMillis())) {
+            wipeExpired(msg, notifyPeer = true)
+            refreshOpenChat()
+            refreshConversations()
+        }
+    }
+
+    private fun wipeExpired(msg: ChatMessage, notifyPeer: Boolean) {
+        ExpireRules.unlinkIfUnderMedia(msg.localPath, mediaRoot())
+        val chatId = msg.peerDeviceId
+        val cur = store.chatPrefs(chatId)
+        if (cur.pinnedMessageId == msg.id) {
+            store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = null))
+            if (openChatId() == chatId) {
+                _state.value = _state.value.copy(pinnedMessageId = null)
+            }
+            if (notifyPeer && ExpireRules.shouldSendControl(chatId)) {
+                sendControl(
+                    EnvelopeTypes.RECEIPT,
+                    ChatControl(ChatControl.PIN, msg.id, op = ReactionPayload.CLEAR).toJson().toByteArray(),
+                    chatId,
+                )
+            }
+        }
+        if (voicePlayer.activeId == msg.id) {
+            voicePlayer.stop()
+            publishVoiceProgress()
+        }
+        if (_state.value.viewingImage?.id == msg.id) {
+            closeImage()
+        }
+        val albumId = runCatching { MediaPayload.parse(msg.extra).albumId }.getOrNull()
+        notifier.cancel(AlbumRules.notifyId(msg.text, albumId))
+        notifier.cancel(msg.id.hashCode())
+        store.hardDeleteMessage(msg.id)
+        if (notifyPeer && ExpireRules.shouldSendControl(chatId)) {
+            sendControl(
+                EnvelopeTypes.RECEIPT,
+                ChatControl(ChatControl.EXPIRE, msg.id).toJson().toByteArray(),
+                chatId,
+            )
+        }
+    }
+
+    private fun applyTtlControl(control: ChatControl, sender: DirectoryDevice, timestampMs: Long) {
+        val chatId = ExpireRules.chatIdFromTtlTarget(control.targetId, sender.deviceId)
+        val group = if (ChatIds.isGroup(chatId)) {
+            store.groups().find { it.groupId == ChatIds.rawGroupId(chatId) }
+        } else {
+            null
+        }
+        val allowed = ExpireRules.senderMaySetTtl(
+            isGroup = group != null,
+            senderId = sender.deviceId,
+            organizerId = group?.let { GroupChatUx.organizerId(it) }.orEmpty(),
+            senderServerRole = sender.role,
+        )
+        if (!allowed) return
+        val cur = store.chatPrefs(chatId)
+        if (timestampMs < cur.ttlSetAtMs) return
+        val next = if (control.op == "clear") 0 else ExpireRules.normalizeTtl(control.text.toIntOrNull() ?: 0)
+        store.saveChatPrefs(chatId, cur.copy(ttlSec = next, ttlSetAtMs = timestampMs))
+        if (openChatId() == chatId) {
+            _state.value = _state.value.copy(ttlSec = next)
+        }
     }
 
     private fun prefetchMedia(messages: List<ChatMessage>) {
@@ -1778,10 +1959,14 @@ class RopeRepository(private val app: Application) {
         return VideoRules.looksLikeVideo(name, mime) || looksLikeImage(name, mime)
     }
 
-    private fun sendControl(type: UByte, body: ByteArray) {
+    private fun sendControl(type: UByte, body: ByteArray, chatId: String? = openChatId()) {
+        if (chatId == null || !ExpireRules.shouldSendControl(chatId)) return
         val id = identity ?: return
-        val group = _state.value.group
-        if (group != null) {
+        if (ChatIds.isGroup(chatId)) {
+            val gid = ChatIds.rawGroupId(chatId)
+            val group = store.groups().find { it.groupId == gid }
+                ?: _state.value.group?.takeIf { it.groupId == gid }
+                ?: return
             scope.launch {
                 val devices = currentDevices()
                 val envelopes = JSONArray()
@@ -1804,7 +1989,9 @@ class RopeRepository(private val app: Application) {
             }
             return
         }
-        val peer = _state.value.peer ?: return
+        val peer = _state.value.devices.find { it.deviceId == chatId }
+            ?: _state.value.peer?.takeIf { it.deviceId == chatId }
+            ?: return
         if (peer.publicIdentity.isEmpty()) return
         scope.launch {
             try {
@@ -1895,6 +2082,7 @@ class RopeRepository(private val app: Application) {
 
     private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?) {
         val prefs = store.chatPrefs(chatId)
+        sweepExpired(notifyPeer = true)
         val messages = store.messages(chatId)
         val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
         val pending = if (MediaSendRules.keepPendingOnEnter(openChatId(), chatId)) {
@@ -1916,6 +2104,7 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            ttlSec = prefs.ttlSec,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
@@ -1990,8 +2179,17 @@ class RopeRepository(private val app: Application) {
         }
         val id = identity ?: return
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
+        val stamp = chatStamp(peer.deviceId, withMid = false)
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            val packed = TextBody.encode(src.text, null, "", "", forwardedFrom = from)
+            val packed = TextBody.encode(
+                src.text,
+                null,
+                "",
+                "",
+                forwardedFrom = from,
+                ttlSec = stamp.ttlSec,
+                expMs = stamp.expMs,
+            )
             val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
             store.insertMessage(
                 ChatMessage(
@@ -2006,13 +2204,17 @@ class RopeRepository(private val app: Application) {
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
                     forwardedFrom = from,
+                    ttlSec = stamp.ttlSec,
+                    expiresAtMs = stamp.expMs,
                 ),
             )
             refreshMessages(peer.deviceId)
             pushEnvelope(env.bytes)
             return
         }
-        val payload = attributedMediaPayload(src, from, groupId = null) ?: return
+        val payload = (attributedMediaPayload(src, from, groupId = null) ?: return)
+            .withoutExpire()
+            .withExpire(stamp)
         val env = id.encryptTyped(
             publicIdentityFromBlob(peer.publicIdentity),
             EnvelopeTypes.MEDIA,
@@ -2038,6 +2240,8 @@ class RopeRepository(private val app: Application) {
                 replyName = "",
                 forwardedFrom = from,
                 reactions = emptyList(),
+                ttlSec = stamp.ttlSec,
+                expiresAtMs = stamp.expMs,
             ),
         )
         refreshMessages(peer.deviceId)
@@ -2050,16 +2254,20 @@ class RopeRepository(private val app: Application) {
             sendGroupText(group, src.text, forwardedFrom = from)
             return
         }
-        val payload = attributedMediaPayload(src, from, groupId = group.groupId) ?: return
+        val payload = (attributedMediaPayload(src, from, groupId = group.groupId) ?: return)
+            .withoutExpire()
+        val stamp = chatStamp(ChatIds.group(group.groupId), withMid = true)
+        val timed = payload.withExpire(stamp)
         sendGroupPayload(
             group,
             EnvelopeTypes.MEDIA,
-            payload.toJson().toByteArray(),
-            payload.preview(),
-            payload.messageKind(),
-            payload.toJson(),
+            timed.toJson().toByteArray(),
+            timed.preview(),
+            timed.messageKind(),
+            timed.toJson(),
             src.localPath?.let { File(it) }?.takeIf { it.isFile },
             forwardedFrom = from,
+            stamp = stamp,
         )
     }
 
@@ -2069,7 +2277,8 @@ class RopeRepository(private val app: Application) {
             saveLocalText(src.text, forwardedFrom = from)
             return
         }
-        val payload = attributedMediaPayload(src, from, groupId = null, upload = false) ?: return
+        val payload = (attributedMediaPayload(src, from, groupId = null, upload = false) ?: return)
+            .withoutExpire()
         val cache = src.localPath?.let { File(it) }?.takeIf { it.isFile }
         insertLocalSaved(
             text = payload.preview(),
@@ -2107,16 +2316,23 @@ class RopeRepository(private val app: Application) {
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
     ) {
+        val timestampMs = System.currentTimeMillis()
+        val stamp = chatStamp(SavedMessagesRules.ID, timestampMs, withMid = false)
+        val extraOut = if (extra.isNotBlank()) {
+            runCatching { MediaPayload.parse(extra).withoutExpire().withExpire(stamp).toJson() }.getOrDefault(extra)
+        } else {
+            extra
+        }
         val local = ChatMessage(
             id = store.newId(),
             peerDeviceId = SavedMessagesRules.ID,
             outgoing = true,
             text = text,
             status = MessageStatus.DELIVERED_TO_DEVICE,
-            timestampMs = System.currentTimeMillis(),
+            timestampMs = timestampMs,
             envelope = null,
             kind = kind,
-            extra = extra,
+            extra = extraOut,
             localPath = localFile?.absolutePath,
             senderId = identity?.deviceId().orEmpty(),
             senderName = _state.value.profile?.displayName.orEmpty(),
@@ -2127,6 +2343,8 @@ class RopeRepository(private val app: Application) {
             quoteStart = pack.quoteStart,
             quoteEnd = pack.quoteEnd,
             forwardedFrom = forwardedFrom,
+            ttlSec = stamp.ttlSec,
+            expiresAtMs = stamp.expMs,
         )
         store.insertMessage(local)
         refreshMessages(SavedMessagesRules.ID)
@@ -2422,6 +2640,7 @@ class RopeRepository(private val app: Application) {
             EnvelopeTypes.TEXT -> {
                 val plain = id.decryptMessage(publicIdentityFromBlob(sender.publicIdentity), env)
                 val packed = TextBody.decode(plain.text)
+                val stamp = incomingStamp(packed.ttlSec, packed.expiresAtMs, plain.timestampMs.toLong(), null)
                 val msg = ChatMessage(
                     id = plain.messageId,
                     peerDeviceId = sender.deviceId,
@@ -2439,10 +2658,13 @@ class RopeRepository(private val app: Application) {
                     quoteStart = packed.quoteStart,
                     quoteEnd = packed.quoteEnd,
                     forwardedFrom = packed.forwardedFrom,
+                    ttlSec = stamp.ttlSec,
+                    expiresAtMs = stamp.expMs,
                 )
                 store.insertMessage(msg)
                 ack(plain.messageId)
                 notifyIfHidden(sender.displayName, packed.text, sender.deviceId)
+                maybeExpireIncoming(msg)
             }
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2453,8 +2675,9 @@ class RopeRepository(private val app: Application) {
                     return
                 }
                 val chatId = ChatIds.group(gid)
+                val stamp = incomingStamp(payload.ttlSec, payload.expiresAtMs, typed.timestampMs.toLong(), payload.mid)
                 val msg = ChatMessage(
-                    id = typed.messageId,
+                    id = stamp.mid ?: typed.messageId,
                     peerDeviceId = chatId,
                     outgoing = false,
                     text = payload.text,
@@ -2471,10 +2694,13 @@ class RopeRepository(private val app: Application) {
                     quoteStart = payload.quoteStart,
                     quoteEnd = payload.quoteEnd,
                     forwardedFrom = payload.forwardedFrom,
+                    ttlSec = stamp.ttlSec,
+                    expiresAtMs = stamp.expMs,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
                 notifyIfHidden(sender.displayName, payload.text, chatId)
+                maybeExpireIncoming(msg)
             }
             EnvelopeTypes.MEDIA -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2482,8 +2708,9 @@ class RopeRepository(private val app: Application) {
                 val known = _state.value.groups.map { it.groupId }.toSet()
                 val chatId = ChatRouting.mediaChatId(payload.groupId, sender.deviceId, known)
                 val routedGroup = JsonIds.optional(payload.groupId)?.takeIf { it in known }
+                val stamp = incomingStamp(payload.ttlSec, payload.expiresAtMs, typed.timestampMs.toLong(), payload.mid)
                 val msg = ChatMessage(
-                    id = typed.messageId,
+                    id = stamp.mid ?: typed.messageId,
                     peerDeviceId = chatId,
                     outgoing = false,
                     text = payload.preview(),
@@ -2501,11 +2728,14 @@ class RopeRepository(private val app: Application) {
                     quoteStart = payload.quoteStart,
                     quoteEnd = payload.quoteEnd,
                     forwardedFrom = payload.forwardedFrom,
+                    ttlSec = stamp.ttlSec,
+                    expiresAtMs = stamp.expMs,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
                 notifyIfHidden(sender.displayName, payload.preview(), chatId, payload.albumId)
                 scope.launch { downloadMedia(msg.id, payload) }
+                maybeExpireIncoming(msg)
             }
             EnvelopeTypes.RECEIPT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2528,6 +2758,10 @@ class RopeRepository(private val app: Application) {
                         if (openChatId() == chatId) {
                             _state.value = _state.value.copy(pinnedMessageId = next)
                         }
+                    }
+                    control?.kind == ChatControl.TTL -> applyTtlControl(control, sender, typed.timestampMs.toLong())
+                    control?.kind == ChatControl.EXPIRE -> {
+                        store.message(control.targetId)?.let { wipeExpired(it, notifyPeer = false) }
                     }
                     reaction != null -> store.applyReaction(
                         reaction.targetId,
@@ -3118,7 +3352,14 @@ class RopeRepository(private val app: Application) {
                 val gid = msg.groupId ?: ChatIds.rawGroupId(msg.peerDeviceId)
                 val group = store.group(gid) ?: continue
                 val body = when (msg.kind) {
-                    MessageKind.GROUP_TEXT, MessageKind.TEXT -> GroupTextPayload(gid, msg.text, group.epoch).toJson().toByteArray()
+                    MessageKind.GROUP_TEXT, MessageKind.TEXT -> GroupTextPayload(
+                        gid,
+                        msg.text,
+                        group.epoch,
+                        ttlSec = msg.ttlSec,
+                        expiresAtMs = msg.expiresAtMs,
+                        mid = msg.expiresAtMs?.let { msg.id },
+                    ).toJson().toByteArray()
                     else -> msg.extra.toByteArray()
                 }
                 val type = if (msg.kind == MessageKind.GROUP_TEXT || msg.kind == MessageKind.TEXT) EnvelopeTypes.GROUP_TEXT else EnvelopeTypes.MEDIA
@@ -3149,7 +3390,21 @@ class RopeRepository(private val app: Application) {
         val peer = devices.find { it.deviceId == msg.peerDeviceId } ?: return null
         return try {
             if (msg.kind == MessageKind.TEXT) {
-                id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), msg.text).bytes
+                id.encryptMessage(
+                    publicIdentityFromBlob(peer.publicIdentity),
+                    TextBody.encode(
+                        msg.text,
+                        msg.replyToId,
+                        msg.replyPreview,
+                        msg.replyName,
+                        forwardedFrom = msg.forwardedFrom,
+                        quoteText = msg.quoteText,
+                        quoteStart = msg.quoteStart,
+                        quoteEnd = msg.quoteEnd,
+                        ttlSec = msg.ttlSec,
+                        expMs = msg.expiresAtMs,
+                    ),
+                ).bytes
             } else {
                 id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.MEDIA, msg.extra.toByteArray()).bytes
             }
@@ -3188,7 +3443,8 @@ class RopeRepository(private val app: Application) {
             _state.value.group != null -> ChatIds.group(_state.value.group!!.groupId)
             else -> _state.value.peer?.deviceId
         } ?: return
-        _state.value = _state.value.copy(messages = store.messages(openId))
+        val prefs = store.chatPrefs(openId)
+        _state.value = _state.value.copy(messages = store.messages(openId), ttlSec = prefs.ttlSec, pinnedMessageId = prefs.pinnedMessageId)
         refreshConversations()
     }
 

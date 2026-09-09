@@ -25,6 +25,9 @@ data class MediaPayload(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val waveform: List<Int> = emptyList(),
+    val ttlSec: Int = 0,
+    val expiresAtMs: Long? = null,
+    val mid: String? = null,
 ) {
     fun withReply(
         replyTo: String?,
@@ -50,6 +53,11 @@ data class MediaPayload(
         quoteStart = -1,
         quoteEnd = -1,
     )
+
+    fun withExpire(stamp: ExpireStamp): MediaPayload =
+        copy(ttlSec = stamp.ttlSec, expiresAtMs = stamp.expMs, mid = stamp.mid)
+
+    fun withoutExpire(): MediaPayload = copy(ttlSec = 0, expiresAtMs = null, mid = null)
 
     fun toJson(): String = JSONObject()
         .put("kind", kind)
@@ -79,6 +87,7 @@ data class MediaPayload(
                 waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
                 put("wf", arr)
             }
+            ExpireRules.put(this, ExpireStamp(ttlSec, expiresAtMs, mid))
         }
         .toString()
 
@@ -115,6 +124,7 @@ data class MediaPayload(
         fun parse(raw: String): MediaPayload {
             val o = JSONObject(raw)
             val quote = QuoteSpanRules.read(o)
+            val expire = ExpireRules.read(o)
             return MediaPayload(
                 kind = o.optString("kind"),
                 objectId = o.optString("object_id"),
@@ -137,6 +147,9 @@ data class MediaPayload(
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 waveform = readWaveform(o.optJSONArray("wf")),
+                ttlSec = expire.ttlSec,
+                expiresAtMs = expire.expMs,
+                mid = expire.mid,
             )
         }
 
@@ -167,6 +180,9 @@ data class GroupTextPayload(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val ttlSec: Int = 0,
+    val expiresAtMs: Long? = null,
+    val mid: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
@@ -178,6 +194,7 @@ data class GroupTextPayload(
             if (replyName.isNotBlank()) put("rn", replyName)
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
             QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+            ExpireRules.put(this, ExpireStamp(ttlSec, expiresAtMs, mid))
         }
         .toString()
 
@@ -185,6 +202,7 @@ data class GroupTextPayload(
         fun parse(raw: String): GroupTextPayload {
             val o = JSONObject(raw)
             val quote = QuoteSpanRules.read(o)
+            val expire = ExpireRules.read(o)
             return GroupTextPayload(
                 groupId = o.optString("g"),
                 text = o.optString("t"),
@@ -196,6 +214,9 @@ data class GroupTextPayload(
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                ttlSec = expire.ttlSec,
+                expiresAtMs = expire.expMs,
+                mid = expire.mid,
             )
         }
     }
@@ -211,6 +232,8 @@ data class MessageMeta(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val ttlSec: Int = 0,
+    val expiresAtMs: Long? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("reply_to", replyToId ?: JSONObject.NULL)
@@ -222,6 +245,8 @@ data class MessageMeta(
         .put("quote_text", quoteText)
         .put("quote_start", quoteStart)
         .put("quote_end", quoteEnd)
+        .put("ttl_sec", ttlSec)
+        .put("exp_ms", expiresAtMs ?: JSONObject.NULL)
         .toString()
 
     companion object {
@@ -239,6 +264,8 @@ data class MessageMeta(
                     quoteText = o.optString("quote_text"),
                     quoteStart = o.optInt("quote_start", -1),
                     quoteEnd = o.optInt("quote_end", -1),
+                    ttlSec = o.optInt("ttl_sec", 0),
+                    expiresAtMs = if (o.has("exp_ms") && !o.isNull("exp_ms")) o.optLong("exp_ms") else null,
                 )
             } catch (_: Exception) {
                 MessageMeta()
@@ -255,6 +282,8 @@ data class MessageMeta(
             quoteText = msg.quoteText,
             quoteStart = msg.quoteStart,
             quoteEnd = msg.quoteEnd,
+            ttlSec = msg.ttlSec,
+            expiresAtMs = msg.expiresAtMs,
         )
     }
 }
@@ -281,8 +310,10 @@ data class ChatControl(
         const val DELETE = "delete"
         const val TYPING = "typing"
         const val PIN = "pin"
+        const val TTL = "ttl"
+        const val EXPIRE = "expire"
 
-        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN)
+        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN, TTL, EXPIRE)
 
         fun parse(raw: String): ChatControl? {
             val o = try {
@@ -313,6 +344,8 @@ data class PackedText(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val ttlSec: Int = 0,
+    val expiresAtMs: Long? = null,
 )
 
 object TextBody {
@@ -325,18 +358,26 @@ object TextBody {
         quoteText: String = "",
         quoteStart: Int = -1,
         quoteEnd: Int = -1,
+        ttlSec: Int = 0,
+        expMs: Long? = null,
     ): String {
         val from = JsonIds.optional(forwardedFrom)
+        val stamp = ExpireStamp(ttlSec, expMs)
         if (from != null) {
-            return JSONObject().put("t", text).put("ff", from).toString()
+            return JSONObject().put("t", text).put("ff", from).apply { ExpireRules.put(this, stamp) }.toString()
         }
-        if (replyTo.isNullOrBlank()) return text
+        if (replyTo.isNullOrBlank() && !stamp.active) return text
         return JSONObject()
             .put("t", text)
-            .put("r", replyTo)
-            .put("rp", replyPreview)
-            .put("rn", replyName)
-            .apply { QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd) }
+            .apply {
+                JsonIds.optional(replyTo)?.let {
+                    put("r", it)
+                    if (replyPreview.isNotBlank()) put("rp", replyPreview)
+                    if (replyName.isNotBlank()) put("rn", replyName)
+                    QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+                }
+                ExpireRules.put(this, stamp)
+            }
             .toString()
     }
 
@@ -347,6 +388,7 @@ object TextBody {
             val o = JSONObject(trimmed)
             if (!o.has("t")) return PackedText(raw)
             val quote = QuoteSpanRules.read(o)
+            val expire = ExpireRules.read(o)
             PackedText(
                 text = o.optString("t"),
                 replyTo = JsonIds.optional(o.optString("r")),
@@ -356,6 +398,8 @@ object TextBody {
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                ttlSec = expire.ttlSec,
+                expiresAtMs = expire.expMs,
             )
         } catch (_: Exception) {
             PackedText(raw)
@@ -390,6 +434,8 @@ data class ChatPrefs(
     val lastReadMs: Long = 0,
     val draft: String = "",
     val pinnedMessageId: String? = null,
+    val ttlSec: Int = 0,
+    val ttlSetAtMs: Long = 0,
 ) {
     fun toJson(): String = JSONObject()
         .put("pinned", pinned)
@@ -398,6 +444,8 @@ data class ChatPrefs(
         .put("last_read_ms", lastReadMs)
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
+        .put("ttl_sec", ttlSec)
+        .put("ttl_set_at_ms", ttlSetAtMs)
         .toString()
 
     companion object {
@@ -412,6 +460,8 @@ data class ChatPrefs(
                     lastReadMs = o.optLong("last_read_ms"),
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
+                    ttlSec = o.optInt("ttl_sec", 0),
+                    ttlSetAtMs = o.optLong("ttl_set_at_ms", 0),
                 )
             } catch (_: Exception) {
                 ChatPrefs()

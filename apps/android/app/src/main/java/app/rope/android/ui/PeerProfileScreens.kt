@@ -25,6 +25,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -45,12 +49,14 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onSetTtl: (Int) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    var showTtl by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -95,6 +101,15 @@ fun PeerProfilePane(
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    DisappearSettingsRow(
+                        ttlSec = state.ttlSec,
+                        canSet = true,
+                        onOpen = { showTtl = true },
+                    )
+                }
+            }
+            item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
                 Text(
                     PeerProfileRules.sectionLabel(photos.size),
                     style = MaterialTheme.typography.titleSmall,
@@ -123,6 +138,17 @@ fun PeerProfilePane(
                     SharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
                 }
             }
+        }
+        if (showTtl) {
+            DisappearSheet(
+                ttlSec = state.ttlSec,
+                canSet = true,
+                onSelect = {
+                    onSetTtl(it)
+                    showTtl = false
+                },
+                onDismiss = { showTtl = false },
+            )
         }
     }
 }

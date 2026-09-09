@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.ExpireRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.RoleRules
 
@@ -104,6 +105,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onBack: () -> Unit,
+    onSetTtl: (Int) -> Unit = {},
 ) {
     val g = state.group
     if (g == null) {
@@ -119,7 +121,10 @@ fun GroupInfoPane(
     val isMember = me != null && me in g.members
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
+    val canSetTtl = ExpireRules.canSetTimer(isGroup = true, canManageGroup = canManage, saved = false)
+    val showTtlRow = ExpireRules.showSettingsRow(isGroup = true, canSet = canSetTtl, ttlSec = state.ttlSec)
     var confirmLeave by remember { mutableStateOf(false) }
+    var showTtl by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -137,6 +142,15 @@ fun GroupInfoPane(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+            }
+            if (showTtlRow) {
+                item {
+                    DisappearSettingsRow(
+                        ttlSec = state.ttlSec,
+                        canSet = canSetTtl,
+                        onOpen = { showTtl = true },
+                    )
                 }
             }
             item { Text("Участники", style = MaterialTheme.typography.titleSmall) }
@@ -204,6 +218,17 @@ fun GroupInfoPane(
                     QuietButton("Выйти из группы", { confirmLeave = true }, Modifier.fillMaxWidth())
                 }
             }
+        }
+        if (showTtl) {
+            DisappearSheet(
+                ttlSec = state.ttlSec,
+                canSet = canSetTtl,
+                onSelect = {
+                    onSetTtl(it)
+                    showTtl = false
+                },
+                onDismiss = { showTtl = false },
+            )
         }
     }
 }

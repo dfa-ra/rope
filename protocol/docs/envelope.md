@@ -85,6 +85,27 @@ The object store holds only ciphertext. The object key never appears in HTTP hea
 
 Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only. Optional `qt` / `qo` are the same quote-span as type=1.
 
+### Auto-delete (`ttl` / `exp`) — inner JSON only
+
+Chat auto-delete starts at send: `exp = timestamp_ms + ttl_sec * 1000`. Kotlin packs these keys inside AEAD. They must **not** appear on the envelope header or REST. The relay does not learn when a blob expires.
+
+type=1 text (next to `t` / `r` / `ff`):
+
+```json
+{ "t": "secret", "ttl": 86400, "exp": 1789000000000 }
+```
+
+type=2 media and type=3 group_text add the same `ttl` / `exp`. Groups also pack sender-chosen `mid` so type=5 tombstones hit the same LocalStore row on every member.
+
+type=5 receipts (same `encrypt_typed` family as pin / delete / reactions):
+
+```json
+{ "v": 1, "kind": "ttl", "target": "peer-or-group:id", "op": "set", "text": "86400" }
+{ "v": 1, "kind": "expire", "target": "message-id-or-mid", "op": "set", "text": "" }
+```
+
+`kind=ttl` syncs the chat setting. `kind=expire` is a ciphertext tombstone after a local sweeper wipe (clock skew). Saved Messages (`saved:`) never send these receipts. No new envelope type. No Go expire API.
+
 ### Encrypted objects (`ROCH`)
 
 ```

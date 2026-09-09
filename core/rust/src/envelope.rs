@@ -457,6 +457,70 @@ mod tests {
     }
 
     #[test]
+    fn typed_inner_json_ttl_exp_and_receipt_kinds_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let text = br#"{"t":"secret","ttl":86400,"exp":1789000000000}"#;
+        let env = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_TEXT,
+            text,
+        )
+        .unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_TEXT);
+        assert_eq!(got.body, text);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"ttl\":86400"));
+        assert!(json.contains("\"exp\":1789000000000"));
+        let media = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1,"ttl":86400,"exp":1789000000000,"mid":"mid-1"}"#;
+        let env = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_MEDIA,
+            media,
+        )
+        .unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"exp\":1789000000000"));
+        assert!(json.contains("\"mid\":\"mid-1\""));
+        let group = br#"{"g":"gid","t":"secret","e":1,"ttl":86400,"exp":1789000000000,"mid":"mid-g"}"#;
+        let env = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_GROUP_TEXT,
+            group,
+        )
+        .unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, group);
+        let ttl = br#"{"v":1,"kind":"ttl","target":"peer","op":"set","text":"86400"}"#;
+        let env = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_RECEIPT,
+            ttl,
+        )
+        .unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"kind\":\"ttl\""));
+        let expire = br#"{"v":1,"kind":"expire","target":"mid-1","op":"set","text":""}"#;
+        let env = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_RECEIPT,
+            expire,
+        )
+        .unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"kind\":\"expire\""));
+    }
+
+    #[test]
     fn typed_text_forwarded_from_json_roundtrip() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();
