@@ -32,6 +32,7 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.FontScaleRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
@@ -185,6 +186,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val fontScale: String = FontScaleRules.DEFAULT,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    fontScale = store.fontScale(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -578,6 +581,13 @@ class RopeRepository(private val app: Application) {
         if (_state.value.theme == mode) return
         store.saveTheme(mode)
         _state.value = _state.value.copy(theme = mode)
+    }
+
+    fun setFontScale(raw: String?) {
+        val next = FontScaleRules.parse(raw)
+        if (_state.value.fontScale == next) return
+        store.saveFontScale(next)
+        _state.value = _state.value.copy(fontScale = next)
     }
 
     fun toggleNotificationsMuted() {

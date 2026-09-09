@@ -3,6 +3,8 @@ package app.rope.android.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,11 +26,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.FontScaleRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsPane(
     state: UiState,
@@ -36,6 +39,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetFontScale: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -143,6 +147,31 @@ fun SettingsPane(
                         onClick = { onSetTheme(ThemeMode.LIGHT) },
                         label = { Text("Светлая") },
                     )
+                }
+            }
+        }
+        FadeIn(180) {
+            SectionCard {
+                Text("Размер текста", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    FontScaleRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    FontScaleRules.sample(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.semantics { contentDescription = "Пример размера текста" },
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val current = FontScaleRules.parse(state.fontScale)
+                    FontScaleRules.PRESETS.forEach { preset ->
+                        FilterChip(
+                            selected = current == preset.id,
+                            onClick = { onSetFontScale(preset.id) },
+                            label = { Text(preset.label) },
+                        )
+                    }
                 }
             }
         }

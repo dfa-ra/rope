@@ -61,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,13 +70,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import android.net.Uri
+import app.rope.android.data.FontScaleRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
@@ -153,6 +157,7 @@ fun RopeScaffold(
     onUnbindCallLocal: (org.webrtc.VideoSink) -> Unit = {},
     onToggleTheme: () -> Unit,
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
+    onSetFontScale: (String) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
     onToggleLinkPreviews: () -> Unit = {},
     onCopyText: (String) -> Unit = {},
@@ -194,6 +199,13 @@ fun RopeScaffold(
     BackHandler(enabled = BackStack.consumesSystemBack(state)) {
         onBack()
     }
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(
+            density.density,
+            density.fontScale * FontScaleRules.factor(state.fontScale),
+        ),
+    ) {
     Box {
     Scaffold(
         topBar = {
@@ -348,6 +360,7 @@ fun RopeScaffold(
                             onToggleNotifications,
                             onCopyText,
                             onToggleLinkPreviews,
+                            onSetFontScale = onSetFontScale,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
@@ -402,6 +415,7 @@ fun RopeScaffold(
     }
     if (splash.visible) {
         RopeSplash(caption = splash.caption, loop = splash.loop, compact = splash.compact)
+    }
     }
     }
 }

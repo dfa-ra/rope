@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveFontScale(id: String) {
+        put("font_scale", FontScaleRules.parse(id))
+    }
+
+    fun fontScale(): String = FontScaleRules.parse(get("font_scale"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
