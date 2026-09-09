@@ -730,7 +730,7 @@ fun ChatPane(
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
-                if (state.peer != null && state.group == null && SavedMessagesRules.canCall(state.peer?.deviceId)) {
+                if (state.peer != null && state.group == null && SavedMessagesRules.canCall(state.peer.deviceId)) {
                     IconButton(onClick = onCall) {
                         Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
                     }

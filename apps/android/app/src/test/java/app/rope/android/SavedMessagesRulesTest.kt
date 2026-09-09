@@ -9,6 +9,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ChatRouting
+import app.rope.android.data.Conversation
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
