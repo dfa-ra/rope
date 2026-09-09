@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; sender-packed HTTPS link previews tagged v0.3.36; do not merge ui-silent / ui-polls / ui-disappear / sec-wss-sig / sec-main-p1 / sec-devicebackup in this record | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; WSS auth Phase A tagged v0.3.37; do not merge ICE #58 / DeviceBackup #60 / disappear / silent / polls / attach-cam #64 / folders in this record | — |
+| CG-190 | Slice: WSS auth Phase A as 0.3.37 | PO | DONE | shipped v0.3.37; D-051; header or query, keep query; D-050 stays 0.3.36; D-031 stays org law | CG-007 |
+| CG-191 | Go+Android: X-Rope-Ws-Auth or query; Android sends both | GO-01 / AND-01 | DONE | D-051; Kotlin never crypto; query sig stays (Phase B later) | CG-190 |
+| CG-192 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS (bc-fc30413e); leftovers: wss.md wording, WsAuthTest local URL, PR body was stale | CG-191 |
+| CG-193 | Ship **0.3.37** | PO | DONE | tag v0.3.37 = aea02ae; versionCode 61; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32 / v0.3.33 / v0.3.34 / v0.3.35 / v0.3.36 unchanged | CG-192 |
 | CG-185 | Slice: sender-packed HTTPS link previews as 0.3.36 | PO | DONE | shipped v0.3.36; D-050; sender-packed OG `lp` in ciphertext; D-031 stays org law | CG-007 |
 | CG-186 | Android: HTTPS link previews packed on send | AND-01 | DONE | D-050; Kotlin never crypto; Go does not crawl | CG-185 |
 | CG-187 | Independent review | REV-01 | DONE | PASS (bc-2c62eaa3); do not merge leftover ui/sec branches in this record | CG-186 |
