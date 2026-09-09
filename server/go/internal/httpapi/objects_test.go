@@ -7,10 +7,15 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dfa-ra/rope/server/go/internal/config"
+	"github.com/google/uuid"
 )
 
 func sha256Hex(b []byte) string {
@@ -108,6 +113,67 @@ func TestObjectQuota(t *testing.T) {
 	if resp.StatusCode != http.StatusInsufficientStorage {
 		t.Fatalf("quota want 507 got %d", resp.StatusCode)
 	}
+}
+
+func getObject(t *testing.T, hs *httptest.Server, d testDevice, id string) (int, string) {
+	t.Helper()
+	path := "/v1/objects/" + id
+	req := authReq(t, http.MethodGet, hs.URL+path, path, nil, d)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func assertObjectNotFound(t *testing.T, code int, body, label string) {
+	t.Helper()
+	if code != 404 {
+		t.Fatalf("%s want 404 got %d body=%q", label, code, body)
+	}
+	if !strings.Contains(body, `"error":"not found"`) {
+		t.Fatalf("%s want not found got %q", label, body)
+	}
+	for _, leak := range []string{"expired", "missing blob"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("%s leaked %q in %q", label, leak, body)
+		}
+	}
+}
+
+func TestObjectDownloadErrorsAreUniform(t *testing.T) {
+	s, hs, setup := testServer(t)
+	owner := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+
+	code, body := getObject(t, hs, owner, uuid.NewString())
+	assertObjectNotFound(t, code, body, "unknown uuid")
+
+	code, body = getObject(t, hs, owner, "not-a-uuid")
+	assertObjectNotFound(t, code, body, "garbage id")
+
+	if err := os.MkdirAll(s.Cfg.ObjectsDir(), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	expiredID := uuid.NewString()
+	if err := s.Store.InsertObject(expiredID, owner.id, "dead", 1, -time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.Cfg.ObjectsDir(), expiredID), []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	code, body = getObject(t, hs, owner, expiredID)
+	assertObjectNotFound(t, code, body, "expired")
+
+	missingID := uuid.NewString()
+	if err := s.Store.InsertObject(missingID, owner.id, "dead", 1, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	code, body = getObject(t, hs, owner, missingID)
+	assertObjectNotFound(t, code, body, "missing blob")
 }
 
 func TestAdminStage2Fields(t *testing.T) {

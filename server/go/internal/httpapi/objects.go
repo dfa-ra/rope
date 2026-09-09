@@ -59,22 +59,35 @@ func (s *Server) uploadObject(w http.ResponseWriter, r *http.Request, a authed, 
 	})
 }
 
+func objectIDOK(id string) bool {
+	_, err := uuid.Parse(id)
+	return err == nil
+}
+
+func objectNotFound(w http.ResponseWriter) {
+	writeJSON(w, 404, map[string]string{"error": "not found"})
+}
+
 func (s *Server) downloadObject(w http.ResponseWriter, r *http.Request, _ authed, _ []byte) {
 	id := chi.URLParam(r, "id")
+	if !objectIDOK(id) {
+		objectNotFound(w)
+		return
+	}
 	meta, err := s.Store.Object(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "not found"})
+		objectNotFound(w)
 		return
 	}
 	exp, err := time.Parse(time.RFC3339, meta.ExpiresAt)
 	if err == nil && time.Now().After(exp) {
 		s.gcObject(meta.ID)
-		writeJSON(w, 404, map[string]string{"error": "expired"})
+		objectNotFound(w)
 		return
 	}
 	raw, err := os.ReadFile(filepath.Join(s.Cfg.ObjectsDir(), id))
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "missing blob"})
+		objectNotFound(w)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
