@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; busy/flood RING REJECT tagged v0.3.43; do not merge disappear / silent / polls / attach-cam #64 / folders / sec-boot-enum #73 / chat-archive #75 / sec-ssh-pem #76 in this record | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; bootstrap login enum tagged v0.3.44; do not merge disappear / silent / polls / attach-cam #64 / folders / chat-archive #75 / sec-ssh-pem #76 in this record | — |
+| CG-225 | Slice: stop bootstrap login enumeration as 0.3.44 | PO | DONE | shipped v0.3.44; D-058; PeekInvite before login uniqueness; D-057 stays 0.3.43; D-031 stays org law | CG-007 |
+| CG-226 | Go: PeekInvite before bootstrap display-name check | GO-01 | DONE | D-058; taken login still 409 without consuming invite | CG-225 |
+| CG-227 | Independent review | REV-01 | DONE | PASS on b63fc18; CI 6/6; PO accepts PASS | CG-226 |
+| CG-228 | Ship **0.3.44** | PO | DONE | tag v0.3.44 = b63fc18; versionCode 68; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32 / v0.3.33 / v0.3.34 / v0.3.35 / v0.3.36 / v0.3.37 / v0.3.38 / v0.3.39 / v0.3.40 / v0.3.41 / v0.3.42 / v0.3.43 unchanged | CG-227 |
 | CG-220 | Slice: busy/flood RING REJECT as 0.3.43 | PO | DONE | shipped v0.3.43; D-057; REJECT surplus RING; D-056 stays 0.3.42; D-031 stays org law | CG-007 |
 | CG-221 | Android: REJECT surplus RING without TearDown | AND-01 | DONE | D-057; Kotlin never crypto; glare and live-call RING unchanged | CG-220 |
 | CG-222 | Independent review | REV-01 | DONE | PASS on b9b931e; prior PASS on 08e427d; PO accepts PASS | CG-221 |
