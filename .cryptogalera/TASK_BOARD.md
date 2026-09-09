@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; ICE TURN cache wrap tagged v0.3.38; do not merge DeviceBackup #60 / sec-ctrl #67 / disappear / silent / polls / attach-cam #64 / folders / archive in this record | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; DeviceBackup RODB wrap tagged v0.3.39; do not merge sec-ctrl #67 / call-remote #69 / disappear / silent / polls / attach-cam #64 / folders in this record | — |
+| CG-200 | Slice: DeviceBackup RODB + IdentityVault Keystore wrap as 0.3.39 | PO | DONE | shipped v0.3.39; D-053; wrap API for future writer; toBytes() still clear JSON; D-052 stays 0.3.38; D-031 stays org law | CG-007 |
+| CG-201 | Android: DeviceBackup wrap API (RODB + Keystore AES-GCM) | AND-01 | DONE | D-053; Kotlin never crypto; leftover v1 JSON not auto-applied | CG-200 |
+| CG-202 | Independent review | REV-01 | DONE | PASS (bc-fceeea88) | CG-201 |
+| CG-203 | Ship **0.3.39** | PO | DONE | tag v0.3.39 = 3e7a718; versionCode 63; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32 / v0.3.33 / v0.3.34 / v0.3.35 / v0.3.36 / v0.3.37 / v0.3.38 unchanged | CG-202 |
 | CG-195 | Slice: ICE TURN cache wrap as 0.3.38 | PO | DONE | shipped v0.3.38; D-052; Keystore-wrap cached TURN HMAC; ICE URL allowlist; D-051 stays 0.3.37; D-031 stays org law | CG-007 |
 | CG-196 | Android: wrap TURN creds + allowlist ICE URL schemes | AND-01 | DONE | D-052; Kotlin never crypto; stun/turn/turns only | CG-195 |
 | CG-197 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS (bc-7fac14ec) on a7e8a82; delta onto 37ce745 clean (bc-b6cf4a89) | CG-196 |
