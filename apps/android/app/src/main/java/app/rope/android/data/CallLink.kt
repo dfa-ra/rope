@@ -32,6 +32,23 @@ object CallLink {
         return !withinRingCooldown(nowMs, lastAtMs)
     }
 
+    /**
+     * Surplus RING that we will not take: another peer while we are live (busy),
+     * or a same-peer flood while idle. Tell the caller REJECT so they stop
+     * ringing-out. Glare and extra RING on the live call id are decided first.
+     */
+    fun rejectSurplusRing(
+        live: Boolean,
+        from: String,
+        livePeer: String,
+        flood: Boolean,
+    ): Boolean {
+        if (from.isBlank()) return false
+        if (live && !PeerIds.same(from, livePeer)) return true
+        if (!live && flood) return true
+        return false
+    }
+
     fun heading(
         phase: CallPhase,
         link: CallLinkState,

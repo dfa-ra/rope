@@ -174,10 +174,14 @@ class CallSignalingTest {
         assertFalse(m.state.live)
 
         val flood = m.onWire("alice", CallSignal.RING, "c2", "", "bob")
-        assertTrue(flood.isEmpty())
+        assertTrue(flood.any { it is CallEffect.Send && it.event == CallSignal.REJECT && it.callId == "c2" && it.peerId == "alice" })
+        assertFalse(flood.any { it is CallEffect.NotifyIncoming })
+        assertFalse(flood.any { it is CallEffect.TearDown })
         assertFalse(m.state.live)
         val again = m.onWire("alice", CallSignal.RING, "c3", "", "bob")
-        assertTrue(again.isEmpty())
+        assertTrue(again.any { it is CallEffect.Send && it.event == CallSignal.REJECT && it.callId == "c3" && it.peerId == "alice" })
+        assertFalse(again.any { it is CallEffect.NotifyIncoming })
+        assertFalse(m.state.live)
 
         val other = m.onWire("eve", CallSignal.RING, "c4", "", "bob")
         assertTrue(other.any { it is CallEffect.NotifyIncoming })
@@ -192,8 +196,40 @@ class CallSignalingTest {
         m.onRingTimeout()
         assertFalse(m.state.live)
         val flood = m.onWire("alice", CallSignal.RING, "c2", "", "bob")
-        assertTrue(flood.isEmpty())
+        assertTrue(flood.any { it is CallEffect.Send && it.event == CallSignal.REJECT && it.callId == "c2" && it.peerId == "alice" })
+        assertFalse(flood.any { it is CallEffect.NotifyIncoming })
         assertFalse(m.state.live)
+    }
+
+    @Test
+    fun busyRingFromOtherPeerGetsRejectKeepsLiveCall() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice", video = true)
+        val liveId = m.state.callId
+        val fx = m.onWire("eve", CallSignal.RING, "eve-ring", VideoCallRules.ringPayload(true), "alice")
+        assertTrue(fx.any { it is CallEffect.Send && it.event == CallSignal.REJECT && it.callId == "eve-ring" && it.peerId == "eve" })
+        assertFalse(fx.any { it is CallEffect.TearDown })
+        assertFalse(fx.any { it is CallEffect.NotifyIncoming })
+        assertTrue(m.state.live)
+        assertEquals(liveId, m.state.callId)
+        assertEquals("bob", m.state.peerDeviceId)
+        assertEquals(CallPhase.RINGING_OUT, m.state.phase)
+    }
+
+    @Test
+    fun busyRingWhileActiveGetsRejectKeepsLiveCall() {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice")
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        assertEquals(CallPhase.ACTIVE, m.state.phase)
+        val fx = m.onWire("eve", CallSignal.RING, "eve-ring", "", "alice")
+        assertTrue(fx.any { it is CallEffect.Send && it.event == CallSignal.REJECT && it.callId == "eve-ring" && it.peerId == "eve" })
+        assertFalse(fx.any { it is CallEffect.TearDown })
+        assertFalse(fx.any { it is CallEffect.NotifyIncoming })
+        assertTrue(m.state.live)
+        assertEquals("c1", m.state.callId)
+        assertEquals("bob", m.state.peerDeviceId)
+        assertEquals(CallPhase.ACTIVE, m.state.phase)
     }
 
     @Test

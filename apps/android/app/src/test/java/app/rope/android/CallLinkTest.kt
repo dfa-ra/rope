@@ -280,4 +280,13 @@ class CallLinkTest {
         assertTrue(CallLink.acceptIncomingRing("alice", "", 1_500L, 1L))
         assertFalse(CallLink.acceptIncomingRing("", "alice", 3_000L, 1L))
     }
+
+    @Test
+    fun rejectSurplusRingBusyVsFlood() {
+        assertTrue(CallLink.rejectSurplusRing(live = true, from = "eve", livePeer = "bob", flood = false))
+        assertFalse(CallLink.rejectSurplusRing(live = true, from = "bob", livePeer = "bob", flood = false))
+        assertTrue(CallLink.rejectSurplusRing(live = false, from = "alice", livePeer = "", flood = true))
+        assertFalse(CallLink.rejectSurplusRing(live = false, from = "alice", livePeer = "", flood = false))
+        assertFalse(CallLink.rejectSurplusRing(live = true, from = "", livePeer = "bob", flood = false))
+    }
 }

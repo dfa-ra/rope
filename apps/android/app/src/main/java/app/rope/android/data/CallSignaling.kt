@@ -388,12 +388,14 @@ class CallMachine {
             return resolveGlareLocked(from, callId, myId, incomingVideo)
         }
         if (state.live && matchesLocked(from, callId)) return emptyList()
-        if (state.live) return emptyList()
+        val live = state.live
         val now = System.currentTimeMillis()
-        if (!CallLink.acceptIncomingRing(from, lastIncomingRingFrom, now, lastIncomingRingAtMs)) {
-            noteIncomingRing(from, now)
-            return emptyList()
+        val flood = !live && !CallLink.acceptIncomingRing(from, lastIncomingRingFrom, now, lastIncomingRingAtMs)
+        if (CallLink.rejectSurplusRing(live, from, state.peerDeviceId, flood)) {
+            if (!live) noteIncomingRing(from, now)
+            return listOf(CallEffect.Send(callId, from, CallSignal.REJECT))
         }
+        if (live) return emptyList()
         noteIncomingRing(from, now)
         state = CallMachineState(
             callId = callId,
