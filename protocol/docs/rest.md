@@ -20,7 +20,15 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
 
 ### `GET /health`
 
-`ok` is the Go process. `turn_running` is a live TCP probe of coturn on `turn_port` (listening), not “`turn_secret` exists”. `turn_allocate_ok` is a local TURN Allocate (HMAC + XOR-RELAYED-ADDRESS). Listening without a successful Allocate still yields `turn_running: true` and a `turn_error` (typical: wrong `relay-ip` / `external-ip`, HMAC mismatch). `/health` `ok` stays true so the installer can finish.
+`ok` is the Go process. `turn_running` is a live TCP probe of coturn (listening), not “`turn_secret` exists”. `turn_allocate_ok` is a local TURN Allocate (HMAC + XOR-RELAYED-ADDRESS). `/health` `ok` stays true so the installer can finish. Loopback vs public is decided from `RemoteAddr` (not `X-Forwarded-For`).
+
+**Public** (non-loopback) body is only the booleans:
+
+```json
+{ "ok": true, "turn_running": true, "turn_allocate_ok": true }
+```
+
+**Loopback** (`install.sh` curls `https://127.0.0.1`) also includes ALLOCATE details:
 
 ```json
 {
@@ -30,11 +38,12 @@ rope-auth-v1\n<METHOD>\n<PATH>\n<unix_seconds>\n<hex(sha256(body))>
   "turn_relayed_ip": "203.0.113.9",
   "turns_listening": true,
   "turn_port": 3478,
-  "turns_port": 443
+  "turns_port": 443,
+  "turn_error": "wrong relay-ip / external-ip"
 }
 ```
 
-Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running": false, "turn_allocate_ok": false }`. A down coturn does **not** make `/health` fail — installer still greps `"ok"`.
+`turn_error` is omitted when empty; `turn_relayed_ip` is omitted when ALLOCATE did not return an address. Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running": false, "turn_allocate_ok": false }` on both. A down coturn does **not** make `/health` fail — installer still greps `"ok"`. Listening without a successful Allocate still yields `turn_running: true` on loopback plus `turn_error`. Authed `GET /v1/admin/status` still has the full TURN fields.
 
 ### `GET /version`
 
