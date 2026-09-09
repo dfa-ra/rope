@@ -25,6 +25,7 @@ import app.rope.android.data.CallMachine
 import app.rope.android.data.CallSignal
 import app.rope.android.data.CallToneRules
 import app.rope.android.data.IceServerSpec
+import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
@@ -2732,20 +2733,37 @@ class RopeRepository(private val app: Application) {
                 val control = ChatControl.parse(raw)
                 val reaction = ReactionPayload.parse(raw)
                 when {
-                    control?.kind == ChatControl.EDIT -> store.editMessage(control.targetId, control.text)
-                    control?.kind == ChatControl.DELETE -> store.markDeleted(control.targetId)
+                    control?.kind == ChatControl.EDIT -> {
+                        val target = store.message(control.targetId)
+                        if (ChatControlRules.allowEdit(sender.deviceId, target)) {
+                            store.editMessage(control.targetId, control.text)
+                        }
+                    }
+                    control?.kind == ChatControl.DELETE -> {
+                        val target = store.message(control.targetId)
+                        if (ChatControlRules.allowDelete(sender.deviceId, target)) {
+                            store.markDeleted(control.targetId)
+                        }
+                    }
                     control?.kind == ChatControl.TYPING -> {
-                        val chatId = if (ChatIds.isGroup(control.targetId)) control.targetId else sender.deviceId
-                        noteTyping(chatId, sender.deviceId, sender.displayName)
+                        val known = _state.value.groups.map { it.groupId }
+                        ChatControlRules.typingChatId(sender.deviceId, control.targetId, known)?.let { chatId ->
+                            noteTyping(chatId, sender.deviceId, sender.displayName)
+                        }
                     }
                     control?.kind == ChatControl.PIN -> {
-                        val chatId = store.message(control.targetId)?.peerDeviceId
-                            ?: if (ChatIds.isGroup(control.targetId)) control.targetId else sender.deviceId
-                        val cur = store.chatPrefs(chatId)
-                        val next = if (control.op == ReactionPayload.CLEAR) null else control.targetId
-                        store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = next))
-                        if (openChatId() == chatId) {
-                            _state.value = _state.value.copy(pinnedMessageId = next)
+                        val target = store.message(control.targetId)
+                        val gid = JsonIds.optional(target?.groupId)
+                            ?: target?.peerDeviceId?.takeIf { ChatIds.isGroup(it) }?.let { ChatIds.rawGroupId(it) }
+                        val members = gid?.let { store.group(it)?.members }
+                        if (ChatControlRules.allowPin(sender.deviceId, target, members) && target != null) {
+                            val chatId = target.peerDeviceId
+                            val cur = store.chatPrefs(chatId)
+                            val next = if (control.op == ReactionPayload.CLEAR) null else control.targetId
+                            store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = next))
+                            if (openChatId() == chatId) {
+                                _state.value = _state.value.copy(pinnedMessageId = next)
+                            }
                         }
                     }
                     reaction != null -> store.applyReaction(

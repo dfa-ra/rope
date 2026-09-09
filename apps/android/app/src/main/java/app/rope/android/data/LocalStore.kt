@@ -138,6 +138,9 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun insertMessage(msg: ChatMessage) {
         val existing = message(msg.id)
+        if (existing != null && !ChatControlRules.shouldReplace(existing.senderId, msg.senderId)) {
+            return
+        }
         val merged = if (existing == null) {
             msg
         } else {
