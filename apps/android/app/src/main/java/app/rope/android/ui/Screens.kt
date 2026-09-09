@@ -169,6 +169,15 @@ fun RopeScaffold(
     onMessageQuery: (String) -> Unit,
     onPinChat: (String) -> Unit,
     onMuteChat: (String) -> Unit,
+    onSelectFolder: (String) -> Unit = {},
+    onHideUnreadFolder: () -> Unit = {},
+    onShowUnreadFolder: (Boolean) -> Unit = {},
+    onCreateFolder: (String) -> Unit = {},
+    onRenameFolder: (String, String) -> Unit = { _, _ -> },
+    onDeleteFolder: (String) -> Unit = {},
+    onMoveFolder: (String, Int) -> Unit = { _, _ -> },
+    onCycleFolderChat: (String, String) -> Unit = { _, _ -> },
+    onSetChatFolders: (String, Set<String>) -> Unit = { _, _ -> },
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
@@ -296,6 +305,12 @@ fun RopeScaffold(
                             onChatQuery,
                             onPinChat,
                             onMuteChat,
+                            onSelectFolder = onSelectFolder,
+                            onHideUnreadFolder = onHideUnreadFolder,
+                            onOpenFolderEdit = { onGo(Screen.Folders) },
+                            onSetChatFolders = onSetChatFolders,
+                            onRenameFolder = onRenameFolder,
+                            onDeleteFolder = onDeleteFolder,
                             listMode = NavRules.listMode(screen),
                         )
                         Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)
@@ -351,6 +366,16 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                        )
+                        Screen.Folders -> app.rope.android.ui.FolderEditPane(
+                            state,
+                            onShowUnread = onShowUnreadFolder,
+                            onCreate = onCreateFolder,
+                            onRename = onRenameFolder,
+                            onDelete = onDeleteFolder,
+                            onMove = onMoveFolder,
+                            onCycleChat = onCycleFolderChat,
+                            onBack = { onBack() },
                         )
                     }
                 }

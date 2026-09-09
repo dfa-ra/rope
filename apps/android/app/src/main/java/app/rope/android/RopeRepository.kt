@@ -31,6 +31,8 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.FolderRules
+import app.rope.android.data.FolderSnap
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
@@ -182,9 +184,10 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val folders: FolderSnap = FolderSnap(),
 )
 
-enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
+enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Folders }
 
 private data class ReplyPack(
     val id: String? = null,
@@ -252,6 +255,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    folders = store.folders(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -742,6 +746,59 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun selectFolder(id: String) {
+        if (id == FolderRules.EDIT_ID) return
+        persistFolders(FolderRules.select(_state.value.folders, id))
+    }
+
+    fun hideUnreadFolder() {
+        persistFolders(FolderRules.hideBuiltin(_state.value.folders, FolderRules.UNREAD_ID))
+    }
+
+    fun showUnreadFolder() {
+        persistFolders(FolderRules.showBuiltin(_state.value.folders, FolderRules.UNREAD_ID))
+    }
+
+    fun createFolder(name: String) {
+        val (next, err) = FolderRules.addCustom(_state.value.folders, name)
+        if (err != null) {
+            notice(err)
+            return
+        }
+        persistFolders(next)
+    }
+
+    fun renameFolder(id: String, name: String) {
+        val (next, err) = FolderRules.renameCustom(_state.value.folders, id, name)
+        if (err != null) {
+            notice(err)
+            return
+        }
+        persistFolders(next)
+    }
+
+    fun deleteFolder(id: String) {
+        persistFolders(FolderRules.deleteCustom(_state.value.folders, id))
+    }
+
+    fun moveFolder(id: String, delta: Int) {
+        persistFolders(FolderRules.moveCustom(_state.value.folders, id, delta))
+    }
+
+    fun cycleFolderChat(folderId: String, chatId: String) {
+        persistFolders(FolderRules.cycleChat(_state.value.folders, folderId, chatId))
+    }
+
+    fun setChatFolders(chatId: String, folderIds: Set<String>) {
+        persistFolders(FolderRules.setChatFolders(_state.value.folders, chatId, folderIds))
+    }
+
+    private fun persistFolders(snap: FolderSnap) {
+        val next = FolderRules.sanitize(snap)
+        store.saveFolders(next)
+        _state.value = _state.value.copy(folders = next)
     }
 
     fun copyMessage(msg: ChatMessage) {

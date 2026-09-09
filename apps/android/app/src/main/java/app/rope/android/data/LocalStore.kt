@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 6) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, VERSION) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -546,7 +546,14 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         return gen.generateKey()
     }
 
+    fun folders(): FolderSnap = FolderRules.parse(get(FolderRules.KV_KEY))
+
+    fun saveFolders(snap: FolderSnap) {
+        put(FolderRules.KV_KEY, FolderRules.encode(snap))
+    }
+
     companion object {
+        const val VERSION = 6
         private const val PAYLOAD_ALIAS = "rope-local-payload"
     }
 }

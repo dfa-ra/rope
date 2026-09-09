@@ -26,8 +26,8 @@ object InstantUi {
     fun instantTransition(from: Screen, to: Screen): Boolean {
         if (from == to) return true
         val messengerHop =
-            (NavRules.isMessengerTab(from) || from == Screen.Chat || from == Screen.GroupInfo || from == Screen.NewGroup || from == Screen.PeerProfile) &&
-                (NavRules.isMessengerTab(to) || to == Screen.Chat || to == Screen.GroupInfo || to == Screen.NewGroup || to == Screen.PeerProfile)
+            (NavRules.isMessengerTab(from) || from == Screen.Chat || from == Screen.GroupInfo || from == Screen.NewGroup || from == Screen.PeerProfile || from == Screen.Folders) &&
+                (NavRules.isMessengerTab(to) || to == Screen.Chat || to == Screen.GroupInfo || to == Screen.NewGroup || to == Screen.PeerProfile || to == Screen.Folders)
         return messengerHop
     }
 }

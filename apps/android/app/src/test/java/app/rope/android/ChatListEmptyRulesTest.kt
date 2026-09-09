@@ -72,6 +72,17 @@ class ChatListEmptyRulesTest {
     }
 
     @Test
+    fun idleFolderCopy() {
+        val unread = ChatListEmptyRules.copy(ChatListMode.ALL, "", forwarding = false, role = "owner", folderId = "unread")
+        assertEquals("Нет непрочитанных", unread.title)
+        assertEquals("Все прочитано.", unread.body)
+        val custom = ChatListEmptyRules.copy(ChatListMode.ALL, "", forwarding = false, role = "owner", folderId = "work")
+        assertEquals("Нет чатов в папке", custom.title)
+        val groups = ChatListEmptyRules.copy(ChatListMode.GROUPS, "", forwarding = false, role = "owner", folderId = "unread")
+        assertEquals("Групп пока нет", groups.title)
+    }
+
+    @Test
     fun longQueryFallsBackWithoutLectures() {
         val q = "я".repeat(70)
         val body = ChatListEmptyRules.searchBody(ChatListMode.ALL, q)

@@ -24,6 +24,7 @@ object ChatListEmptyRules {
         query: String,
         forwarding: Boolean,
         role: String?,
+        folderId: String = FolderRules.ALL_ID,
     ): ChatListEmptyCopy {
         if (ChatListRules.searching(query)) {
             return ChatListEmptyCopy(
@@ -33,7 +34,8 @@ object ChatListEmptyRules {
                 showFab = false,
             )
         }
-        val title = when (mode) {
+        val folderTitle = if (mode == ChatListMode.ALL) FolderRules.idleTitle(folderId) else null
+        val title = folderTitle ?: when (mode) {
             ChatListMode.GROUPS -> "Групп пока нет"
             ChatListMode.CALLS -> "Звонков ещё не было"
             ChatListMode.ALL -> "Пока никого нет"
@@ -44,6 +46,8 @@ object ChatListEmptyRules {
             } else {
                 "Некуда переслать. Когда появятся чаты, можно будет переслать сюда."
             }
+            folderTitle == FolderRules.UNREAD_EMPTY -> "Все прочитано."
+            folderTitle == FolderRules.CUSTOM_EMPTY -> "Добавьте чаты через «В папку»."
             mode == ChatListMode.GROUPS -> RoleRules.groupsEmptyBody()
             mode == ChatListMode.CALLS -> RoleRules.callsEmptyBody(role)
             else -> RoleRules.chatsEmptyBody(role)

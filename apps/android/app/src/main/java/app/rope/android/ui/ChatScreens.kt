@@ -87,6 +87,9 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -148,6 +151,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.FolderRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -191,6 +195,7 @@ private val InBubbleLight = Color(0xFFF4F4F5)
 private val InBubbleDark = Color(0xFF27272A)
 private val RecRed = Color(0xFFE53935)
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatsPane(
     state: UiState,
@@ -201,6 +206,12 @@ fun ChatsPane(
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
+    onSelectFolder: (String) -> Unit = {},
+    onHideUnreadFolder: () -> Unit = {},
+    onOpenFolderEdit: () -> Unit = {},
+    onSetChatFolders: (String, Set<String>) -> Unit = { _, _ -> },
+    onRenameFolder: (String, String) -> Unit = { _, _ -> },
+    onDeleteFolder: (String) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -262,7 +273,81 @@ fun ChatsPane(
                 ChatListMode.ALL -> "Поиск"
             },
         )
-        val rows = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
+        var chipMenu by remember { mutableStateOf<String?>(null) }
+        var folderPicker by remember { mutableStateOf<Conversation?>(null) }
+        var renameTarget by remember { mutableStateOf<String?>(null) }
+        var renameDraft by remember { mutableStateOf("") }
+        if (listMode == ChatListMode.ALL) {
+            val chips = FolderRules.chips(state.folders)
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(chips, key = { it.id }) { chip ->
+                    val selected = !chip.edit && chip.id == state.folders.selected
+                    val unread = if (chip.edit) 0 else FolderRules.chipUnread(state.conversations, chip.id, state.folders)
+                    val kind = if (chip.edit) UnreadBadgeKind.NONE else FolderRules.chipBadgeKind(state.conversations, chip.id, state.folders)
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            if (chip.edit) onOpenFolderEdit() else onSelectFolder(chip.id)
+                            chipMenu = null
+                        },
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(chip.title)
+                                if (unread > 0) {
+                                    Text(
+                                        UnreadBadgeRules.label(unread),
+                                        color = if (kind == UnreadBadgeKind.MUTED) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.combinedClickable(
+                            onClick = {
+                                if (chip.edit) onOpenFolderEdit() else onSelectFolder(chip.id)
+                                chipMenu = null
+                            },
+                            onLongClick = {
+                                when {
+                                    chip.edit -> onOpenFolderEdit()
+                                    chip.id == FolderRules.ALL_ID -> Unit
+                                    else -> chipMenu = chip.id
+                                }
+                            },
+                        ),
+                    )
+                }
+            }
+            if (chipMenu == FolderRules.UNREAD_ID) {
+                TextButton(
+                    onClick = { onHideUnreadFolder(); chipMenu = null },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                ) { Text(FolderRules.HIDE) }
+            } else if (chipMenu != null && chipMenu != FolderRules.ALL_ID) {
+                val id = chipMenu!!
+                Row(
+                    Modifier.padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(onClick = {
+                        renameTarget = id
+                        renameDraft = state.folders.custom.find { it.id == id }?.name.orEmpty()
+                        chipMenu = null
+                    }) { Text(FolderRules.RENAME) }
+                    TextButton(onClick = { onDeleteFolder(id); chipMenu = null }) { Text(FolderRules.DELETE) }
+                    TextButton(onClick = { onOpenFolderEdit(); chipMenu = null }) { Text(FolderRules.EDIT_CHATS) }
+                }
+            }
+        }
+        val base = ChatListRules.rows(state.conversations, state.chatQuery, listMode)
+        val rows = FolderRules.apply(base, state.folders.selected, state.folders, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
         val empty = ChatListEmptyRules.copy(
@@ -270,6 +355,7 @@ fun ChatsPane(
             state.chatQuery,
             state.forwarding != null,
             state.profile?.role,
+            folderId = if (listMode == ChatListMode.ALL) state.folders.selected else FolderRules.ALL_ID,
         )
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty()) {
@@ -289,6 +375,7 @@ fun ChatsPane(
                                     onClick = { onOpen(c) },
                                     onPin = { onPinChat(c.id) },
                                     onMute = { onMuteChat(c.id) },
+                                    onAddToFolder = { folderPicker = c },
                                     query = state.chatQuery,
                                 )
                             }
@@ -309,6 +396,7 @@ fun ChatsPane(
                                 onClick = { onOpen(c) },
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
+                                onAddToFolder = { folderPicker = c },
                                 query = state.chatQuery,
                             )
                         }
@@ -326,6 +414,39 @@ fun ChatsPane(
                     Icon(Icons.Outlined.Add, contentDescription = "Новая группа")
                 }
             }
+        }
+        folderPicker?.let { conv ->
+            FolderPickDialog(
+                conversation = conv,
+                folders = state.folders,
+                onConfirm = { ids ->
+                    onSetChatFolders(conv.id, ids)
+                    folderPicker = null
+                },
+                onDismiss = { folderPicker = null },
+            )
+        }
+        renameTarget?.let { id ->
+            AlertDialog(
+                onDismissRequest = { renameTarget = null },
+                title = { Text(FolderRules.RENAME) },
+                text = {
+                    TextField(
+                        value = renameDraft,
+                        onValueChange = { renameDraft = it.take(FolderRules.NAME_MAX) },
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onRenameFolder(id, renameDraft)
+                        renameTarget = null
+                    }) { Text("Сохранить") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renameTarget = null }) { Text("Отмена") }
+                },
+            )
         }
     }
 }
@@ -430,6 +551,7 @@ internal fun ConversationRow(
     onClick: () -> Unit,
     onPin: () -> Unit,
     onMute: () -> Unit,
+    onAddToFolder: (() -> Unit)? = null,
     query: String = "",
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
@@ -572,6 +694,11 @@ internal fun ConversationRow(
                 }
                 TextButton(onClick = { onMute(); menu = false }) {
                     Text(if (c.muted) "Включить звук" else "Без звука")
+                }
+                if (onAddToFolder != null) {
+                    TextButton(onClick = { onAddToFolder(); menu = false }) {
+                        Text(FolderRules.ADD_TO_FOLDER)
+                    }
                 }
             }
         }

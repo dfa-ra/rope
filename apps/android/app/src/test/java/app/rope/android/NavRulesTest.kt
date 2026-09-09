@@ -62,6 +62,7 @@ class NavRulesTest {
         assertEquals(Screen.People, NavRules.selectedTab(Screen.People))
         assertEquals(Screen.Chats, NavRules.selectedTab(Screen.Chat))
         assertEquals(Screen.Chats, NavRules.selectedTab(Screen.PeerProfile))
+        assertEquals(Screen.Chats, NavRules.selectedTab(Screen.Folders))
         assertEquals(Screen.Groups, NavRules.selectedTab(Screen.NewGroup))
         assertEquals(Screen.Calls, NavRules.selectedTab(Screen.Calls))
         assertEquals(Screen.Status, NavRules.selectedTab(Screen.Status))
@@ -154,6 +155,7 @@ class NavRulesTest {
         assertEquals("Люди", NavRules.chromeTitle(Screen.People))
         assertEquals("Статус", NavRules.chromeTitle(Screen.Status))
         assertEquals("Настройки", NavRules.chromeTitle(Screen.Settings))
+        assertEquals("Папки", NavRules.chromeTitle(Screen.Folders))
         assertEquals("Профиль", NavRules.chromeTitle(Screen.PeerProfile))
         assertEquals("офлайн", NavRules.chromeTitle(Screen.Home, offline = true))
         Screen.entries.forEach { screen ->

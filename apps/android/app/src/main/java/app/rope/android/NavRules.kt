@@ -43,7 +43,7 @@ object NavRules {
 
     fun isMessengerShell(screen: Screen): Boolean = when (screen) {
         Screen.Chats, Screen.Groups, Screen.Calls, Screen.People, Screen.Status,
-        Screen.Chat, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile,
+        Screen.Chat, Screen.NewGroup, Screen.GroupInfo, Screen.PeerProfile, Screen.Folders,
         -> true
         else -> false
     }
@@ -88,6 +88,7 @@ object NavRules {
             Screen.People -> "Люди"
             Screen.Status -> "Статус"
             Screen.Settings -> "Настройки"
+            Screen.Folders -> "Папки"
             Screen.Invite -> "Приглашение"
             Screen.Home, Screen.Start, Screen.Provision, Screen.Join, Screen.Chat -> ""
         }
@@ -98,7 +99,7 @@ object NavRules {
         screen == Screen.Home || screen == Screen.People || screen == Screen.Settings
 
     fun selectedTab(screen: Screen): Screen? = when (screen) {
-        Screen.Chats, Screen.Chat, Screen.PeerProfile -> Screen.Chats
+        Screen.Chats, Screen.Chat, Screen.PeerProfile, Screen.Folders -> Screen.Chats
         Screen.Groups, Screen.NewGroup, Screen.GroupInfo -> Screen.Groups
         Screen.Calls -> Screen.Calls
         Screen.People -> Screen.People
