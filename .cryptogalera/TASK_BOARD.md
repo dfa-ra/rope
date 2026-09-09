@@ -6,7 +6,11 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-110 | Encode D-031 expanded delivery org (leads + research) | ORG-01 | DONE | user 2026-09-09; docs-only; no version bump; D-030 kept as 0.3.17 product | — |
 | CG-111 | Standing Research: ranked Telegram-gap epics | RESEARCH | STANDING | D-031; no product merges; PO picks next epic | CG-110 |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; remote 1:1 video + RING/RELAY limits tagged v0.3.40; do not merge sec-ctrl #67 / disappear / silent / polls / attach-cam #64 / folders in this record | — |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | freeze; RECEIPT author/thread checks tagged v0.3.41; do not merge disappear / silent / polls / attach-cam #64 / folders / call-mirror #71 / call-busy #72 / sec-boot-enum #73 in this record | — |
+| CG-210 | Slice: RECEIPT author/thread checks as 0.3.41 | PO | DONE | shipped v0.3.41; D-055; edit/delete author; pin/react shared thread; D-054 stays 0.3.40; D-031 stays org law | CG-007 |
+| CG-211 | Android: ChatControlRules author/thread on RECEIPT | AND-01 | DONE | D-055; Kotlin never crypto; same message_id does not clobber another sender | CG-210 |
+| CG-212 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS on ce70aaa; prior PWC on cc09102; PO accepts PWC | CG-211 |
+| CG-213 | Ship **0.3.41** | PO | DONE | tag v0.3.41 = ce70aaa; versionCode 65; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 / v0.3.17 / v0.3.18 / v0.3.19 / v0.3.20 / v0.3.21 / v0.3.22 / v0.3.23 / v0.3.24 / v0.3.25 / v0.3.26 / v0.3.27 / v0.3.28 / v0.3.29 / v0.3.30 / v0.3.31 / v0.3.32 / v0.3.33 / v0.3.34 / v0.3.35 / v0.3.36 / v0.3.37 / v0.3.38 / v0.3.39 / v0.3.40 unchanged | CG-212 |
 | CG-205 | Slice: remote 1:1 video + RING/RELAY limits as 0.3.40 | PO | DONE | shipped v0.3.40; D-054; TextureView EGL / onAddStream / SDP CRLF; Go RING/RELAY 6/30s; D-053 stays 0.3.39; D-031 stays org law | CG-007 |
 | CG-206 | Android+Go: remote video bind + RING flood / RELAY 6/30s | AND-01 / GO-01 | DONE | D-054; Kotlin never crypto; same-peer RING drop 2s | CG-205 |
 | CG-207 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS on 5f1b1e9/211cc64; 6789b4d rebase onto record + RELAY 6/30s; PO accepts PWC | CG-206 |
