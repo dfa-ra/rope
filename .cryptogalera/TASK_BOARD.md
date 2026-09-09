@@ -6,8 +6,8 @@ PO-owned. Canonical tracker. One owner per row.
 | --- | --- | --- | --- | --- | --- |
 | CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.8 owner-device 409 | — |
 | CG-068 | Slice: revoke-device 409 on owner devices as 0.3.8 | PO | IN_PROGRESS | REV-01: co-owner device-count gap | CG-007 |
-| CG-069 | Go: OwnerDeviceCount gate on POST /v1/admin/revoke-device | GO-01 | IN_PROGRESS | not OwnerCount members | CG-068 |
-| CG-070 | Android: canRevokeDevice uses ownerDeviceCount | AND-01 | IN_PROGRESS | unused API; People stays revoke-member | CG-068 |
+| CG-069 | Go: OwnerDeviceCount gate on POST /v1/admin/revoke-device | GO-01 | DONE | not OwnerCount members | CG-068 |
+| CG-070 | Android: canRevokeDevice uses ownerDeviceCount | AND-01 | DONE | unused API; People stays revoke-member | CG-068 |
 | CG-071 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-069, CG-070 |
 | CG-072 | Ship **0.3.8** | PO | IN_PROGRESS | versionCode 32; do not retag v0.3.7 | CG-071 |
 | CG-063 | Slice: last-owner revoke-device 409 as 0.3.7 | PO | DONE | shipped v0.3.7 | CG-007 |
