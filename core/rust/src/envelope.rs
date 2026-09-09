@@ -478,7 +478,7 @@ mod tests {
     fn typed_text_and_group_text_link_preview_json_roundtrip() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();
-        let text = br#"{"t":"смотри https://example.com/a","lp":{"u":"https://example.com/a","h":"example.com","t":"Page title","d":"OG description"}}"#;
+        let text = br#"{"t":"see https://example.com/a","lp":{"u":"https://example.com/a","h":"example.com","t":"Page title","d":"OG description"}}"#;
         let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_TEXT, text).unwrap();
         let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
         assert_eq!(got.msg_type, ENVELOPE_TYPE_TEXT);
