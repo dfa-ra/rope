@@ -55,14 +55,33 @@ object DateSeparatorRules {
         timeZone: TimeZone = TimeZone.getDefault(),
     ): Boolean = prev == null || !sameDay(prev.timestampMs, current.timestampMs, timeZone)
 
+    /** Count of local calendar-day boundaries between [timestampMs] and [nowMs]. */
     fun daysAgo(
         timestampMs: Long,
         nowMs: Long,
         timeZone: TimeZone = TimeZone.getDefault(),
     ): Int {
-        val a = noon(timestampMs, timeZone)
-        val b = noon(nowMs, timeZone)
-        return ((b - a) / 86_400_000L).toInt()
+        val then = Calendar.getInstance(timeZone).apply { timeInMillis = timestampMs }
+        val now = Calendar.getInstance(timeZone).apply { timeInMillis = nowMs }
+        val thenYear = then.get(Calendar.YEAR)
+        val nowYear = now.get(Calendar.YEAR)
+        var days = now.get(Calendar.DAY_OF_YEAR) - then.get(Calendar.DAY_OF_YEAR)
+        val probe = Calendar.getInstance(timeZone)
+        var year = thenYear
+        while (year < nowYear) {
+            probe.clear()
+            probe.set(year, Calendar.JANUARY, 1)
+            days += probe.getActualMaximum(Calendar.DAY_OF_YEAR)
+            year++
+        }
+        year = nowYear
+        while (year < thenYear) {
+            probe.clear()
+            probe.set(year, Calendar.JANUARY, 1)
+            days -= probe.getActualMaximum(Calendar.DAY_OF_YEAR)
+            year++
+        }
+        return days
     }
 
     fun label(
@@ -128,15 +147,6 @@ object DateSeparatorRules {
 
     fun indexOfMessage(items: List<ChatThreadItem>, id: String): Int =
         items.indexOfFirst { it is ChatThreadItem.Bubble && it.msg.id == id }
-
-    private fun noon(ms: Long, timeZone: TimeZone): Long =
-        Calendar.getInstance(timeZone).apply {
-            timeInMillis = ms
-            set(Calendar.HOUR_OF_DAY, 12)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
 
     private fun sameYear(aMs: Long, bMs: Long, timeZone: TimeZone): Boolean {
         val a = Calendar.getInstance(timeZone).apply { timeInMillis = aMs }

@@ -584,7 +584,8 @@ fun ChatPane(
     val visible = remember(state.messages, state.messageQuery) {
         state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     }
-    val threadItems = remember(visible) { DateSeparatorRules.items(visible) }
+    val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
+    val threadItems = remember(visible, todayKey) { DateSeparatorRules.items(visible) }
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
