@@ -36,7 +36,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      # v3's cmdline-tools 16.0 fails on current ubuntu-latest with
+      # "Error on ZipFile unknown archive" while unpacking the emulator
+      # pulled in by the default `tools` package. Unit tests do not need it.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - name: Unit tests
         working-directory: apps/android
         run: ./gradlew test --stacktrace
