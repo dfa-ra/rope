@@ -275,7 +275,10 @@ class Stage2UxTest {
         assertFalse(ChatActions.canPin(deleted))
         assertFalse(ChatActions.canOpen(incoming))
         assertTrue(ChatActions.canOpen(photo.copy(outgoing = false)))
+        val video = mine.copy(kind = MessageKind.VIDEO)
+        assertTrue(ChatActions.canOpen(video.copy(outgoing = false)))
         assertFalse(ChatActions.canOpen(deleted.copy(kind = MessageKind.IMAGE)))
+        assertFalse(ChatActions.canOpen(deleted.copy(kind = MessageKind.VIDEO)))
     }
 
     @Test

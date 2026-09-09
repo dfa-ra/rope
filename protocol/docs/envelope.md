@@ -49,7 +49,7 @@ UTF-8 JSON inside the AEAD (not visible to the server):
 
 ```json
 {
-  "kind": "voice|image|file",
+  "kind": "voice|image|file|video",
   "object_id": "uuid from POST /v1/objects",
   "sha256": "hex of ciphertext",
   "key_b64": "32-byte object key",
@@ -65,6 +65,8 @@ UTF-8 JSON inside the AEAD (not visible to the server):
 ```
 
 Optional `album_id` / `album_index` / `album_count` group 2–10 photos into one album. Each photo is still its own type=2 envelope and object blob; the relay does not see album linkage. A single photo omits these keys and renders as a normal image.
+
+`kind=video` is the same type=2 object JSON (duration in `duration_ms`). The client compresses the clip to the existing 25 MiB object cap before `encryptObject`. Videos are not album members in this slice. No new envelope type.
 
 Optional `ff` is the attributed-forward origin display name («Переслано от …»). It is not a reply quote. Forwards must not set reply fields (`r` / `rp` / `rn`).
 

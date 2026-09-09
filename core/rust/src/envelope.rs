@@ -418,6 +418,21 @@ mod tests {
     }
 
     #[test]
+    fn typed_media_video_json_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let video = br#"{"kind":"video","object_id":"o","sha256":"ab","key_b64":"k","mime":"video/mp4","name":"c.mp4","size":1,"duration_ms":3400}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, video).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_MEDIA);
+        assert_eq!(got.body, video);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"kind\":\"video\""));
+        assert!(json.contains("\"duration_ms\":3400"));
+        assert!(!json.contains("album_id"));
+    }
+
+    #[test]
     fn typed_text_forwarded_from_json_roundtrip() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();

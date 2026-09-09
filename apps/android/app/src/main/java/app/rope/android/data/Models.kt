@@ -10,6 +10,7 @@ enum class MessageKind {
     TEXT,
     VOICE,
     IMAGE,
+    VIDEO,
     FILE,
     GROUP_TEXT,
     CALL,

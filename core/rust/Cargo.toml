@@ -1,6 +1,6 @@
 [package]
 name = "rope_core"
-version = "0.3.21"
+version = "0.3.22"
 edition = "2021"
 license = "MIT"
 description = "Rope security and protocol core"

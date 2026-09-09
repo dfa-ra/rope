@@ -44,6 +44,7 @@ import app.rope.android.data.RoleRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
+import app.rope.android.data.VideoRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -57,6 +58,7 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
+import app.rope.android.media.VideoCodec
 import app.rope.android.media.VoicePlayer
 import app.rope.android.media.VoiceRecorder
 import app.rope.android.media.WebRtcSession
@@ -656,7 +658,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openImage(msg: ChatMessage) {
-        if (msg.kind != MessageKind.IMAGE || msg.deleted) return
+        if ((msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VIDEO) || msg.deleted) return
         _state.value = _state.value.copy(viewingImage = msg)
     }
 
@@ -701,18 +703,23 @@ class RopeRepository(private val app: Application) {
                     prepareOutgoingMedia(uri, forcedMime)
                 }
                 if (prepared.isEmpty()) return@launch
-                val slots = AlbumRules.slots(prepared.size)
-                prepared.zip(slots).forEach { (item, slot) ->
+                val images = prepared.filter { VideoRules.albumEligible(it.kind) }
+                val rest = prepared.filter { !VideoRules.albumEligible(it.kind) }
+                val slots = AlbumRules.slots(images.size)
+                images.zip(slots).forEach { (item, slot) ->
                     sendMediaBytes(
                         item.bytes,
                         item.mime,
                         item.name,
                         item.kind,
-                        0,
+                        item.durationMs,
                         albumId = slot.albumId,
                         albumIndex = slot.index,
                         albumCount = slot.count,
                     )
+                }
+                rest.forEach { item ->
+                    sendMediaBytes(item.bytes, item.mime, item.name, item.kind, item.durationMs)
                 }
             } catch (e: Exception) {
                 error(e)
@@ -725,14 +732,35 @@ class RopeRepository(private val app: Application) {
         val mime: String,
         val name: String,
         val kind: String,
+        val durationMs: Long = 0,
     )
 
     private fun prepareOutgoingMedia(uri: Uri, forcedMime: String?): OutgoingMedia? {
         val cr = app.contentResolver
         var mime = forcedMime ?: cr.getType(uri) ?: "application/octet-stream"
         val name = attachmentName(uri, mime)
+        if (VideoRules.looksLikeVideo(name, mime)) {
+            val compressed = VideoCodec.normalizeForSend(
+                app,
+                uri,
+                mime,
+                name,
+                File(app.cacheDir, "video-out"),
+            )
+            if (compressed == null) {
+                notice(UserFacing.FILE_TOO_BIG)
+                return null
+            }
+            return OutgoingMedia(
+                compressed.bytes,
+                compressed.mime,
+                compressed.name.ifBlank { name },
+                "video",
+                compressed.durationMs,
+            )
+        }
         var bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
-        if (bytes.size > 25 * 1024 * 1024) {
+        if (bytes.size > VideoRules.MAX_OBJECT_BYTES) {
             notice(UserFacing.FILE_TOO_BIG)
             return null
         }
@@ -741,11 +769,7 @@ class RopeRepository(private val app: Application) {
             bytes = normalized.first
             mime = normalized.second
         }
-        val kind = when {
-            mime.startsWith("image/") -> "image"
-            mime.startsWith("audio/") -> "voice"
-            else -> "file"
-        }
+        val kind = VideoRules.kind(mime, name)
         return OutgoingMedia(bytes, mime, name, kind)
     }
 
@@ -842,7 +866,7 @@ class RopeRepository(private val app: Application) {
 
     fun ensureMedia(msg: ChatMessage, force: Boolean = false) {
         if (msg.extra.isBlank()) return
-        if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE) return
+        if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE && msg.kind != MessageKind.VIDEO) return
         val path = msg.localPath
         if (!force && path != null && File(path).isFile && File(path).length() > 8) return
         if (!force && !mediaAttempts.add(msg.id)) return
@@ -1633,6 +1657,7 @@ class RopeRepository(private val app: Application) {
                 kind = when (src.kind) {
                     MessageKind.VOICE -> "voice"
                     MessageKind.IMAGE -> "image"
+                    MessageKind.VIDEO -> "video"
                     else -> "file"
                 },
                 objectId = "",

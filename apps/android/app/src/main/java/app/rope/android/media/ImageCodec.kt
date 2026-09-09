@@ -2,6 +2,7 @@ package app.rope.android.media
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import app.rope.android.data.VideoRules
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -11,6 +12,7 @@ object ImageCodec {
 
     fun extensionFor(mime: String, name: String): String {
         val m = mime.lowercase()
+        if (m.startsWith("video/")) return VideoRules.extension(mime, name)
         val fromMime = when {
             "jpeg" in m || "jpg" in m -> "jpg"
             "png" in m -> "png"

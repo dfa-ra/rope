@@ -1090,8 +1090,8 @@ private fun MessageBubble(
                         if (selecting) onToggleSelect() else onEnterSelect()
                     },
                 )
-            val photo = m.kind == MessageKind.IMAGE && !m.deleted
-            if (photo) {
+            val mediaTile = (m.kind == MessageKind.IMAGE || m.kind == MessageKind.VIDEO) && !m.deleted
+            if (mediaTile) {
                 Box(bubbleClick) {
                     Column {
                         if (showName) {
@@ -1107,7 +1107,11 @@ private fun MessageBubble(
                             accent = senderColor,
                             onJump = onJump,
                         )
-                        ImageBubble(m, onEnsureMedia, overlayMeta = true)
+                        if (m.kind == MessageKind.VIDEO) {
+                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
+                        } else {
+                            ImageBubble(m, onEnsureMedia, overlayMeta = true)
+                        }
                     }
                     Box(
                         Modifier
@@ -2119,7 +2123,7 @@ private fun AttachSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val recents = remember { recentImages(context) }
+    val recents = remember { recentMedia(context) }
     var selected by remember { mutableStateOf(listOf<Uri>()) }
     fun toggle(uri: Uri) {
         selected = when {
@@ -2142,19 +2146,19 @@ private fun AttachSheet(
             Text("Вложение", style = MaterialTheme.typography.titleMedium)
             if (recents.isNotEmpty()) {
                 Text(
-                    "До ${AlbumRules.MAX_PHOTOS} фото",
+                    "До ${AlbumRules.MAX_PHOTOS} фото или видео",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(recents, key = { it.toString() }) { uri ->
-                        val bmp = remember(uri) { decodeRecentThumb(context, uri) }
-                        val order = selected.indexOf(uri)
+                    items(recents, key = { it.uri.toString() }) { item ->
+                        val bmp = remember(item.uri) { decodeRecentThumb(context, item.uri, item.video) }
+                        val order = selected.indexOf(item.uri)
                         Box(
                             Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(RopeShapes.media))
-                                .clickable { toggle(uri) }
+                                .clickable { toggle(item.uri) }
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                         ) {
                             if (bmp != null) {
@@ -2163,6 +2167,19 @@ private fun AttachSheet(
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            if (item.video) {
+                                Text(
+                                    if (item.durationMs > 0) MediaPayload.formatDuration(item.durationMs) else "видео",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(4.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.Black.copy(alpha = 0.5f))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp),
                                 )
                             }
                             if (order >= 0) {
@@ -2194,7 +2211,7 @@ private fun AttachSheet(
                     Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        if (selected.size == 1) "Отправить фото" else "Отправить ${selected.size} фото",
+                        if (selected.size == 1) "Отправить" else "Отправить ${selected.size}",
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -2214,36 +2231,97 @@ private fun AttachSheet(
     }
 }
 
-private fun recentImages(context: Context, limit: Int = 24): List<Uri> {
-    val permission = if (Build.VERSION.SDK_INT >= 33) {
+private data class RecentMedia(
+    val uri: Uri,
+    val video: Boolean,
+    val added: Long,
+    val durationMs: Long = 0,
+)
+
+private fun recentMedia(context: Context, limit: Int = 24): List<RecentMedia> {
+    val imagePerm = if (Build.VERSION.SDK_INT >= 33) {
         Manifest.permission.READ_MEDIA_IMAGES
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
-    if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
-        return emptyList()
+    val videoPerm = if (Build.VERSION.SDK_INT >= 33) {
+        Manifest.permission.READ_MEDIA_VIDEO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
     }
-    val uris = mutableListOf<Uri>()
-    val projection = arrayOf(MediaStore.Images.Media._ID)
-    runCatching {
-        context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            null,
-            null,
-            "${MediaStore.Images.Media.DATE_ADDED} DESC",
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            while (cursor.moveToNext() && uris.size < limit) {
-                val id = cursor.getLong(idCol)
-                uris += ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+    val items = mutableListOf<RecentMedia>()
+    if (ContextCompat.checkSelfPermission(context, imagePerm) == PackageManager.PERMISSION_GRANTED) {
+        runCatching {
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED),
+                null,
+                null,
+                "${MediaStore.Images.Media.DATE_ADDED} DESC",
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+                while (cursor.moveToNext() && items.size < limit) {
+                    val id = cursor.getLong(idCol)
+                    items += RecentMedia(
+                        ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id),
+                        video = false,
+                        added = cursor.getLong(dateCol),
+                    )
+                }
             }
         }
     }
-    return uris
+    if (ContextCompat.checkSelfPermission(context, videoPerm) == PackageManager.PERMISSION_GRANTED) {
+        runCatching {
+            context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(
+                    MediaStore.Video.Media._ID,
+                    MediaStore.Video.Media.DATE_ADDED,
+                    MediaStore.Video.Media.DURATION,
+                ),
+                null,
+                null,
+                "${MediaStore.Video.Media.DATE_ADDED} DESC",
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                var n = 0
+                while (cursor.moveToNext() && n < limit) {
+                    val id = cursor.getLong(idCol)
+                    items += RecentMedia(
+                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id),
+                        video = true,
+                        added = cursor.getLong(dateCol),
+                        durationMs = cursor.getLong(durCol),
+                    )
+                    n++
+                }
+            }
+        }
+    }
+    return items.sortedByDescending { it.added }.take(limit)
 }
 
-private fun decodeRecentThumb(context: Context, uri: Uri, edge: Int = 144): android.graphics.Bitmap? {
+private fun decodeRecentThumb(
+    context: Context,
+    uri: Uri,
+    video: Boolean = false,
+    edge: Int = 144,
+): android.graphics.Bitmap? {
+    if (video) {
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            retriever.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
     val resolver = context.contentResolver
     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
     runCatching { resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) } }
@@ -2332,24 +2410,33 @@ fun ImageViewer(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val item = album[page]
-            val bmp = item.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
             Box(
                 Modifier
                     .fillMaxSize()
                     .clickable(onClick = onClose),
                 contentAlignment = Alignment.Center,
             ) {
-                if (bmp != null) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = "Фото",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
-                            .clip(RoundedCornerShape(RopeShapes.media)),
-                    )
+                if (item.kind == MessageKind.VIDEO) {
+                    val path = item.localPath
+                    if (!path.isNullOrBlank()) {
+                        VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
+                    } else {
+                        Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    }
                 } else {
-                    Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    val bmp = item.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Фото",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                                .clip(RoundedCornerShape(RopeShapes.media)),
+                        )
+                    } else {
+                        Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
             }
         }

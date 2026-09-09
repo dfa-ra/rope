@@ -124,7 +124,7 @@ class MainActivity : AppCompatActivity() {
                     onAttach = { picker.launch("*/*") },
                     onAttachGallery = {
                         galleryPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
                         )
                     },
                     onAttachFile = { picker.launch("*/*") },

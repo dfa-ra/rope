@@ -42,6 +42,7 @@ data class MediaPayload(
     fun messageKind(): MessageKind = when (kind) {
         "voice" -> MessageKind.VOICE
         "image" -> MessageKind.IMAGE
+        "video" -> MessageKind.VIDEO
         "file" -> MessageKind.FILE
         else -> MessageKind.UNKNOWN
     }
@@ -53,6 +54,7 @@ data class MediaPayload(
         } else {
             "Фото"
         }
+        "video" -> VideoRules.preview(durationMs)
         "file" -> name.ifBlank { "Файл" }
         else -> "Вложение"
     }
@@ -276,7 +278,8 @@ object ChatActions {
 
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
 
-    fun canOpen(msg: ChatMessage): Boolean = !msg.deleted && msg.kind == MessageKind.IMAGE
+    fun canOpen(msg: ChatMessage): Boolean =
+        !msg.deleted && (msg.kind == MessageKind.IMAGE || msg.kind == MessageKind.VIDEO)
 }
 
 data class ChatPrefs(
