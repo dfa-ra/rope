@@ -30,7 +30,7 @@ On connect the server:
 
 Connect URL still uses `?device_id=&ts=&sig=` (Ed25519 over `rope-ws-v1\n<unix>`). Moving `sig` to a header is a paired client+server cut and is not done in this slice.
 
-Decoded `payload` is capped at 16384 bytes (`too_large` if larger). Empty payload is allowed for control events (`ring`, `accept`, `reject`, `hangup`, `relay`, …). `audio` is rate-limited per sender at ~40 frames/sec (`rate_limited`, key `ws-call-audio:<device_id>`). `ring` is limited per sender at 6 / 30s (`rate_limited`, key `ws-call-ring:<device_id>`). Other signaling (`accept`, `reject`, `hangup`, `offer`, `answer`, `ice`, `relay`) is not throttled at those caps — a live call must not starve.
+Decoded `payload` is capped at 16384 bytes (`too_large` if larger). Empty payload is allowed for control events (`ring`, `accept`, `reject`, `hangup`, `relay`, …). `audio` is rate-limited per sender at ~40 frames/sec (`rate_limited`, key `ws-call-audio:<device_id>`). `ring` and `relay` are limited per sender at 6 / 30s (`rate_limited`, keys `ws-call-ring:<device_id>` and `ws-call-relay:<device_id>`). Other signaling (`accept`, `reject`, `hangup`, `offer`, `answer`, `ice`) is not throttled at those caps — a live call must not starve.
 
 Call events:
 

@@ -402,9 +402,69 @@ func TestCallRingRateLimited(t *testing.T) {
 		t.Fatalf("want rate_limited got %+v", lim)
 	}
 
-	for _, event := range []string{"hangup", "relay", "accept", "ice"} {
+	for _, event := range []string{"hangup", "accept", "ice"} {
 		if err := wsjson.Write(ctx, aliceWS, map[string]any{
 			"type": "call", "call_id": "c-ring", "to": bob.id, "event": event,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		got := readSkipPresence(t, ctx, bobWS)
+		if got.Type != "call" || got.Event != event {
+			t.Fatalf("%s must stay unthrottled %+v", event, got)
+		}
+	}
+}
+
+func TestCallRelayRateLimited(t *testing.T) {
+	s, hs, setup := testServer(t)
+	s.CallRelay = ratelimit.New(3, time.Minute)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+	drainHello(t, ctx, bobWS)
+
+	for i := 0; i < 3; i++ {
+		if err := wsjson.Write(ctx, aliceWS, map[string]any{
+			"type": "call", "call_id": "c-rel-rl", "to": bob.id, "event": "relay",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		got := readSkipPresence(t, ctx, bobWS)
+		if got.Type != "call" || got.Event != "relay" {
+			t.Fatalf("relay %d want forward got %+v", i, got)
+		}
+	}
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-rel-rl", "to": bob.id, "event": "RELAY",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lim := readSkipPresence(t, ctx, aliceWS)
+	if lim.Type != "error" || lim.Code != "rate_limited" {
+		t.Fatalf("want rate_limited got %+v", lim)
+	}
+
+	for _, event := range []string{"hangup", "accept", "ice"} {
+		if err := wsjson.Write(ctx, aliceWS, map[string]any{
+			"type": "call", "call_id": "c-rel-rl", "to": bob.id, "event": event,
 		}); err != nil {
 			t.Fatal(err)
 		}
