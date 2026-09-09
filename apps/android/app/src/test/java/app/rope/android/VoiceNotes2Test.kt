@@ -127,6 +127,7 @@ class VoiceNotes2Test {
     fun backCancelsVideoNoteRecording() {
         val chat = UiState(screen = Screen.Chat, backStack = listOf(Screen.Chats, Screen.Chat))
         assertEquals(BackLayer.CancelRecording, BackStack.decide(chat.copy(recordingVideoNote = true)))
+        assertEquals(BackLayer.CancelRecording, BackStack.decide(chat.copy(attachCameraOpen = true)))
         assertEquals(BackLayer.Pop, BackStack.decide(chat))
     }
 }

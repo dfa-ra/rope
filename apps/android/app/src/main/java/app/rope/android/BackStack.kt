@@ -96,7 +96,8 @@ object BackStack {
     fun decide(state: UiState, hints: OverlayHints = OverlayHints()): BackLayer = when {
         state.call != null -> BackLayer.DismissCall
         state.viewingImage != null -> BackLayer.CloseImage
-        composerLive(state.screen) && (state.recording || state.recordingVideoNote) -> BackLayer.CancelRecording
+        composerLive(state.screen) &&
+            (state.recording || state.recordingVideoNote || state.attachCameraOpen) -> BackLayer.CancelRecording
         hints.emojiOpen -> BackLayer.CloseEmoji
         hints.searchOpen -> BackLayer.CloseSearch
         hints.dialogOpen -> BackLayer.CloseDialog

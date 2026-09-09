@@ -117,6 +117,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val attachCamPerm = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val repo = (application as RopeApp).repo
+        if (granted) repo.openAttachCamera() else repo.attachCameraDenied()
+    }
+
     private val notifyPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     private val installSources = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -194,6 +201,11 @@ class MainActivity : AppCompatActivity() {
                     onVideoNoteFinish = repo::finishVideoNote,
                     onVideoNotePreview = repo::bindVideoNotePreview,
                     onVideoNotePreviewGone = repo::unbindVideoNotePreview,
+                    onOpenAttachCamera = { withAttachCam { repo.openAttachCamera() } },
+                    onCloseAttachCamera = repo::closeAttachCamera,
+                    onAttachCameraNotice = repo::userNotice,
+                    onAttachCameraUnavailable = repo::attachCameraUnavailable,
+                    onAttachCameraMicDenied = { repo.userNotice(VideoCallRules.micDeniedNotice()) },
                     onCall = { withMic("call") { repo.startCall() } },
                     onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,
@@ -284,6 +296,14 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             startedInstallFor = null
             repo.onApkInstallFailed(e.message ?: "не удалось начать установку", -1)
+        }
+    }
+
+    private fun withAttachCam(granted: () -> Unit) {
+        if (hasCam()) {
+            granted()
+        } else {
+            attachCamPerm.launch(Manifest.permission.CAMERA)
         }
     }
 

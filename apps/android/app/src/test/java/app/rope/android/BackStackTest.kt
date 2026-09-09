@@ -166,6 +166,8 @@ class BackStackTest {
             BackStack.decide(base.copy(call = ringingCall(), viewingImage = photo)),
         )
         assertEquals(BackLayer.CancelRecording, BackStack.decide(base.copy(recording = true)))
+        assertEquals(BackLayer.CancelRecording, BackStack.decide(base.copy(recordingVideoNote = true)))
+        assertEquals(BackLayer.CancelRecording, BackStack.decide(base.copy(attachCameraOpen = true)))
         assertEquals(BackLayer.CloseEmoji, BackStack.decide(base, OverlayHints(emojiOpen = true)))
         assertEquals(BackLayer.CloseSearch, BackStack.decide(base, OverlayHints(searchOpen = true)))
         assertEquals(BackLayer.CloseDialog, BackStack.decide(base, OverlayHints(dialogOpen = true)))

@@ -84,6 +84,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -145,6 +146,7 @@ import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
+import app.rope.android.data.AttachCameraRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -755,6 +757,11 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onOpenAttachCamera: () -> Unit = {},
+    onCloseAttachCamera: () -> Unit = {},
+    onAttachCameraNotice: (String) -> Unit = {},
+    onAttachCameraUnavailable: () -> Unit = {},
+    onAttachCameraMicDenied: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1147,9 +1154,29 @@ fun ChatPane(
             onCancel = { onVideoNoteFinish(false) },
         )
     }
+    if (state.attachCameraOpen) {
+        AttachCameraOverlay(
+            pending = state.pendingAttachments,
+            onStage = { onAttachUris(listOf(it)) },
+            onClose = onCloseAttachCamera,
+            onDone = onCloseAttachCamera,
+            onNotice = onAttachCameraNotice,
+            onUnavailable = onAttachCameraUnavailable,
+            onMicDenied = onAttachCameraMicDenied,
+        )
+    }
     }
     if (showAttach) {
         AttachSheet(
+            showCamera = AttachCameraRules.showTile(
+                state.call != null,
+                state.recording,
+                state.recordingVideoNote,
+            ),
+            onCamera = {
+                showAttach = false
+                onOpenAttachCamera()
+            },
             onGallery = {
                 showAttach = false
                 onAttachGallery()
@@ -2322,7 +2349,12 @@ private fun ComposerBar(
                     onCancel = onCancelPendingMedia,
                 )
             }
-            state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
+            state.composerPreview?.takeIf {
+                state.editTarget == null &&
+                    !state.recording &&
+                    !state.recordingVideoNote &&
+                    !state.attachCameraOpen
+            }?.let { preview ->
                 ComposerLinkPreview(
                     preview = preview,
                     onDismiss = onDismissLinkPreview,
@@ -2765,6 +2797,8 @@ private fun GlassActionButton(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AttachSheet(
+    showCamera: Boolean,
+    onCamera: () -> Unit,
     onGallery: () -> Unit,
     onFile: () -> Unit,
     onUri: (Uri) -> Unit,
@@ -2794,13 +2828,18 @@ private fun AttachSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Вложение", style = MaterialTheme.typography.titleMedium)
-            if (recents.isNotEmpty()) {
+            if (showCamera || recents.isNotEmpty()) {
                 Text(
                     "До ${AlbumRules.MAX_PHOTOS} фото или видео",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (showCamera) {
+                        item(key = "attach-cam") {
+                            AttachSheetCameraCell(onClick = onCamera)
+                        }
+                    }
                     items(recents, key = { it.uri.toString() }) { item ->
                         val bmp = remember(item.uri) { decodeRecentThumb(context, item.uri, item.video) }
                         val order = selected.indexOf(item.uri)
@@ -2864,6 +2903,13 @@ private fun AttachSheet(
                         if (selected.size == 1) "Отправить" else "Отправить ${selected.size}",
                         modifier = Modifier.weight(1f),
                     )
+                }
+            }
+            if (showCamera) {
+                TextButton(onClick = onCamera, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text("Камера", modifier = Modifier.weight(1f))
                 }
             }
             TextButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {

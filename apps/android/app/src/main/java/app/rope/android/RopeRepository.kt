@@ -15,6 +15,7 @@ import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
+import app.rope.android.data.AttachCameraRules
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
@@ -185,6 +186,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val attachCameraOpen: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -312,7 +314,11 @@ class RopeRepository(private val app: Application) {
                 true
             }
             BackLayer.CancelRecording -> {
-                if (s.recordingVideoNote) finishVideoNote(false) else finishVoice(false)
+                when {
+                    s.attachCameraOpen -> closeAttachCamera()
+                    s.recordingVideoNote -> finishVideoNote(false)
+                    else -> finishVoice(false)
+                }
                 true
             }
             BackLayer.ClearMessageQuery -> {
@@ -714,6 +720,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelPendingMedia() {
+        _state.value.pendingAttachments.forEach { deleteAttachCam(it) }
         _state.value = _state.value.copy(pendingAttachments = emptyList())
     }
 
@@ -853,7 +860,10 @@ class RopeRepository(private val app: Application) {
 
     fun stageAttachments(uris: List<Uri>) {
         if (_state.value.editTarget != null) return
-        val merged = (_state.value.pendingAttachments + uris).distinct().take(AlbumRules.MAX_PHOTOS)
+        val merged = AttachCameraRules.mergeStaged(
+            _state.value.pendingAttachments.map { it.toString() },
+            uris.map { it.toString() },
+        ).map { Uri.parse(it) }
         if (merged.isEmpty()) return
         _state.value = _state.value.copy(pendingAttachments = merged)
     }
@@ -908,6 +918,7 @@ class RopeRepository(private val app: Application) {
                         destGroup = destGroup,
                     )
                 }
+                uris.forEach { deleteAttachCam(it) }
             } catch (e: Exception) {
                 error(e)
             }
@@ -961,7 +972,12 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startVoice() {
-        if (_state.value.recording || _state.value.recordingVideoNote) return
+        if (!AttachCameraRules.canStartVoice(
+                _state.value.recording,
+                _state.value.recordingVideoNote,
+                _state.value.attachCameraOpen,
+            )
+        ) return
         try {
             voiceRecorder.start()
             unfurlJob?.cancel()
@@ -1025,7 +1041,13 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startVideoNote() {
-        if (_state.value.recording || _state.value.recordingVideoNote || _state.value.call != null) return
+        if (!AttachCameraRules.canStartVideoNote(
+                _state.value.call != null,
+                _state.value.recording,
+                _state.value.recordingVideoNote,
+                _state.value.attachCameraOpen,
+            )
+        ) return
         unfurlJob?.cancel()
         unfurlResult = null
         _state.value = _state.value.copy(recordingVideoNote = true, recordMs = 0, error = null)
@@ -1274,7 +1296,41 @@ class RopeRepository(private val app: Application) {
         startCall(video = true)
     }
 
+    fun openAttachCamera() {
+        val st = _state.value
+        if (!AttachCameraRules.canOpen(st.call != null, st.recording, st.recordingVideoNote, st.attachCameraOpen)) {
+            return
+        }
+        unfurlJob?.cancel()
+        unfurlResult = null
+        _state.value = st.copy(attachCameraOpen = true)
+    }
+
+    fun closeAttachCamera() {
+        _state.value = _state.value.copy(attachCameraOpen = false)
+    }
+
+    fun userNotice(msg: String) {
+        notice(msg)
+    }
+
+    fun attachCameraDenied() {
+        notice(VideoCallRules.cameraDeniedNotice())
+    }
+
+    fun attachCameraUnavailable() {
+        closeAttachCamera()
+        notice(AttachCameraRules.UNAVAILABLE_NOTICE)
+    }
+
+    private fun deleteAttachCam(uri: Uri) {
+        if (!AttachCameraRules.isAttachCamUri(uri)) return
+        val name = uri.lastPathSegment ?: return
+        File(File(app.cacheDir, AttachCameraRules.CACHE_DIR), name).delete()
+    }
+
     private fun startCall(video: Boolean) {
+        if (!AttachCameraRules.canStartCall(_state.value.attachCameraOpen)) return
         if (_state.value.group != null) return
         val hint = _state.value.peer ?: return
         if (ChatIds.isGroup(hint.deviceId) || ChatIds.isSaved(hint.deviceId)) return
@@ -1817,7 +1873,7 @@ class RopeRepository(private val app: Application) {
         }
         if (!LinkPreviewRules.shouldFetch(
                 _state.value.linkPreviewsEnabled,
-                _state.value.recording || _state.value.recordingVideoNote,
+                _state.value.recording || _state.value.recordingVideoNote || _state.value.attachCameraOpen,
                 text,
             ) ||
             url == null ||
@@ -1832,7 +1888,7 @@ class RopeRepository(private val app: Application) {
         unfurlJob = scope.launch {
             val self = coroutineContext[Job]
             delay(LinkPreviewRules.UNFURL_DEBOUNCE_MS)
-            if (_state.value.recording || _state.value.recordingVideoNote) return@launch
+            if (_state.value.recording || _state.value.recordingVideoNote || _state.value.attachCameraOpen) return@launch
             if (!_state.value.linkPreviewsEnabled) return@launch
             if (!LinkPreviewRules.keepUnfurl(url, _state.value.draftText)) return@launch
             val withThumb = fetchPackedPreview(url)
