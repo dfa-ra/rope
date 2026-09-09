@@ -39,7 +39,7 @@ Without `public_host` + `turn_secret` the body is `{ "ok": true, "turn_running":
 ### `GET /version`
 
 ```json
-{ "server": "0.3.31", "protocol": 1 }
+{ "server": "0.3.32", "protocol": 1 }
 ```
 
 ### `GET /v1/info`
@@ -131,7 +131,7 @@ Public identities of non-revoked devices so clients can encrypt.
 ```json
 {
   "server_id": "hex",
-  "version": "0.3.31",
+  "version": "0.3.32",
   "protocol_version": 1,
   "member_count": 2,
   "device_count": 2,
