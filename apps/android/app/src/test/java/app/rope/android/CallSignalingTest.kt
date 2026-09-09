@@ -444,4 +444,91 @@ class CallSignalingTest {
         m.media("bob", CallSignal.OFFER, "c1", CallSignal(CallSignal.OFFER, sdp = sdp), "alice")
         assertTrue(m.state.video)
     }
+
+    @Test
+    fun localHangupFromActiveSendsEndAndClears() {
+        val m = connectedCall()
+        val hang = m.localHangup()
+        val send = hang.filterIsInstance<CallEffect.Send>().single { it.event == CallSignal.HANGUP }
+        assertEquals("c1", send.callId)
+        assertEquals("bob", send.peerId)
+        assertTrue(hang.contains(CallEffect.TearDown))
+        assertFalse(m.state.live)
+        assertNull(m.snapshot("Bob"))
+    }
+
+    @Test
+    fun remoteHangupAndByeClearCallWithoutSending() {
+        val hangup = connectedCall()
+        val remote = hangup.onWire("bob", CallSignal.HANGUP, "c1", "", "alice")
+        assertEquals(listOf(CallEffect.TearDown), remote)
+        assertFalse(hangup.state.live)
+
+        val bye = connectedCall()
+        assertEquals(CallSignal.HANGUP, CallSignal.parseEvent("bye"))
+        assertEquals(CallSignal.HANGUP, CallSignal.parseEvent("BYE"))
+        val end = bye.onWire("bob", "bye", "c1", "", "alice")
+        assertEquals(listOf(CallEffect.TearDown), end)
+        assertFalse(bye.state.live)
+        assertNull(bye.snapshot("Bob"))
+    }
+
+    @Test
+    fun iceBlipAfterConnectedDoesNotHangupOrFallback() {
+        val m = connectedCall()
+        assertTrue(m.state.mediaUp)
+        val disc = m.onIce("DISCONNECTED", true)
+        assertTrue(disc.none { it is CallEffect.TearDown || it is CallEffect.StartWssMedia })
+        assertTrue(disc.none { it is CallEffect.Send && it.event == CallSignal.HANGUP })
+        assertTrue(m.state.live)
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+        assertFalse(m.state.wssMedia)
+
+        val closed = m.onIce("CLOSED", true)
+        assertTrue(closed.isEmpty())
+        assertTrue(m.state.live)
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+
+        val failed = m.onIce("FAILED", true)
+        assertTrue(failed.contains(CallEffect.RestartIce))
+        assertTrue(failed.none { it is CallEffect.TearDown || it is CallEffect.StartWssMedia })
+        assertTrue(failed.none { it is CallEffect.Send && it.event == CallSignal.HANGUP })
+        assertTrue(m.state.live)
+        assertFalse(m.state.wssMedia)
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+
+        val failedAgain = m.onIce("FAILED", true)
+        assertTrue(failedAgain.none { it is CallEffect.TearDown || it is CallEffect.StartWssMedia })
+        assertTrue(m.state.live)
+        assertFalse(m.state.wssMedia)
+    }
+
+    @Test
+    fun muteFlipCameraDenyAreNotHangupSignals() {
+        assertFalse(VideoCallRules.sdpErrorFailsIce())
+        assertTrue(VideoCallRules.iceBlipKeepsCall("FAILED", mediaWasUp = true))
+        assertTrue(VideoCallRules.iceBlipKeepsCall("DISCONNECTED", mediaWasUp = true))
+        assertTrue(VideoCallRules.iceBlipKeepsCall("CLOSED", mediaWasUp = false))
+        assertTrue(VideoCallRules.ignorePcClosed("CLOSED"))
+        assertFalse(VideoCallRules.iceFailedFallsBackToWss("FAILED", mediaWasUp = true))
+        assertTrue(VideoCallRules.iceFailedFallsBackToWss("FAILED", mediaWasUp = false))
+        assertFalse(VideoCallRules.wireEventIsHangup(CallSignal.ICE))
+        assertTrue(VideoCallRules.wireEventIsHangup(CallSignal.HANGUP))
+        assertTrue(VideoCallRules.wireEventIsHangup("bye"))
+    }
+
+    private fun connectedCall(): CallMachine {
+        val m = CallMachine()
+        m.localStart("c1", "bob", "alice", video = true)
+        m.onWire("bob", CallSignal.ACCEPT, "c1", "", "alice")
+        m.onHasTurn(true, "")
+        m.onSessionAttached()
+        m.onLocalOfferSent()
+        m.media("bob", CallSignal.ANSWER, "c1", answer(), "alice")
+        m.onIce("CONNECTED", true)
+        assertEquals(CallLinkState.CONNECTED, m.state.link)
+        assertTrue(m.state.mediaUp)
+        assertTrue(m.state.live)
+        return m
+    }
 }

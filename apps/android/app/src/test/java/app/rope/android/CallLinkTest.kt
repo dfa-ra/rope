@@ -47,7 +47,7 @@ class CallLinkTest {
         assertEquals("WebRTC · через сервер", CallLink.applyIce("CONNECTED", viaRelay = true).second)
         assertEquals(CallLinkState.FAILED, CallLink.applyIce("FAILED").first)
         assertTrue(CallLink.applyIce("FAILED", hasTurn = false).second.contains("ядро"))
-        assertEquals(CallLinkState.FAILED, CallLink.applyIce("CLOSED").first)
+        assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("CLOSED").first)
         assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("DISCONNECTED").first)
         assertTrue(CallLink.applyIce("DISCONNECTED").second.contains("прервалась"))
         assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("CHECKING").first)

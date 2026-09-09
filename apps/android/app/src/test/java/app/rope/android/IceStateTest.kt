@@ -20,9 +20,9 @@ class IceStateTest {
     fun failedAndClosedStopConnecting() {
         assertEquals(CallLinkState.FAILED, CallLink.applyIce("FAILED").first)
         assertEquals(CallLinkState.FAILED, CallLink.applyIce("failed").first)
-        assertEquals(CallLinkState.FAILED, CallLink.applyIce("CLOSED").first)
+        assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("CLOSED").first)
         assertTrue(CallLink.iceIsFailed("FAILED"))
-        assertTrue(CallLink.iceIsFailed("closed"))
+        assertFalse(CallLink.iceIsFailed("closed"))
         assertFalse(CallLink.iceIsFailed("CHECKING"))
         assertFalse(CallLink.iceIsFailed("CONNECTING"))
         assertTrue(CallLink.applyIce("FAILED", hasTurn = false).second.contains("ядро"))
@@ -46,7 +46,7 @@ class IceStateTest {
         assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("CONNECTING").first)
         assertEquals(CallLinkState.CONNECTED, CallLink.applyIce("CONNECTED").first)
         assertEquals(CallLinkState.FAILED, CallLink.applyIce("FAILED").first)
-        assertEquals(CallLinkState.FAILED, CallLink.applyIce("CLOSED").first)
+        assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("CLOSED").first)
         assertEquals(CallLinkState.CONNECTING, CallLink.applyIce("DISCONNECTED").first)
     }
 }

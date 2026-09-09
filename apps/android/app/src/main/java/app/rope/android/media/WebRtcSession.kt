@@ -83,6 +83,7 @@ class WebRtcSession(
     private var pendingRemote: CallSignal? = null
     private var viaRelay = false
     private var fellBack = false
+    @Volatile
     private var closed = false
     @Volatile
     private var pcReady = false
@@ -126,6 +127,7 @@ class WebRtcSession(
 
         override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
             if (closed) return
+            if (state == PeerConnection.PeerConnectionState.CLOSED) return
             onIce(state.name, viaRelay)
         }
 
@@ -154,7 +156,17 @@ class WebRtcSession(
         override fun onDataChannel(p0: DataChannel) = Unit
         override fun onRenegotiationNeeded() {
             if (closed || !pcReady) return
-            createOffer(renegotiate = true)
+            val stable = pc?.signalingState() == PeerConnection.SignalingState.STABLE
+            if (!VideoCallRules.offerOnRenegotiationNeeded(
+                    pcReady = true,
+                    callee = callee,
+                    signalingStable = stable,
+                    makingOffer = makingOffer,
+                )
+            ) {
+                return
+            }
+            createOffer()
         }
     }
 
@@ -243,6 +255,10 @@ class WebRtcSession(
 
     fun createOffer(iceRestart: Boolean = false, renegotiate: Boolean = false) {
         if (closed) return
+        if (makingOffer && !iceRestart) {
+            Log.i("rope-webrtc", "skip offer: already making one")
+            return
+        }
         if (callee && !iceRestart && !renegotiate) {
             Log.i("rope-webrtc", "skip offer: this side is callee")
             return
@@ -252,7 +268,6 @@ class WebRtcSession(
             Log.w("rope-webrtc", "skip offer: signaling=$state")
             return
         }
-        callee = false
         makingOffer = true
         pc?.createOffer(sdpSink { desc ->
             pc?.setLocalDescription(object : SdpObserver by noopSdp {
@@ -268,7 +283,7 @@ class WebRtcSession(
                 override fun onSetFailure(err: String) {
                     makingOffer = false
                     Log.w("rope-webrtc", "setLocal offer: $err")
-                    onIce("FAILED", viaRelay)
+                    if (VideoCallRules.sdpErrorFailsIce()) onIce("FAILED", viaRelay)
                 }
             }, desc)
         }, offerConstraints(videoWanted, iceRestart))
@@ -338,7 +353,13 @@ class WebRtcSession(
             runCatching {
                 capturer?.startCapture(VideoCallRules.WIDTH, VideoCallRules.HEIGHT, VideoCallRules.FPS)
             }
-            if (VideoCallRules.renegotiateOnCameraUnmute(hadTrack)) {
+            val stable = pc?.signalingState() == PeerConnection.SignalingState.STABLE
+            if (VideoCallRules.explicitOfferOnCameraUnmute(
+                    hadLocalTrack = hadTrack,
+                    signalingStable = stable,
+                    makingOffer = makingOffer,
+                )
+            ) {
                 createOffer(renegotiate = true)
             }
         } else {
@@ -361,8 +382,12 @@ class WebRtcSession(
         if (closed) return
         when (signal.kind) {
             CallSignal.OFFER -> {
-                val glare = makingOffer || pc?.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER
-                if (glare && !polite) {
+                if (VideoCallRules.ignoreRemoteOfferOnGlare(
+                        makingOffer = makingOffer,
+                        haveLocalOffer = pc?.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER,
+                        polite = polite,
+                    )
+                ) {
                     Log.i("rope-webrtc", "glare: ignore remote offer (impolite)")
                     return
                 }
@@ -450,15 +475,17 @@ class WebRtcSession(
                             }
                             override fun onSetFailure(err: String) {
                                 Log.w("rope-webrtc", "setLocal answer: $err")
-                                onIce("FAILED", viaRelay)
+                                if (VideoCallRules.sdpErrorFailsIce()) onIce("FAILED", viaRelay)
                             }
                         }, answer)
-                    }, offerConstraints(videoWanted || VideoCallRules.sdpHasVideo(signal.sdp)))
+                    }, offerConstraints(VideoCallRules.answerReceivesVideo(videoWanted, signal.sdp)))
                 }
             }
             override fun onSetFailure(err: String) {
                 Log.w("rope-webrtc", "setRemote ${signal.kind}: $err")
-                if (signal.kind == CallSignal.OFFER) onIce("FAILED", viaRelay)
+                if (signal.kind == CallSignal.OFFER && VideoCallRules.sdpErrorFailsIce()) {
+                    onIce("FAILED", viaRelay)
+                }
             }
         }, desc)
     }
@@ -628,8 +655,13 @@ class WebRtcSession(
         private fun audioConstraints(iceRestart: Boolean = false) = offerConstraints(false, iceRestart)
 
         private fun offerConstraints(video: Boolean, iceRestart: Boolean = false) = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", if (video) "true" else "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", VideoCallRules.offerToReceiveAudio()))
+            mandatory.add(
+                MediaConstraints.KeyValuePair(
+                    "OfferToReceiveVideo",
+                    VideoCallRules.offerToReceiveVideo(video),
+                ),
+            )
             if (iceRestart) {
                 mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
             }

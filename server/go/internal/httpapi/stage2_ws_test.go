@@ -403,6 +403,56 @@ func TestCallPendingRingDeliveredOnReconnect(t *testing.T) {
 	}
 }
 
+func TestCallHangupQueuedWhenPeerOffline(t *testing.T) {
+	_, hs, setup := testServer(t)
+	alice := newDevice(t)
+	bob := newDevice(t)
+	bootstrap(t, hs, setup, alice, "alice")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), alice)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, bob, "bob")
+
+	ctx := context.Background()
+	aliceWS := dialWS(t, ctx, hs, alice)
+	defer aliceWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, aliceWS)
+
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-end", "to": bob.id, "event": "ring",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	queuedRing := readSkipPresence(t, ctx, aliceWS)
+	if queuedRing.Type != "queued" || queuedRing.CallID != "c-end" {
+		t.Fatalf("offline ring want queued got %+v", queuedRing)
+	}
+	if err := wsjson.Write(ctx, aliceWS, map[string]any{
+		"type": "call", "call_id": "c-end", "to": bob.id, "event": "hangup",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	queuedHang := readSkipPresence(t, ctx, aliceWS)
+	if queuedHang.Type != "queued" || queuedHang.CallID != "c-end" {
+		t.Fatalf("offline hangup want queued got %+v", queuedHang)
+	}
+
+	bobWS := dialWS(t, ctx, hs, bob)
+	defer bobWS.Close(websocket.StatusNormalClosure, "")
+	drainHello(t, ctx, bobWS)
+	got := readSkipPresence(t, ctx, bobWS)
+	if got.Type != "call" || got.Event != "hangup" || got.From != alice.id || got.CallID != "c-end" {
+		t.Fatalf("reconnect want pending hangup got %+v", got)
+	}
+}
+
 func TestCallAudioPeerOffline(t *testing.T) {
 	_, hs, setup := testServer(t)
 	alice := newDevice(t)

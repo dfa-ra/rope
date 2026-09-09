@@ -153,6 +153,7 @@ fun CallOverlay(
     onToggleCamera: () -> Unit = {},
     onFlipCamera: () -> Unit = {},
     eglContext: () -> EglBase.Context? = { null },
+    rtcReady: Boolean = false,
     onBindRemote: (SurfaceViewRenderer) -> Unit = {},
     onBindLocal: (SurfaceViewRenderer) -> Unit = {},
 ) {
@@ -200,6 +201,7 @@ fun CallOverlay(
                     modifier = Modifier.fillMaxSize(),
                     mirror = false,
                     overlay = false,
+                    rtcReady = rtcReady,
                     eglContext = eglContext,
                     onBind = onBindRemote,
                 )
@@ -213,6 +215,7 @@ fun CallOverlay(
                             .clip(RoundedCornerShape(12.dp)),
                         mirror = true,
                         overlay = true,
+                        rtcReady = rtcReady,
                         eglContext = eglContext,
                         onBind = onBindLocal,
                     )
@@ -323,10 +326,14 @@ fun CallOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         for (spec in CallChromeRules.inCallControls(
-                            video = call.video,
+                            video = call.video && call.media != CallMedia.CHAT,
                             micMuted = micMuted,
                             speakerOn = speakerOn,
                             camMuted = camMuted,
+                            showFlip = CallChromeRules.showFlip(
+                                camMuted = camMuted,
+                                rtcReady = eglContext() != null && call.media != CallMedia.CHAT,
+                            ),
                         )) {
                             CircleAction(
                                 spec,
@@ -357,6 +364,7 @@ private fun CallVideoView(
     modifier: Modifier,
     mirror: Boolean,
     overlay: Boolean,
+    rtcReady: Boolean,
     eglContext: () -> EglBase.Context?,
     onBind: (SurfaceViewRenderer) -> Unit,
 ) {
@@ -371,6 +379,7 @@ private fun CallVideoView(
             }
         },
         update = { view ->
+            if (!rtcReady) return@AndroidView
             val egl = eglContext() ?: return@AndroidView
             if (view.tag != "rope-inited") {
                 view.init(egl, null)

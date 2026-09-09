@@ -38,6 +38,7 @@ data class CallSignal(
 
         fun parseEvent(raw: String?): String? {
             val v = JsonIds.optional(raw)?.lowercase() ?: return null
+            if (v == "bye") return HANGUP
             return if (v in WIRE) v else null
         }
 

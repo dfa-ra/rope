@@ -86,8 +86,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 CallMediaStart.VIDEO -> repo.startVideoCall()
                 CallMediaStart.AUDIO -> {
-                    repo.cameraDenied()
                     repo.startCall()
+                    repo.cameraDenied()
                 }
             }
             "accept" -> {
@@ -99,6 +99,9 @@ class MainActivity : AppCompatActivity() {
                 repo.acceptCall()
             }
             "unmute-cam" -> {
+                if (!VideoCallRules.applyUnmuteCamResult(repo.state.value.call != null)) {
+                    return@registerForActivityResult
+                }
                 if (cam) repo.toggleCallCamera() else repo.cameraDenied()
             }
         }

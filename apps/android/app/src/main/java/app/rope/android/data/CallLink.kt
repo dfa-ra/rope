@@ -223,8 +223,8 @@ object CallLink {
         val name = ice.trim().uppercase()
         return when (name) {
             "CONNECTED", "COMPLETED" -> CallLinkState.CONNECTED to connectedDetail(viaRelay)
-            "FAILED", "CLOSED" -> CallLinkState.FAILED to iceFailedDetail(viaRelay, hasTurn)
-            "DISCONNECTED" -> CallLinkState.CONNECTING to disconnectedDetail()
+            "FAILED" -> CallLinkState.FAILED to iceFailedDetail(viaRelay, hasTurn)
+            "CLOSED", "DISCONNECTED" -> CallLinkState.CONNECTING to disconnectedDetail()
             "CHECKING", "CONNECTING", "NEW" ->
                 CallLinkState.CONNECTING to connectingDetail(hasTurn, remoteReady, fellBack)
             else -> CallLinkState.CONNECTING to if (hasTurn) "WebRTC · соединяем" else missingTurnDetail()
@@ -233,7 +233,7 @@ object CallLink {
 
     fun iceIsFailed(ice: String): Boolean {
         val name = ice.trim().uppercase()
-        return name == "FAILED" || name == "CLOSED"
+        return name == "FAILED"
     }
 
     fun applyInfo(iceServersJson: String?, current: CallInfo): CallInfo {

@@ -20,6 +20,7 @@ object VideoCallRules {
     const val FPS = 24
     const val TRACK_ID = "rope-video"
     const val STREAM_ID = "rope"
+    const val BYE = "bye"
 
     fun showHeader(peerId: String?, isGroup: Boolean): Boolean =
         !isGroup && !peerId.isNullOrBlank() && SavedMessagesRules.canCall(peerId)
@@ -45,6 +46,43 @@ object VideoCallRules {
     fun sdpHasVideo(sdp: String): Boolean =
         sdp.lineSequence().any { it.startsWith("m=video") }
 
+    fun offerToReceiveAudio(): String = "true"
+
+    /** Unified Plan still honors this Plan-B key; video offers/answers must recv. */
+    fun offerToReceiveVideo(video: Boolean): String = if (video) "true" else "false"
+
+    fun answerReceivesVideo(wantVideo: Boolean, remoteSdp: String): Boolean =
+        wantVideo || sdpHasVideo(remoteSdp)
+
+    /** SDP setLocal/setRemote failure is not ICE failed and must not hang up. */
+    fun sdpErrorFailsIce(): Boolean = false
+
+    /**
+     * PeerConnection CLOSED is local teardown (or the peer already left).
+     * Do not map it to ICE failed / WSS fallback / hangup.
+     */
+    fun ignorePcClosed(iceName: String): Boolean =
+        iceName.trim().equals("CLOSED", ignoreCase = true)
+
+    /**
+     * After DTLS is up, FAILED / DISCONNECTED are path blips (mute, flip,
+     * camera-deny, renegotiation). They must not hang up the remote.
+     */
+    fun iceBlipKeepsCall(iceName: String, mediaWasUp: Boolean): Boolean {
+        val name = iceName.trim().uppercase()
+        if (name == "DISCONNECTED" || name == "CLOSED") return true
+        return mediaWasUp && name == "FAILED"
+    }
+
+    /** WSS audio fallback only when ICE never connected. Never a user hangup. */
+    fun iceFailedFallsBackToWss(iceName: String, mediaWasUp: Boolean): Boolean =
+        !mediaWasUp && iceName.trim().equals("FAILED", ignoreCase = true)
+
+    fun wireEventIsHangup(event: String): Boolean {
+        val v = event.trim().lowercase()
+        return v == CallSignal.HANGUP || v == BYE
+    }
+
     fun utf8Bytes(payload: String): Int = payload.toByteArray(Charsets.UTF_8).size
 
     fun fitsWss(payload: String): Boolean = utf8Bytes(payload) <= MAX_WSS_PAYLOAD
@@ -58,7 +96,9 @@ object VideoCallRules {
     fun micDeniedNotice(): String = "Нет доступа к микрофону"
 
     /** Incoming Accept + mic deny must land on the overlay, not a Scaffold snackbar. */
-    fun micDeniedUsesOverlay(hasCall: Boolean): Boolean = hasCall
+    fun noticeUsesOverlay(hasCall: Boolean): Boolean = hasCall
+
+    fun micDeniedUsesOverlay(hasCall: Boolean): Boolean = noticeUsesOverlay(hasCall)
 
     fun overlayMicDenied(hasCall: Boolean): String? =
         if (hasCall) micDeniedNotice() else null
@@ -66,12 +106,54 @@ object VideoCallRules {
     /**
      * Video sessions keep an m=video transceiver even when the local camera is
      * muted or denied, so later unmute can send without a missing m-line.
+     * Reserving that m-line must not make the callee send the first offer.
      */
     fun reserveVideoTransceiver(wantVideo: Boolean, startCamera: Boolean): Boolean =
         wantVideo && !startCamera
 
+    /**
+     * Observer-driven offer (perfect negotiation): only the initial offerer,
+     * only while STABLE, never to dodge the callee guard with renegotiate=true.
+     */
+    fun offerOnRenegotiationNeeded(
+        pcReady: Boolean,
+        callee: Boolean,
+        signalingStable: Boolean,
+        makingOffer: Boolean = false,
+    ): Boolean = pcReady && !callee && signalingStable && !makingOffer
+
     /** Adding the first local video track after mute-before-connect needs a new offer. */
     fun renegotiateOnCameraUnmute(hadLocalTrack: Boolean): Boolean = !hadLocalTrack
+
+    /**
+     * Explicit unmute offer when STABLE. Callee uses this path because the
+     * observer must not offer. Skip if an offer is already in flight (glare).
+     */
+    fun explicitOfferOnCameraUnmute(
+        hadLocalTrack: Boolean,
+        signalingStable: Boolean,
+        makingOffer: Boolean = false,
+    ): Boolean = renegotiateOnCameraUnmute(hadLocalTrack) && signalingStable && !makingOffer
+
+    /**
+     * Impolite (caller) drops a remote offer while making one. Polite (callee)
+     * accepts and relies on implicit rollback.
+     */
+    fun ignoreRemoteOfferOnGlare(
+        makingOffer: Boolean,
+        haveLocalOffer: Boolean,
+        polite: Boolean,
+    ): Boolean = (makingOffer || haveLocalOffer) && !polite
+
+    fun applyUnmuteCamResult(hasCall: Boolean): Boolean = hasCall
+
+    /** Mic-deny banner drops once Accept actually proceeds. Camera-deny stays. */
+    fun noticeAfterAccept(notice: String?): String? =
+        if (notice == micDeniedNotice()) null else notice
+
+    /** In-call unmute that starts a track clears the «только звук» banner. */
+    fun noticeAfterCameraUnmute(notice: String?): String? =
+        if (notice == cameraFailedNotice() || notice == cameraDeniedNotice()) null else notice
 
     fun inCallUnmuteNeedsCameraPermission(unmuting: Boolean, cameraGranted: Boolean): Boolean =
         unmuting && !cameraGranted

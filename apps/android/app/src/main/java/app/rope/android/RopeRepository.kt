@@ -142,6 +142,7 @@ data class UiState(
     val callSpeakerOn: Boolean = false,
     val callCamMuted: Boolean = false,
     val callNotice: String? = null,
+    val callRtcReady: Boolean = false,
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
@@ -207,6 +208,8 @@ class RopeRepository(private val app: Application) {
     private var ringWatch: Job? = null
     private var rtcAsCaller = false
     private val rtcLock = Any()
+    private var boundRemote: org.webrtc.SurfaceViewRenderer? = null
+    private var boundLocal: org.webrtc.SurfaceViewRenderer? = null
     private var iceCachedAtMs: Long = 0L
 
     fun start(pendingLink: String?) {
@@ -1126,7 +1129,15 @@ class RopeRepository(private val app: Application) {
     }
 
     fun acceptCall() {
+        val before = _state.value.call?.phase
         applyCallEffects(callMachine.localAccept())
+        val st = _state.value
+        if (before == CallPhase.RINGING_IN && st.call != null) {
+            val next = VideoCallRules.noticeAfterAccept(st.callNotice)
+            if (next != st.callNotice) {
+                _state.value = st.copy(callNotice = next)
+            }
+        }
     }
 
     fun rejectCall() {
@@ -1151,8 +1162,13 @@ class RopeRepository(private val app: Application) {
     }
 
     fun toggleCallCamera() {
-        val next = !_state.value.callCamMuted
-        _state.value = _state.value.copy(callCamMuted = next)
+        val st = _state.value
+        if (st.call == null) return
+        val next = !st.callCamMuted
+        _state.value = st.copy(
+            callCamMuted = next,
+            callNotice = if (!next) VideoCallRules.noticeAfterCameraUnmute(st.callNotice) else st.callNotice,
+        )
         rtc?.setCameraEnabled(!next)
     }
 
@@ -1161,27 +1177,27 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cameraDenied() {
-        _state.value = _state.value.copy(
+        val st = _state.value
+        if (st.call == null) return
+        _state.value = st.copy(
             callCamMuted = true,
             callNotice = VideoCallRules.cameraDenyFallbackNotice(),
         )
     }
 
     fun micDenied() {
-        if (VideoCallRules.micDeniedUsesOverlay(_state.value.call != null)) {
-            _state.value = _state.value.copy(callNotice = VideoCallRules.micDeniedNotice())
-        } else {
-            notice(VideoCallRules.micDeniedNotice())
-        }
+        notice(VideoCallRules.micDeniedNotice())
     }
 
     fun callEglContext(): org.webrtc.EglBase.Context? = rtc?.eglContext()
 
     fun bindCallRemote(renderer: org.webrtc.SurfaceViewRenderer) {
+        boundRemote = renderer
         rtc?.attachRemoteSink(renderer)
     }
 
     fun bindCallLocal(renderer: org.webrtc.SurfaceViewRenderer) {
+        boundLocal = renderer
         rtc?.attachLocalSink(renderer)
     }
 
@@ -2588,6 +2604,7 @@ class RopeRepository(private val app: Application) {
             } catch (_: Exception) {
             }
             rtc = null
+            _state.value = _state.value.copy(callRtcReady = false)
             if (wssAudio != null) {
                 if (_state.value.callMicMuted) wssAudio?.setMuted(true)
                 return
@@ -2664,6 +2681,11 @@ class RopeRepository(private val app: Application) {
                 if (_state.value.callMicMuted) existing.setMicEnabled(false)
                 if (_state.value.callCamMuted) existing.setCameraEnabled(false)
                 if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
+                boundRemote?.let { existing.attachRemoteSink(it) }
+                boundLocal?.let { existing.attachLocalSink(it) }
+                if (!_state.value.callRtcReady) {
+                    _state.value = _state.value.copy(callRtcReady = true)
+                }
                 if (asCaller && !rtcAsCaller) {
                     rtcAsCaller = true
                     existing.createOffer()
@@ -2723,6 +2745,9 @@ class RopeRepository(private val app: Application) {
             if (_state.value.callMicMuted) session.setMicEnabled(false)
             if (_state.value.callCamMuted) session.setCameraEnabled(false)
             if (_state.value.callSpeakerOn) CallAudio.setSpeaker(app, true)
+            boundRemote?.let { session.attachRemoteSink(it) }
+            boundLocal?.let { session.attachLocalSink(it) }
+            _state.value = _state.value.copy(callRtcReady = true)
             if (asCaller) session.createOffer() else session.prepareCallee()
         }
     }
@@ -2831,6 +2856,8 @@ class RopeRepository(private val app: Application) {
         ringWatch = null
         rtcAsCaller = false
         callPeerName = ""
+        boundRemote = null
+        boundLocal = null
         callMachine.reset()
         stopTone()
         audioMode(false)
@@ -2853,6 +2880,7 @@ class RopeRepository(private val app: Application) {
             callSpeakerOn = false,
             callCamMuted = false,
             callNotice = null,
+            callRtcReady = false,
         )
     }
 
@@ -3051,7 +3079,11 @@ class RopeRepository(private val app: Application) {
 
     private fun notice(msg: String) {
         val text = UserFacing.of(msg)
-        _state.value = _state.value.copy(busy = false, error = text, notice = text)
+        if (VideoCallRules.noticeUsesOverlay(_state.value.call != null)) {
+            _state.value = _state.value.copy(busy = false, error = null, callNotice = text)
+        } else {
+            _state.value = _state.value.copy(busy = false, error = text, notice = text)
+        }
     }
 
     private fun error(e: Exception) {

@@ -44,22 +44,38 @@ class CallChromeRulesTest {
     }
 
     @Test
-    fun videoInCallHasCameraFlipNotSpeaker() {
-        val controls = CallChromeRules.inCallControls(video = true, micMuted = true, camMuted = true)
+    fun videoInCallHidesFlipWhenMutedOrNoCapturer() {
+        val muted = CallChromeRules.inCallControls(video = true, micMuted = true, camMuted = true)
+        assertEquals(
+            listOf(CallControlKind.MUTE, CallControlKind.HANGUP, CallControlKind.CAMERA),
+            muted.map { it.kind },
+        )
+        assertFalse(muted.any { it.kind == CallControlKind.SPEAKER || it.kind == CallControlKind.FLIP })
+        assertFalse(CallChromeRules.showFlip(camMuted = true, rtcReady = true))
+        assertFalse(CallChromeRules.showFlip(camMuted = false, rtcReady = false))
+        assertTrue(CallChromeRules.showFlip(camMuted = false, rtcReady = true))
+        val live = CallChromeRules.inCallControls(
+            video = true,
+            micMuted = true,
+            camMuted = false,
+            showFlip = true,
+        )
         assertEquals(
             listOf(CallControlKind.MUTE, CallControlKind.HANGUP, CallControlKind.CAMERA, CallControlKind.FLIP),
-            controls.map { it.kind },
+            live.map { it.kind },
         )
-        assertFalse(controls.any { it.kind == CallControlKind.SPEAKER })
-        for (spec in controls) {
+        assertFalse(live.any { it.kind == CallControlKind.SPEAKER })
+        for (spec in muted + live) {
             assertTrue(CallChromeRules.iconOnly(spec))
             assertFalse(CallChromeRules.showVisibleCaption(spec.kind))
         }
-        assertEquals("Микрофон выкл", controls[0].a11y)
-        assertEquals("Завершить", controls[1].a11y)
-        assertEquals("Камера выкл", controls[2].a11y)
-        assertEquals("Сменить камеру", controls[3].a11y)
+        assertEquals("Микрофон выкл", muted[0].a11y)
+        assertEquals("Завершить", muted[1].a11y)
+        assertEquals("Камера выкл", muted[2].a11y)
+        assertEquals("Сменить камеру", live[3].a11y)
         assertEquals("Камера", CallChromeRules.cameraA11y(false))
+        val noRtc = CallChromeRules.inCallControls(video = true, camMuted = false, showFlip = false)
+        assertFalse(noRtc.any { it.kind == CallControlKind.FLIP })
     }
 
     @Test

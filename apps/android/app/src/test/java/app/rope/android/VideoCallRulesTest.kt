@@ -106,6 +106,139 @@ class VideoCallRulesTest {
         assertFalse(VideoCallRules.inCallUnmuteNeedsCameraPermission(unmuting = false, cameraGranted = false))
     }
 
+    @Test
+    fun reservedTransceiverDoesNotMakeCalleeOffer() {
+        assertTrue(VideoCallRules.reserveVideoTransceiver(wantVideo = true, startCamera = false))
+        assertFalse(
+            VideoCallRules.offerOnRenegotiationNeeded(
+                pcReady = true,
+                callee = true,
+                signalingStable = true,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.offerOnRenegotiationNeeded(
+                pcReady = false,
+                callee = false,
+                signalingStable = true,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.offerOnRenegotiationNeeded(
+                pcReady = true,
+                callee = false,
+                signalingStable = false,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.offerOnRenegotiationNeeded(
+                pcReady = true,
+                callee = false,
+                signalingStable = true,
+                makingOffer = true,
+            ),
+        )
+        assertTrue(
+            VideoCallRules.offerOnRenegotiationNeeded(
+                pcReady = true,
+                callee = false,
+                signalingStable = true,
+            ),
+        )
+        assertTrue(
+            VideoCallRules.explicitOfferOnCameraUnmute(
+                hadLocalTrack = false,
+                signalingStable = true,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.explicitOfferOnCameraUnmute(
+                hadLocalTrack = true,
+                signalingStable = true,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.explicitOfferOnCameraUnmute(
+                hadLocalTrack = false,
+                signalingStable = false,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.explicitOfferOnCameraUnmute(
+                hadLocalTrack = false,
+                signalingStable = true,
+                makingOffer = true,
+            ),
+        )
+        assertTrue(
+            VideoCallRules.ignoreRemoteOfferOnGlare(
+                makingOffer = true,
+                haveLocalOffer = false,
+                polite = false,
+            ),
+        )
+        assertTrue(
+            VideoCallRules.ignoreRemoteOfferOnGlare(
+                makingOffer = false,
+                haveLocalOffer = true,
+                polite = false,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.ignoreRemoteOfferOnGlare(
+                makingOffer = true,
+                haveLocalOffer = true,
+                polite = true,
+            ),
+        )
+        assertFalse(
+            VideoCallRules.ignoreRemoteOfferOnGlare(
+                makingOffer = false,
+                haveLocalOffer = false,
+                polite = false,
+            ),
+        )
+    }
+
+    @Test
+    fun unmuteCamResultAndOverlayNoticesClearOnSuccess() {
+        assertFalse(VideoCallRules.applyUnmuteCamResult(hasCall = false))
+        assertTrue(VideoCallRules.applyUnmuteCamResult(hasCall = true))
+        assertTrue(VideoCallRules.noticeUsesOverlay(hasCall = true))
+        assertFalse(VideoCallRules.noticeUsesOverlay(hasCall = false))
+        assertEquals(null, VideoCallRules.noticeAfterAccept(VideoCallRules.micDeniedNotice()))
+        assertEquals(
+            VideoCallRules.cameraFailedNotice(),
+            VideoCallRules.noticeAfterAccept(VideoCallRules.cameraFailedNotice()),
+        )
+        assertEquals(null, VideoCallRules.noticeAfterAccept(null))
+        assertEquals(null, VideoCallRules.noticeAfterCameraUnmute(VideoCallRules.cameraFailedNotice()))
+        assertEquals(null, VideoCallRules.noticeAfterCameraUnmute(VideoCallRules.cameraDeniedNotice()))
+        assertEquals(
+            VideoCallRules.micDeniedNotice(),
+            VideoCallRules.noticeAfterCameraUnmute(VideoCallRules.micDeniedNotice()),
+        )
+    }
+
+    @Test
+    fun videoOfferConstraintsReceiveBothDirections() {
+        assertEquals("true", VideoCallRules.offerToReceiveAudio())
+        assertEquals("true", VideoCallRules.offerToReceiveVideo(true))
+        assertEquals("false", VideoCallRules.offerToReceiveVideo(false))
+        assertTrue(VideoCallRules.answerReceivesVideo(true, "v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\n"))
+        assertTrue(
+            VideoCallRules.answerReceivesVideo(
+                false,
+                "v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\nm=video 9 UDP/TLS/RTP/SAVPF 96\n",
+            ),
+        )
+        assertFalse(VideoCallRules.answerReceivesVideo(false, "v=0\nm=audio 9 UDP/TLS/RTP/SAVPF 111\n"))
+        val offer = CallSignal(CallSignal.OFFER, sdp = representativeVideoSdp()).toJson()
+        assertTrue(VideoCallRules.sdpHasVideo(CallSignal.parse(offer)!!.sdp))
+        assertTrue(VideoCallRules.fitsWss(offer))
+        assertFalse(VideoCallRules.sdpErrorFailsIce())
+    }
+
     /**
      * Compact VP8+opus offer similar to Unified Plan. Real device SDP is larger
      * (ICE, fingerprint, more fmtp) but still typically 2–6 KiB — under 16 KiB.

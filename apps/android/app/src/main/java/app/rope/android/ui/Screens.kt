@@ -339,6 +339,20 @@ fun RopeScaffold(
             }
         }
     }
+    state.viewingImage?.let { img ->
+        val siblings = if (state.screen == Screen.PeerProfile) {
+            app.rope.android.data.PeerProfileRules.photos(state.messages).ifEmpty { listOf(img) }
+        } else {
+            app.rope.android.data.AlbumRules.siblings(state.messages, img)
+        }
+        app.rope.android.ui.ImageViewer(
+            msg = img,
+            siblings = siblings.ifEmpty { listOf(img) },
+            onClose = onCloseImage,
+            onShow = onOpenImage,
+            onEnsure = onEnsureMedia,
+        )
+    }
     state.call?.let { call ->
         app.rope.android.ui.CallOverlay(
             call,
@@ -355,22 +369,9 @@ fun RopeScaffold(
             onToggleCamera = onToggleCallCamera,
             onFlipCamera = onFlipCallCamera,
             eglContext = callEgl,
+            rtcReady = state.callRtcReady,
             onBindRemote = onBindCallRemote,
             onBindLocal = onBindCallLocal,
-        )
-    }
-    state.viewingImage?.let { img ->
-        val siblings = if (state.screen == Screen.PeerProfile) {
-            app.rope.android.data.PeerProfileRules.photos(state.messages).ifEmpty { listOf(img) }
-        } else {
-            app.rope.android.data.AlbumRules.siblings(state.messages, img)
-        }
-        app.rope.android.ui.ImageViewer(
-            msg = img,
-            siblings = siblings.ifEmpty { listOf(img) },
-            onClose = onCloseImage,
-            onShow = onOpenImage,
-            onEnsure = onEnsureMedia,
         )
     }
     if (splash.visible) {

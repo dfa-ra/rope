@@ -10,11 +10,11 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.29**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, and `v0.3.28` remain published history.
+The product trunk is **`main`**, shipping **0.3.30**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, and `v0.3.29` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.29` / `versionCode=53`, plus CryptoGalera operating layer |
+| **`main`** | Shipped tree: Android `versionName=0.3.30` / `versionCode=54`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
 | **GitHub Release `v0.3.0`** | Previous line. Do not retag `v0.3.0`. |
 | **GitHub Release `v0.3.1`** | Previous line. Do not retag `v0.3.1`. |
@@ -44,7 +44,8 @@ The product trunk is **`main`**, shipping **0.3.29**. GitHub Releases `v0.2.15`,
 | **GitHub Release `v0.3.25`** | Previous line. Do not retag `v0.3.25`. |
 | **GitHub Release `v0.3.26`** | Previous line. Do not retag `v0.3.26`. |
 | **GitHub Release `v0.3.27`** | Previous line. Do not retag `v0.3.27`. |
-| **GitHub Release `v0.3.28`** | Previous Latest until `v0.3.29` publishes. Do not retag `v0.3.28`. |
+| **GitHub Release `v0.3.28`** | Previous line. Do not retag `v0.3.28`. |
+| **GitHub Release `v0.3.29`** | Previous Latest until `v0.3.30` publishes. Do not retag `v0.3.29`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -54,7 +55,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.29`).
+1. Install the Android app (this cycle ships `v0.3.30`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).
@@ -71,6 +72,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 - **0.3.27 call chrome:** in-call / ringing controls are Telegram-style icon-only rounds (mute, speaker, camera, flip, hangup, accept); labels are a11y `contentDescription` only
 - **0.3.28 QA:** reply+media keeps quote; incoming camera-deny mutes local camera (`только звук` on overlay); composer video hint; split reply vs album cancel; pending URIs do not leak across chats; outgoing camera mute applies when WebRTC starts
 - **0.3.29 QA:** incoming Accept mic-deny shows on the call overlay; camera unmute after mute-before-connect renegotiates; in-call CAMERA re-asks permission; in-flight album stays on the chat that tapped Send; edit is not dropped by staged media; same-chat remount keeps pending URIs
+- **0.3.30 calls:** 1:1 video establishes both directions (camera + remote surface) on the existing WebRTC/WSS path; `OfferToReceiveVideo` on video offers/answers; callee `onRenegotiationNeeded` does not createOffer; ICE blip / mute / flip / camera-deny / renegotiation does not hang up the remote; explicit hangup sends `hangup` (BYE alias accepted) so both leave a clean idle overlay; CAMERA result after hangup does not poison the next call
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator

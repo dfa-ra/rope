@@ -27,6 +27,8 @@ data class CallMachineState(
     val relayFellBack: Boolean = false,
     val wssMedia: Boolean = false,
     val video: Boolean = false,
+    /** True once ICE/DTLS reached CONNECTED; blips must not hang up. */
+    val mediaUp: Boolean = false,
 ) {
     val live: Boolean get() = !ended && callId.isNotBlank()
 }
@@ -206,7 +208,35 @@ class CallMachine {
         if (!state.live) return emptyList()
         if (state.wssMedia) return emptyList()
         if (state.phase == CallPhase.RINGING_IN || state.phase == CallPhase.RINGING_OUT) return emptyList()
+        if (VideoCallRules.ignorePcClosed(name)) return emptyList()
         val relay = state.viaRelay || viaRelay
+        if (VideoCallRules.iceBlipKeepsCall(name, state.mediaUp) && state.mediaUp) {
+            val out = mutableListOf<CallEffect>()
+            if (name.trim().equals("FAILED", ignoreCase = true) &&
+                state.hasTurn &&
+                !state.iceRestartUsed &&
+                state.role == CallRtcRole.OFFERER
+            ) {
+                state = state.copy(
+                    iceRestartUsed = true,
+                    lastIce = name,
+                    viaRelay = relay,
+                    media = CallLink.iceRestartDetail(),
+                )
+                out += CallEffect.RestartIce
+            } else {
+                state = state.copy(
+                    lastIce = name,
+                    viaRelay = relay,
+                    media = if (name.trim().equals("DISCONNECTED", ignoreCase = true)) {
+                        CallLink.disconnectedDetail()
+                    } else {
+                        state.media
+                    },
+                )
+            }
+            return out
+        }
         val (link, label) = CallLink.applyIce(
             name,
             viaRelay = relay,
@@ -214,7 +244,14 @@ class CallMachine {
             remoteReady = state.remoteDescriptionReady,
             fellBack = state.relayFellBack,
         )
-        state = state.copy(link = link, media = label, lastIce = name, iceReady = true, viaRelay = relay)
+        state = state.copy(
+            link = link,
+            media = label,
+            lastIce = name,
+            iceReady = true,
+            viaRelay = relay,
+            mediaUp = state.mediaUp || link == CallLinkState.CONNECTED,
+        )
         val out = mutableListOf<CallEffect>()
         if (link == CallLinkState.CONNECTED) out += CallEffect.CancelWatch
         if (link == CallLinkState.FAILED) {
@@ -225,7 +262,7 @@ class CallMachine {
                     media = CallLink.iceRestartDetail(),
                 )
                 out += CallEffect.RestartIce
-            } else {
+            } else if (!state.mediaUp) {
                 return startWssFallbackLocked(sendRelay = true)
             }
         }

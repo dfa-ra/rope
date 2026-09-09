@@ -708,7 +708,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		return
 	}
 	target := s.resolveCallTarget(in.To)
-	if dest, ok := s.Hub.Get(target); ok {
+        if dest, ok := s.Hub.Get(target); ok {
 		if isCallTerminal(in.Event) {
 			s.dropPendingCall(in.CallID)
 		}
@@ -723,10 +723,6 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 	}
 	if strings.EqualFold(in.Event, "audio") {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "peer offline"})
-		return
-	}
-	if isCallTerminal(in.Event) {
-		s.dropPendingCall(in.CallID)
 		return
 	}
 	if !s.storePendingCall(pendingCall{

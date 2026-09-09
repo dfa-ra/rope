@@ -27,21 +27,24 @@ object CallChromeRules {
         CallControlSpec(CallControlKind.ACCEPT, a11y = "Ответить"),
     )
 
+    fun showFlip(camMuted: Boolean, rtcReady: Boolean): Boolean = !camMuted && rtcReady
+
     fun inCallControls(
         video: Boolean,
         micMuted: Boolean = false,
         speakerOn: Boolean = false,
         camMuted: Boolean = false,
+        showFlip: Boolean = video && !camMuted,
     ): List<CallControlSpec> {
         val mute = CallControlSpec(CallControlKind.MUTE, a11y = muteA11y(micMuted))
         val hangup = CallControlSpec(CallControlKind.HANGUP, a11y = "Завершить")
         return if (video) {
-            listOf(
-                mute,
-                hangup,
-                CallControlSpec(CallControlKind.CAMERA, a11y = cameraA11y(camMuted)),
-                CallControlSpec(CallControlKind.FLIP, a11y = "Сменить камеру"),
-            )
+            buildList {
+                add(mute)
+                add(hangup)
+                add(CallControlSpec(CallControlKind.CAMERA, a11y = cameraA11y(camMuted)))
+                if (showFlip) add(CallControlSpec(CallControlKind.FLIP, a11y = "Сменить камеру"))
+            }
         } else {
             listOf(
                 mute,
