@@ -4,11 +4,11 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.17 chat-list last-message preview | — |
-| CG-106 | Slice: chat-list last-message preview as 0.3.17 | PO | IN_PROGRESS | Telegram Черновик / Вы:; mute after title | CG-007 |
-| CG-107 | Android: ChatListPreviewRules + row chrome | AND-01 | IN_PROGRESS | D-030; no 0.3.2 tap/long-press redo | CG-106 |
-| CG-108 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-107 |
-| CG-109 | Ship **0.3.17** | PO | IN_PROGRESS | versionCode 41; do not retag v0.3.16 | CG-108 |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.18 grouped photo albums (in flight; not 0.3.17) | — |
+| CG-106 | Slice: chat-list last-message preview as 0.3.17 | PO | DONE | shipped v0.3.17 | CG-007 |
+| CG-107 | Android: ChatListPreviewRules + row chrome | AND-01 | DONE | D-030; no 0.3.2 tap/long-press redo | CG-106 |
+| CG-108 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; idle group «N участников» can hit search as preview; draft accent heuristic; no compose test | CG-107 |
+| CG-109 | Ship **0.3.17** | PO | DONE | tag v0.3.17 = 6a1b84e; versionCode 41; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10 / v0.3.11 / v0.3.12 / v0.3.13 / v0.3.14 / v0.3.15 / v0.3.16 unchanged | CG-108 |
 | CG-102 | Slice: in-thread search empty as 0.3.16 | PO | DONE | shipped v0.3.16 | CG-007 |
 | CG-103 | Android: ThreadEmptyRules search miss | AND-01 | DONE | D-029; no 0.3.2 tap/long-press redo | CG-102 |
 | CG-104 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; lowercase quoted q; miss is «Ничего не найдено» not idle / «Ничего не нашли» | CG-103 |
@@ -82,4 +82,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, or `v0.3.16`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, or `v0.3.17`.**
