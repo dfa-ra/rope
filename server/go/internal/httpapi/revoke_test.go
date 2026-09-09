@@ -620,10 +620,21 @@ func TestConcurrentTwoOwnerRevokeMember(t *testing.T) {
 	}
 	t.Cleanup(func() { db.AfterOwnerDeviceCount = nil })
 
+	// Each owner revokes the other. Signing both requests as the same
+	// device is not a two-actor race: if that device's member is revoked
+	// first, the second HTTP call is 401 at authenticate, not 409.
+	type pair struct {
+		target string
+		actor  testDevice
+	}
+	pairs := []pair{
+		{peerMember, owner},
+		{ownerMember, peer},
+	}
 	reqs := make([]*http.Request, 0, 2)
-	for _, id := range []string{ownerMember, peerMember} {
-		body := []byte(`{"member_id":"` + id + `"}`)
-		reqs = append(reqs, authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-member", "/v1/admin/revoke-member", body, owner))
+	for _, p := range pairs {
+		body := []byte(`{"member_id":"` + p.target + `"}`)
+		reqs = append(reqs, authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-member", "/v1/admin/revoke-member", body, p.actor))
 	}
 
 	type result struct {
@@ -651,7 +662,10 @@ func TestConcurrentTwoOwnerRevokeMember(t *testing.T) {
 	got := []result{<-codes, <-codes}
 	db.AfterOwnerDeviceCount = nil
 
-	ok, conflict := 0, 0
+	// Safety: never both 200 (that bricks the instance). The loser is 409
+	// when both passed authenticate, or 401 if the winner revoked the
+	// other actor before that request authenticated.
+	ok, loser := 0, 0
 	for _, r := range got {
 		if r.err != nil {
 			t.Fatal(r.err)
@@ -659,14 +673,17 @@ func TestConcurrentTwoOwnerRevokeMember(t *testing.T) {
 		switch r.code {
 		case 200:
 			ok++
-		case 409:
-			conflict++
+		case 409, 401:
+			loser++
 		default:
 			t.Fatalf("concurrent revoke-member statuses %v %v", got[0], got[1])
 		}
 	}
-	if ok != 1 || conflict != 1 {
-		t.Fatalf("concurrent two-owner revoke-member wanted one 200 and one 409, got %d and %d", got[0].code, got[1].code)
+	if ok == 2 {
+		t.Fatalf("both 200 — last-owner device invariant broken: %d and %d", got[0].code, got[1].code)
+	}
+	if ok != 1 || loser != 1 {
+		t.Fatalf("concurrent two-owner revoke-member wanted one 200 and one 401/409, got %d and %d", got[0].code, got[1].code)
 	}
 	n, err := s.Store.OwnerDeviceCount()
 	if err != nil || n != 1 {
