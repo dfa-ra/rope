@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import android.content.Intent
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
@@ -57,6 +58,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -83,6 +85,7 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -128,6 +131,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -145,6 +149,8 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
@@ -595,6 +601,7 @@ fun ChatPane(
     onDelete: (ChatMessage) -> Unit = {},
     onForward: (ChatMessage) -> Unit = {},
     onCancelComposer: () -> Unit = {},
+    onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
@@ -966,6 +973,7 @@ fun ChatPane(
                 onVoiceStart = onVoiceStart,
                 onVoiceFinish = onVoiceFinish,
                 onCancelComposer = onCancelComposer,
+                onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
             )
@@ -1323,12 +1331,26 @@ private fun MessageBubble(
                             MessageKind.FILE -> FileBubble(m)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
-                            else -> MentionText(
-                                m.text,
-                                mentionNames,
-                                mentionColor = if (mine) outFg else senderColor,
-                                styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
-                            )
+                            else -> {
+                                val context = LocalContext.current
+                                MentionText(
+                                    m.text,
+                                    mentionNames,
+                                    mentionColor = if (mine) outFg else senderColor,
+                                    styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
+                                    onPlainTap = onTap,
+                                )
+                                val preview = m.linkPreview
+                                if (preview != null) {
+                                    LaunchedEffect(m.id, preview.objectId, preview.localPath) {
+                                        onEnsureMedia(m)
+                                    }
+                                    LinkPreviewCard(
+                                        preview = preview,
+                                        onOpen = { openHttps(context, it) },
+                                    )
+                                }
+                            }
                         }
                     }
                     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
@@ -1409,10 +1431,19 @@ private fun ReplyQuote(name: String, preview: String, accent: Color, onClick: ()
 
 
 @Composable
-private fun MentionText(text: String, names: List<String>, mentionColor: Color, styleLarge: Boolean) {
+private fun MentionText(
+    text: String,
+    names: List<String>,
+    mentionColor: Color,
+    styleLarge: Boolean,
+    onPlainTap: () -> Unit = {},
+) {
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
+    val links = remember(text) { LinkPreviewRules.spans(text) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
-    if (spans.isEmpty()) {
+    val context = LocalContext.current
+    val linkColor = MaterialTheme.colorScheme.primary
+    if (spans.isEmpty() && links.isEmpty()) {
         Text(text, style = style)
         return
     }
@@ -1425,8 +1456,120 @@ private fun MentionText(text: String, names: List<String>, mentionColor: Color, 
                 range.last + 1,
             )
         }
+        links.forEach { link ->
+            addStyle(
+                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                link.start,
+                link.endExclusive,
+            )
+            addStringAnnotation("URL", link.url, link.start, link.endExclusive)
+        }
     }
-    Text(annotated, style = style)
+    ClickableText(
+        text = annotated,
+        style = style.copy(color = LocalContentColor.current),
+        onClick = { offset ->
+            val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
+            if (url != null) openHttps(context, url) else onPlainTap()
+        },
+    )
+}
+
+@Composable
+private fun ComposerLinkPreview(preview: PackedLinkPreview, onDismiss: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(36.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                preview.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                preview.host,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Outlined.Close, contentDescription = "Убрать предпросмотр")
+        }
+    }
+}
+
+@Composable
+private fun LinkPreviewCard(preview: PackedLinkPreview, onOpen: (String) -> Unit) {
+    val bmp = preview.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+    Surface(
+        modifier = Modifier
+            .padding(top = 6.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onOpen(preview.url) },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        tonalElevation = 0.dp,
+    ) {
+        Column {
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = preview.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp),
+                )
+            }
+            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(
+                    preview.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (preview.description.isNotBlank()) {
+                    Text(
+                        preview.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    preview.host.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private fun openHttps(context: Context, url: String) {
+    if (!url.startsWith("https://", ignoreCase = true)) return
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
 }
 
 @Composable
@@ -1866,6 +2009,7 @@ private fun ComposerBar(
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCancelComposer: () -> Unit,
+    onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
 ) {
@@ -1951,6 +2095,12 @@ private fun ComposerBar(
                 ComposerHint(
                     copy = MediaSendRules.hint(state.pendingAttachments.size, videos),
                     onCancel = onCancelPendingMedia,
+                )
+            }
+            state.composerPreview?.takeIf { state.editTarget == null && !state.recording }?.let { preview ->
+                ComposerLinkPreview(
+                    preview = preview,
+                    onDismiss = onDismissLinkPreview,
                 )
             }
             if (showEmoji && !state.recording) {

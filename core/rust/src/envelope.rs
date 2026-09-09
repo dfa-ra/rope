@@ -475,6 +475,34 @@ mod tests {
     }
 
     #[test]
+    fn typed_text_and_group_text_link_preview_json_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let text = br#"{"t":"смотри https://example.com/a","lp":{"u":"https://example.com/a","h":"example.com","t":"Page title","d":"OG description"}}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_TEXT, text).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_TEXT);
+        assert_eq!(got.body, text);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"lp\""));
+        assert!(json.contains("https://example.com/a"));
+        let group = br#"{"g":"gid","t":"hi https://example.com/a","e":1,"lp":{"u":"https://example.com/a","h":"example.com","t":"Page title"}}"#;
+        let env = encrypt_typed(
+            &alice,
+            &bob.public_identity(),
+            ENVELOPE_TYPE_GROUP_TEXT,
+            group,
+        )
+        .unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_GROUP_TEXT);
+        assert_eq!(got.body, group);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"lp\""));
+        assert!(json.contains("\"h\":\"example.com\""));
+    }
+
+    #[test]
     fn v1_text_still_works_after_typed_api() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();

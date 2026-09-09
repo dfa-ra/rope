@@ -147,6 +147,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 forwardedFrom = msg.forwardedFrom ?: existing.forwardedFrom,
                 edited = msg.edited || existing.edited,
                 deleted = msg.deleted || existing.deleted,
+                linkPreview = mergePreview(msg.linkPreview, existing.linkPreview),
             )
         }
         writableDatabase.execSQL(
@@ -213,11 +214,24 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun editMessage(id: String, text: String): Boolean {
         val msg = message(id) ?: return false
+        val oldUrl = LinkPreviewRules.firstHttps(msg.text)
+        val newUrl = LinkPreviewRules.firstHttps(text)
+        val keep = !oldUrl.isNullOrBlank() && oldUrl == newUrl
+        val nextPreview = if (keep) msg.linkPreview else null
         writableDatabase.execSQL(
             "UPDATE messages SET body_enc = ?, meta = ? WHERE id = ?",
-            arrayOf(encrypt(text), MessageMeta.of(msg.copy(text = text, edited = true)).toJson(), id),
+            arrayOf(encrypt(text), MessageMeta.of(msg.copy(text = text, edited = true, linkPreview = nextPreview)).toJson(), id),
         )
         return true
+    }
+
+    fun updateLinkThumb(id: String, path: String) {
+        val msg = message(id) ?: return
+        val lp = msg.linkPreview?.copy(localPath = path) ?: return
+        writableDatabase.execSQL(
+            "UPDATE messages SET meta = ? WHERE id = ?",
+            arrayOf(MessageMeta.of(msg.copy(linkPreview = lp)).toJson(), id),
+        )
     }
 
     fun markDeleted(id: String): Boolean {
@@ -365,6 +379,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
 
+    fun saveLinkPreviews(enabled: Boolean) {
+        put("link_previews", if (enabled) "1" else "0")
+    }
+
+    fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
@@ -446,6 +466,11 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun newId(): String = UUID.randomUUID().toString()
 
+    private fun mergePreview(incoming: PackedLinkPreview?, existing: PackedLinkPreview?): PackedLinkPreview? {
+        val base = incoming ?: existing ?: return null
+        return base.copy(localPath = incoming?.localPath ?: existing?.localPath)
+    }
+
     private fun row(c: android.database.Cursor): ChatMessage {
         val kind = runCatching { MessageKind.valueOf(c.getString(7)) }.getOrDefault(MessageKind.TEXT)
         val meta = if (c.columnCount > 14 && !c.isNull(14)) MessageMeta.parse(c.getString(14)) else MessageMeta()
@@ -474,6 +499,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             forwardedFrom = meta.forwardedFrom,
             edited = meta.edited,
             deleted = meta.deleted,
+            linkPreview = meta.linkPreview,
         )
     }
 

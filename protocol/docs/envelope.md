@@ -39,7 +39,29 @@ Inner plaintext for type=1 (`text`):
 N bytes UTF-8 text
 ```
 
-That UTF-8 text may be a JSON object for replies (`t`,`r`,`rp`,`rn`) with optional quote-span (`qt`,`qo`) or attributed forwards (`t`,`ff`). Forwards must not masquerade as replies.
+That UTF-8 text may be a JSON object for replies (`t`,`r`,`rp`,`rn`) with optional quote-span (`qt`,`qo`), attributed forwards (`t`,`ff`), or a sender-packed link preview (`lp`). Forwards must not masquerade as replies.
+
+Optional `lp` is a link-preview card fetched on the **sending phone** (Open Graph over HTTPS). Recipients render `lp` and never refetch the URL. The relay does not crawl. HTTPS only.
+
+```json
+{
+  "t": "смотри https://example.com/a",
+  "lp": {
+    "u": "https://example.com/a",
+    "h": "example.com",
+    "t": "Page title",
+    "d": "OG description",
+    "o": "uuid",
+    "s": "hex sha256 of object ciphertext",
+    "k": "key_b64",
+    "m": "image/jpeg",
+    "n": "lp.jpg",
+    "z": 18432
+  }
+}
+```
+
+`u` and `h` are required. `t` is required when `lp` is present (host is the fallback). `d` and the image set `o`/`s`/`k`/`m`/`n`/`z` are optional together. JPEG bytes are never inlined; the thumb is an encrypted object referenced from `lp`. Omit `lp` when there is no HTTPS URL, fetch failed, settings generation is off, or the sender dismissed the card.
 
 Optional `qt` is the selected quote substring. Optional `qo` is a JSON array `[start,end]` of UTF-16 offsets into the quoted message (Kotlin `String` indices). A full-body reply omits `qt`/`qo` and keeps `rp` as the preview. Kotlin packs this JSON; the existing Rust `encrypt_message` / `encrypt_typed` path encrypts it. The relay never sees plaintext.
 
@@ -80,10 +102,10 @@ The object store holds only ciphertext. The object key never appears in HTTP hea
 ### type=3 group_text
 
 ```json
-{ "g": "group_id", "t": "text", "e": 2, "ff": "Анна" }
+{ "g": "group_id", "t": "text", "e": 2, "ff": "Анна", "lp": { "u": "https://example.com", "h": "example.com", "t": "Title" } }
 ```
 
-Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only. Optional `qt` / `qo` are the same quote-span as type=1.
+Optional `ff` is the attributed-forward origin. Reply fields `r` / `rp` / `rn` stay for real replies only. Optional `qt` / `qo` are the same quote-span as type=1. Optional `lp` is the same sender-packed link preview as type=1.
 
 ### Encrypted objects (`ROCH`)
 

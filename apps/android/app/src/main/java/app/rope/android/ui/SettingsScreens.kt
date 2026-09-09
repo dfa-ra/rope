@@ -35,6 +35,7 @@ fun SettingsPane(
     onSetTheme: (ThemeMode) -> Unit,
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
+    onToggleLinkPreviews: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -97,6 +98,28 @@ fun SettingsPane(
                             if (checked != state.notificationsMuted) onToggleNotifications()
                         },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Предпросмотр ссылок", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            SettingsRules.linkPreviewsHint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.linkPreviewsEnabled,
+                        onCheckedChange = { checked ->
+                            if (checked != state.linkPreviewsEnabled) onToggleLinkPreviews()
+                        },
+                        modifier = Modifier.semantics { contentDescription = "Предпросмотр ссылок" },
                     )
                 }
             }

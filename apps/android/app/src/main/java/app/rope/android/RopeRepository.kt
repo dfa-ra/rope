@@ -60,7 +60,9 @@ import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
+import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
@@ -76,6 +78,7 @@ import app.rope.android.media.VoiceWaveform
 import app.rope.android.media.WebRtcSession
 import app.rope.android.media.WssAudioSession
 import org.webrtc.VideoSink
+import app.rope.android.net.LinkUnfurl
 import app.rope.android.net.ServerApi
 import app.rope.android.notify.RopeConnectionService
 import app.rope.android.notify.RopeNotifier
@@ -100,6 +103,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -158,6 +162,9 @@ data class UiState(
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
+    val linkPreviewsEnabled: Boolean = true,
+    val composerPreview: PackedLinkPreview? = null,
+    val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
     val latestAppVersion: String = "",
     val replyTo: ChatMessage? = null,
@@ -203,6 +210,7 @@ class RopeRepository(private val app: Application) {
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var recordJob: Job? = null
+    private var unfurlJob: Job? = null
     private var voiceProgressJob: Job? = null
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
@@ -241,6 +249,7 @@ class RopeRepository(private val app: Application) {
                 _state.value = _state.value.copy(
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
+                    linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -357,6 +366,7 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(draftText = text)
         persistOpenDraft()
         maybeSendTyping(text)
+        scheduleUnfurl(text)
     }
 
     fun setChatQuery(query: String) {
@@ -563,6 +573,28 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(notificationsMuted = next)
     }
 
+    fun toggleLinkPreviews() {
+        val next = !_state.value.linkPreviewsEnabled
+        store.saveLinkPreviews(next)
+        _state.value = _state.value.copy(linkPreviewsEnabled = next)
+        if (!next) {
+            unfurlJob?.cancel()
+            _state.value = _state.value.copy(composerPreview = null)
+        } else {
+            scheduleUnfurl(_state.value.draftText)
+        }
+    }
+
+    fun dismissComposerPreview() {
+        val url = _state.value.composerPreview?.url
+            ?: LinkPreviewRules.firstHttps(_state.value.draftText)
+        unfurlJob?.cancel()
+        _state.value = _state.value.copy(
+            composerPreview = null,
+            composerPreviewDismissedUrl = url,
+        )
+    }
+
     fun copyText(value: String) {
         if (value.isBlank()) return
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -575,7 +607,7 @@ class RopeRepository(private val app: Application) {
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
             val text = _state.value.draftText
             if (text.isBlank()) return
-            _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null)
+            _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null, composerPreview = null, composerPreviewDismissedUrl = null)
             persistOpenDraft()
             applyEdit(edit, text)
             return
@@ -591,6 +623,8 @@ class RopeRepository(private val app: Application) {
                 pendingAttachments = emptyList(),
                 replyTo = null,
                 replySpan = null,
+                composerPreview = null,
+                composerPreviewDismissedUrl = null,
             )
             persistOpenDraft()
             sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
@@ -600,54 +634,30 @@ class RopeRepository(private val app: Application) {
         if (text.isBlank() || _state.value.recording) return
         val reply = _state.value.replyTo
         val pack = replyPack(reply)
-        _state.value = _state.value.copy(draftText = "", replyTo = null, replySpan = null)
+        val attached = _state.value.composerPreview
+        val dismissed = _state.value.composerPreviewDismissedUrl
+        val pendingJob = unfurlJob
+        _state.value = _state.value.copy(
+            draftText = "",
+            replyTo = null,
+            replySpan = null,
+            composerPreview = null,
+            composerPreviewDismissedUrl = null,
+        )
         persistOpenDraft()
         val group = _state.value.group
-        if (group != null) {
-            sendGroupText(group, text, reply, pack)
-            return
-        }
-        if (SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(_state.value.peer?.deviceId)) {
-            saveLocalText(text, reply, pack = pack)
-            return
-        }
-        val peer = _state.value.peer ?: return
+        val peer = _state.value.peer
+        val saved = SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(peer?.deviceId)
         scope.launch {
-            val id = identity ?: return@launch
-            try {
-                val packed = TextBody.encode(
-                    text,
-                    pack.id,
-                    pack.preview,
-                    pack.name,
-                    quoteText = pack.quoteText,
-                    quoteStart = pack.quoteStart,
-                    quoteEnd = pack.quoteEnd,
-                )
-                val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
-                val local = ChatMessage(
-                    id = env.messageId,
-                    peerDeviceId = peer.deviceId,
-                    outgoing = true,
-                    text = text,
-                    status = MessageStatus.CREATED,
-                    timestampMs = env.timestampMs.toLong(),
-                    envelope = env.bytes,
-                    kind = MessageKind.TEXT,
-                    senderId = id.deviceId(),
-                    senderName = _state.value.profile?.displayName.orEmpty(),
-                    replyToId = pack.id,
-                    replyPreview = pack.preview,
-                    replyName = pack.name,
-                    quoteText = pack.quoteText,
-                    quoteStart = pack.quoteStart,
-                    quoteEnd = pack.quoteEnd,
-                )
-                store.insertMessage(local)
-                refreshMessages(peer.deviceId)
-                pushEnvelope(env.bytes)
-            } catch (e: Exception) {
-                error(e)
+            val preview = resolvePreviewForSend(text, attached, dismissed, pendingJob, upload = !saved)
+            val lp = if (saved) preview?.withoutImage()?.copy(localPath = preview.localPath) else preview
+            when {
+                group != null -> sendGroupText(group, text, reply, pack, linkPreview = lp)
+                saved -> saveLocalText(text, reply, pack = pack, linkPreview = lp)
+                else -> {
+                    val dest = peer ?: return@launch
+                    sendPeerText(dest, text, pack, lp)
+                }
             }
         }
     }
@@ -923,6 +933,7 @@ class RopeRepository(private val app: Application) {
         if (_state.value.recording || _state.value.recordingVideoNote) return
         try {
             voiceRecorder.start()
+            unfurlJob?.cancel()
             _state.value = _state.value.copy(recording = true, recordMs = 0, error = null)
             recordJob?.cancel()
             recordJob = scope.launch {
@@ -1124,6 +1135,10 @@ class RopeRepository(private val app: Application) {
     }
 
     fun ensureMedia(msg: ChatMessage, force: Boolean = false) {
+        val lp = msg.linkPreview
+        if (lp != null && lp.hasImage() && (force || lp.localPath == null || !File(lp.localPath).isFile)) {
+            scope.launch { downloadLinkThumb(msg.id, lp) }
+        }
         if (msg.extra.isBlank()) return
         if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE && msg.kind != MessageKind.VIDEO && msg.kind != MessageKind.VIDEO_NOTE) return
         val path = msg.localPath
@@ -1639,6 +1654,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         pack: ReplyPack = replyPack(reply),
         forwardedFrom: String? = null,
+        linkPreview: PackedLinkPreview? = null,
     ) {
         val attributed = JsonIds.optional(forwardedFrom)
         val body = GroupTextPayload(
@@ -1652,6 +1668,7 @@ class RopeRepository(private val app: Application) {
             quoteText = if (attributed == null) pack.quoteText else "",
             quoteStart = if (attributed == null) pack.quoteStart else -1,
             quoteEnd = if (attributed == null) pack.quoteEnd else -1,
+            linkPreview = linkPreview,
         ).toJson().toByteArray()
         sendGroupPayload(
             group,
@@ -1664,6 +1681,7 @@ class RopeRepository(private val app: Application) {
             if (attributed == null) reply else null,
             attributed,
             if (attributed == null) pack else ReplyPack(),
+            linkPreview,
         )
     }
 
@@ -1678,6 +1696,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
+        linkPreview: PackedLinkPreview? = null,
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -1728,6 +1747,7 @@ class RopeRepository(private val app: Application) {
                     quoteStart = if (forwardedFrom == null) pack.quoteStart else -1,
                     quoteEnd = if (forwardedFrom == null) pack.quoteEnd else -1,
                     forwardedFrom = forwardedFrom,
+                    linkPreview = linkPreview,
                 )
                 store.insertMessage(local)
                 refreshMessages(chatId)
@@ -1750,6 +1770,151 @@ class RopeRepository(private val app: Application) {
 
     private fun persistPlain(objectId: String, name: String, mime: String, bytes: ByteArray): File {
         return ImageCodec.persist(File(app.filesDir, "media"), objectId, mime, name, bytes)
+    }
+
+    private fun scheduleUnfurl(text: String) {
+        unfurlJob?.cancel()
+        val url = LinkPreviewRules.firstHttps(text)
+        val dismissed = _state.value.composerPreviewDismissedUrl
+        if (url != dismissed && url != null) {
+            _state.value = _state.value.copy(composerPreviewDismissedUrl = null)
+        }
+        if (!LinkPreviewRules.shouldFetch(_state.value.linkPreviewsEnabled, _state.value.recording, text) ||
+            url == null ||
+            url == dismissed
+        ) {
+            if (_state.value.composerPreview?.url != url) {
+                _state.value = _state.value.copy(composerPreview = null)
+            }
+            return
+        }
+        if (_state.value.composerPreview?.url == url) return
+        unfurlJob = scope.launch {
+            delay(LinkPreviewRules.UNFURL_DEBOUNCE_MS)
+            if (_state.value.recording) return@launch
+            if (!LinkPreviewRules.shouldFetch(_state.value.linkPreviewsEnabled, false, _state.value.draftText)) {
+                return@launch
+            }
+            if (LinkPreviewRules.firstHttps(_state.value.draftText) != url) return@launch
+            val page = runCatching { LinkUnfurl.fetch(url) }.getOrNull()
+            val packed = page?.let { LinkPreviewRules.fromOg(url, it.title, it.description) }
+            if (packed == null) {
+                if (_state.value.composerPreview?.url == url) {
+                    _state.value = _state.value.copy(composerPreview = null)
+                }
+                return@launch
+            }
+            val withThumb = page.imageJpeg?.takeIf { it.isNotEmpty() }?.let { jpeg ->
+                packed.copy(localPath = persistPlain("lp-${UUID.randomUUID()}", "lp.jpg", "image/jpeg", jpeg).absolutePath)
+            } ?: packed
+            if (LinkPreviewRules.firstHttps(_state.value.draftText) != url) return@launch
+            if (_state.value.composerPreviewDismissedUrl == url) return@launch
+            _state.value = _state.value.copy(composerPreview = withThumb)
+        }
+    }
+
+    private suspend fun resolvePreviewForSend(
+        text: String,
+        attached: PackedLinkPreview?,
+        dismissedUrl: String?,
+        pendingJob: Job?,
+        upload: Boolean,
+    ): PackedLinkPreview? {
+        if (!_state.value.linkPreviewsEnabled) return null
+        val url = LinkPreviewRules.firstHttps(text) ?: return null
+        if (dismissedUrl == url) return null
+        var packed = attached.takeIf { it?.url == url }
+        if (packed == null && pendingJob != null && pendingJob.isActive) {
+            withTimeoutOrNull(LinkPreviewRules.SEND_WAIT_MS) { pendingJob.join() }
+            packed = _state.value.composerPreview.takeIf { it?.url == url }
+        }
+        return attachThumb(packed, upload)
+    }
+
+    private fun attachThumb(preview: PackedLinkPreview?, upload: Boolean): PackedLinkPreview? {
+        if (preview == null) return null
+        val jpeg = preview.localPath?.let { File(it).takeIf { f -> f.isFile && f.length() > 0 } }?.readBytes()
+        if (jpeg == null) return preview.withoutImage().copy(localPath = preview.localPath)
+        if (!upload) return preview.withoutImage().copy(localPath = preview.localPath)
+        return try {
+            val enc = encryptObject(jpeg)
+            val uploaded = (api ?: return preview.withoutImage().copy(localPath = preview.localPath))
+                .uploadObject(enc.ciphertext, enc.sha256)
+            preview.copy(
+                objectId = uploaded.getString("object_id"),
+                sha256 = enc.sha256,
+                keyB64 = Base64.encodeToString(enc.key, Base64.NO_WRAP),
+                mime = "image/jpeg",
+                name = "lp.jpg",
+                size = enc.ciphertext.size.toLong(),
+            )
+        } catch (_: Exception) {
+            preview.withoutImage().copy(localPath = preview.localPath)
+        }
+    }
+
+    private suspend fun sendPeerText(
+        peer: DirectoryDevice,
+        text: String,
+        pack: ReplyPack,
+        preview: PackedLinkPreview?,
+    ) {
+        val id = identity ?: return
+        try {
+            val packed = TextBody.encode(
+                text,
+                pack.id,
+                pack.preview,
+                pack.name,
+                quoteText = pack.quoteText,
+                quoteStart = pack.quoteStart,
+                quoteEnd = pack.quoteEnd,
+                preview = preview,
+            )
+            val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
+            val local = ChatMessage(
+                id = env.messageId,
+                peerDeviceId = peer.deviceId,
+                outgoing = true,
+                text = text,
+                status = MessageStatus.CREATED,
+                timestampMs = env.timestampMs.toLong(),
+                envelope = env.bytes,
+                kind = MessageKind.TEXT,
+                senderId = id.deviceId(),
+                senderName = _state.value.profile?.displayName.orEmpty(),
+                replyToId = pack.id,
+                replyPreview = pack.preview,
+                replyName = pack.name,
+                quoteText = pack.quoteText,
+                quoteStart = pack.quoteStart,
+                quoteEnd = pack.quoteEnd,
+                linkPreview = preview,
+            )
+            store.insertMessage(local)
+            refreshMessages(peer.deviceId)
+            pushEnvelope(env.bytes)
+        } catch (e: Exception) {
+            error(e)
+        }
+    }
+
+    private fun downloadLinkThumb(messageId: String, preview: PackedLinkPreview) {
+        val objectId = preview.objectId ?: return
+        if (preview.sha256.isBlank() || preview.keyB64.isBlank()) return
+        if (SavedMessagesRules.isLocalObject(objectId)) return
+        if (SavedMessagesRules.skipNetwork(store.message(messageId)?.peerDeviceId)) return
+        try {
+            val api = api ?: return
+            val (blob, headerHash) = api.downloadObject(objectId)
+            val expected = preview.sha256.ifBlank { headerHash }
+            val key = Base64.decode(preview.keyB64, Base64.DEFAULT)
+            val plain = decryptObject(key, blob, expected)
+            val dest = persistPlain(objectId, preview.name.ifBlank { "lp.jpg" }, preview.mime.ifBlank { "image/jpeg" }, plain)
+            store.updateLinkThumb(messageId, dest.absolutePath)
+            refreshOpenChat()
+        } catch (_: Exception) {
+        }
     }
 
     private fun prefetchMedia(messages: List<ChatMessage>) {
@@ -1917,10 +2082,13 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            composerPreview = null,
+            composerPreviewDismissedUrl = null,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
         refreshConversations()
+        scheduleUnfurl(prefs.draft)
     }
 
     private fun persistOpenDraft() {
@@ -1992,7 +2160,11 @@ class RopeRepository(private val app: Application) {
         val id = identity ?: return
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            val packed = TextBody.encode(src.text, null, "", "", forwardedFrom = from)
+            val packed = TextBody.encode(
+                src.text, null, "", "",
+                forwardedFrom = from,
+                preview = src.linkPreview,
+            )
             val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
             store.insertMessage(
                 ChatMessage(
@@ -2007,6 +2179,7 @@ class RopeRepository(private val app: Application) {
                     senderId = id.deviceId(),
                     senderName = _state.value.profile?.displayName.orEmpty(),
                     forwardedFrom = from,
+                    linkPreview = src.linkPreview,
                 ),
             )
             refreshMessages(peer.deviceId)
@@ -2048,7 +2221,7 @@ class RopeRepository(private val app: Application) {
     private fun forwardToGroup(group: RopeGroup, src: ChatMessage) {
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            sendGroupText(group, src.text, forwardedFrom = from)
+            sendGroupText(group, src.text, forwardedFrom = from, linkPreview = src.linkPreview)
             return
         }
         val payload = attributedMediaPayload(src, from, groupId = group.groupId) ?: return
@@ -2067,7 +2240,7 @@ class RopeRepository(private val app: Application) {
     private fun forwardToSaved(src: ChatMessage) {
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            saveLocalText(src.text, forwardedFrom = from)
+            saveLocalText(src.text, forwardedFrom = from, linkPreview = src.linkPreview)
             return
         }
         val payload = attributedMediaPayload(src, from, groupId = null, upload = false) ?: return
@@ -2086,6 +2259,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
         pack: ReplyPack = replyPack(reply),
+        linkPreview: PackedLinkPreview? = null,
     ) {
         val attributed = JsonIds.optional(forwardedFrom)
         insertLocalSaved(
@@ -2096,6 +2270,7 @@ class RopeRepository(private val app: Application) {
             reply = if (attributed == null) reply else null,
             forwardedFrom = attributed,
             pack = if (attributed == null) pack else ReplyPack(),
+            linkPreview = linkPreview,
         )
     }
 
@@ -2107,6 +2282,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
+        linkPreview: PackedLinkPreview? = null,
     ) {
         val local = ChatMessage(
             id = store.newId(),
@@ -2128,6 +2304,7 @@ class RopeRepository(private val app: Application) {
             quoteStart = pack.quoteStart,
             quoteEnd = pack.quoteEnd,
             forwardedFrom = forwardedFrom,
+            linkPreview = linkPreview,
         )
         store.insertMessage(local)
         refreshMessages(SavedMessagesRules.ID)
@@ -2440,10 +2617,12 @@ class RopeRepository(private val app: Application) {
                     quoteStart = packed.quoteStart,
                     quoteEnd = packed.quoteEnd,
                     forwardedFrom = packed.forwardedFrom,
+                    linkPreview = packed.linkPreview,
                 )
                 store.insertMessage(msg)
                 ack(plain.messageId)
                 notifyIfHidden(sender.displayName, packed.text, sender.deviceId)
+                packed.linkPreview?.let { ensureMedia(msg.copy(linkPreview = it)) }
             }
             EnvelopeTypes.GROUP_TEXT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2472,10 +2651,12 @@ class RopeRepository(private val app: Application) {
                     quoteStart = payload.quoteStart,
                     quoteEnd = payload.quoteEnd,
                     forwardedFrom = payload.forwardedFrom,
+                    linkPreview = payload.linkPreview,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
                 notifyIfHidden(sender.displayName, payload.text, chatId)
+                payload.linkPreview?.let { ensureMedia(msg.copy(linkPreview = it)) }
             }
             EnvelopeTypes.MEDIA -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)

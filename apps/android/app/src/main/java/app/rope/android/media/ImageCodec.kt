@@ -72,6 +72,24 @@ object ImageCodec {
         return Bitmap.createScaledBitmap(src, (w * ratio).toInt().coerceAtLeast(1), (h * ratio).toInt().coerceAtLeast(1), true)
     }
 
+    fun compressLinkThumb(
+        bytes: ByteArray,
+        maxEdge: Int = 320,
+        quality: Int = 70,
+        maxBytes: Int = 64 * 1024,
+    ): ByteArray? {
+        val src = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        val scaled = scale(src, maxEdge)
+        var q = quality
+        while (q >= 40) {
+            val out = ByteArrayOutputStream()
+            val ok = scaled.compress(Bitmap.CompressFormat.JPEG, q, out)
+            if (ok && out.size() in 1..maxBytes) return out.toByteArray()
+            q -= 10
+        }
+        return null
+    }
+
     fun sampleSize(width: Int, height: Int, maxEdge: Int): Int {
         var sample = 1
         var w = width

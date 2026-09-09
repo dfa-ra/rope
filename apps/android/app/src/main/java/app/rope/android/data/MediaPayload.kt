@@ -167,6 +167,7 @@ data class GroupTextPayload(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val linkPreview: PackedLinkPreview? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
@@ -178,6 +179,7 @@ data class GroupTextPayload(
             if (replyName.isNotBlank()) put("rn", replyName)
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
             QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+            LinkPreviewRules.put(this, linkPreview)
         }
         .toString()
 
@@ -196,6 +198,7 @@ data class GroupTextPayload(
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                linkPreview = LinkPreviewRules.read(o.optJSONObject("lp")),
             )
         }
     }
@@ -211,6 +214,7 @@ data class MessageMeta(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val linkPreview: PackedLinkPreview? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("reply_to", replyToId ?: JSONObject.NULL)
@@ -222,6 +226,10 @@ data class MessageMeta(
         .put("quote_text", quoteText)
         .put("quote_start", quoteStart)
         .put("quote_end", quoteEnd)
+        .apply {
+            LinkPreviewRules.put(this, linkPreview)
+            JsonIds.optional(linkPreview?.localPath)?.let { put("lp_path", it) }
+        }
         .toString()
 
     companion object {
@@ -229,6 +237,7 @@ data class MessageMeta(
             if (raw.isNullOrBlank()) return MessageMeta()
             return try {
                 val o = JSONObject(raw)
+                val packed = LinkPreviewRules.read(o.optJSONObject("lp"))
                 MessageMeta(
                     replyToId = JsonIds.optional(o.optString("reply_to")),
                     replyPreview = o.optString("reply_preview"),
@@ -239,6 +248,7 @@ data class MessageMeta(
                     quoteText = o.optString("quote_text"),
                     quoteStart = o.optInt("quote_start", -1),
                     quoteEnd = o.optInt("quote_end", -1),
+                    linkPreview = packed?.copy(localPath = JsonIds.optional(o.optString("lp_path"))),
                 )
             } catch (_: Exception) {
                 MessageMeta()
@@ -255,6 +265,7 @@ data class MessageMeta(
             quoteText = msg.quoteText,
             quoteStart = msg.quoteStart,
             quoteEnd = msg.quoteEnd,
+            linkPreview = msg.linkPreview,
         )
     }
 }
@@ -313,6 +324,7 @@ data class PackedText(
     val quoteText: String = "",
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
+    val linkPreview: PackedLinkPreview? = null,
 )
 
 object TextBody {
@@ -325,18 +337,25 @@ object TextBody {
         quoteText: String = "",
         quoteStart: Int = -1,
         quoteEnd: Int = -1,
+        preview: PackedLinkPreview? = null,
     ): String {
         val from = JsonIds.optional(forwardedFrom)
+        val lp = preview?.takeIf { it.title.isNotBlank() && it.url.isNotBlank() }
         if (from != null) {
-            return JSONObject().put("t", text).put("ff", from).toString()
+            return JSONObject().put("t", text).put("ff", from).apply { LinkPreviewRules.put(this, lp) }.toString()
         }
-        if (replyTo.isNullOrBlank()) return text
+        if (replyTo.isNullOrBlank() && lp == null) return text
         return JSONObject()
             .put("t", text)
-            .put("r", replyTo)
-            .put("rp", replyPreview)
-            .put("rn", replyName)
-            .apply { QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd) }
+            .apply {
+                if (!replyTo.isNullOrBlank()) {
+                    put("r", replyTo)
+                    put("rp", replyPreview)
+                    put("rn", replyName)
+                    QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+                }
+                LinkPreviewRules.put(this, lp)
+            }
             .toString()
     }
 
@@ -356,6 +375,7 @@ object TextBody {
                 quoteText = quote?.text.orEmpty(),
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
+                linkPreview = LinkPreviewRules.read(o.optJSONObject("lp")),
             )
         } catch (_: Exception) {
             PackedText(raw)
