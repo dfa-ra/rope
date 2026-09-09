@@ -69,6 +69,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
@@ -93,6 +94,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -137,6 +139,8 @@ import app.rope.android.data.QueryHighlight
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
+import app.rope.android.data.UnreadFab
+import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerHintCopy
@@ -601,10 +605,15 @@ fun ChatPane(
         state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
-    val threadItems = remember(visible, todayKey) {
-        AlbumRules.collapse(DateSeparatorRules.items(visible))
+    val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
+        UnreadSeparatorRules.insert(
+            AlbumRules.collapse(DateSeparatorRules.items(visible)),
+            state.unreadAnchorId,
+            searching = state.messageQuery.isNotBlank(),
+        )
     }
     val list = rememberLazyListState()
+    val jumpScope = rememberCoroutineScope()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
@@ -629,7 +638,7 @@ fun ChatPane(
     }
     LaunchedEffect(state.scrollToMessageId) {
         val id = state.scrollToMessageId ?: return@LaunchedEffect
-        val idx = AlbumRules.indexOfMessage(threadItems, id)
+        val idx = UnreadSeparatorRules.scrollIndex(threadItems, id, state.unreadAnchorId)
         if (idx >= 0) list.animateScrollToItem(idx)
         flashId = id
         onConsumedScroll()
@@ -788,6 +797,7 @@ fun ChatPane(
                     items(threadItems, key = { it.key }) { item ->
                         when (item) {
                             is ChatThreadItem.Day -> DateChip(item.label)
+                            is ChatThreadItem.Unread -> UnreadChip()
                             is ChatThreadItem.Bubble -> {
                                 val m = item.msg
                                 val index = visible.indexOfFirst { it.id == m.id }
@@ -869,6 +879,43 @@ fun ChatPane(
                         selectedIds = emptySet()
                     },
                 )
+            } else {
+                val unreadIdx = threadItems.indexOfFirst { it is ChatThreadItem.Unread }
+                val atBottom by remember { derivedStateOf { !list.canScrollForward } }
+                val unreadVisible by remember(unreadIdx) {
+                    derivedStateOf {
+                        unreadIdx >= 0 && list.layoutInfo.visibleItemsInfo.any { it.index == unreadIdx }
+                    }
+                }
+                val unreadAbove by remember(unreadIdx) {
+                    derivedStateOf {
+                        unreadIdx >= 0 && list.firstVisibleItemIndex > unreadIdx
+                    }
+                }
+                val fabKind = UnreadSeparatorRules.fab(atBottom, unreadVisible, unreadIdx >= 0, unreadAbove)
+                if (fabKind != null) {
+                    FloatingActionButton(
+                        onClick = {
+                            jumpScope.launch {
+                                val target = if (fabKind == UnreadFab.UP) {
+                                    unreadIdx
+                                } else {
+                                    threadItems.lastIndex
+                                }
+                                if (target >= 0) list.animateScrollToItem(target)
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp, bottom = 12.dp),
+                        shape = CircleShape,
+                    ) {
+                        Icon(
+                            if (fabKind == UnreadFab.UP) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = if (fabKind == UnreadFab.UP) "К непрочитанным" else "К последним",
+                        )
+                    }
+                }
             }
         }
         if (!selecting) {
@@ -1937,6 +1984,25 @@ private fun DateChip(label: String) {
                 .clip(RoundedCornerShape(RopeShapes.chip))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
                 .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun UnreadChip() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            UnreadSeparatorRules.LABEL,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }

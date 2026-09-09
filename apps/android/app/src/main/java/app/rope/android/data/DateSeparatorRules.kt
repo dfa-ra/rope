@@ -21,6 +21,10 @@ sealed class ChatThreadItem {
     data class Album(val members: List<ChatMessage>) : ChatThreadItem() {
         override val key: String get() = "album-${members.firstOrNull()?.id ?: "empty"}"
     }
+
+    data object Unread : ChatThreadItem() {
+        override val key: String get() = UnreadSeparatorRules.KEY
+    }
 }
 
 data class ChatDayGroup(

@@ -90,6 +90,7 @@ object AlbumRules {
         items.indexOfFirst { item ->
             when (item) {
                 is ChatThreadItem.Day -> false
+                is ChatThreadItem.Unread -> id == UnreadSeparatorRules.KEY
                 is ChatThreadItem.Bubble -> item.msg.id == id
                 is ChatThreadItem.Album -> item.members.any { it.id == id }
             }

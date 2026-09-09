@@ -43,6 +43,7 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
+import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -148,6 +149,7 @@ data class UiState(
     val scrollToMessageId: String? = null,
     val notice: String? = null,
     val pinnedMessageId: String? = null,
+    val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
 )
 
@@ -282,6 +284,11 @@ class RopeRepository(private val app: Application) {
                     error = null,
                     viewingImage = null,
                     messageQuery = "",
+                    unreadAnchorId = if (next.last() == Screen.Chat || next.last() == Screen.PeerProfile) {
+                        s.unreadAnchorId
+                    } else {
+                        null
+                    },
                 )
                 if (NavRules.refreshesLists(next.last())) refreshConversations()
                 true
@@ -297,7 +304,13 @@ class RopeRepository(private val app: Application) {
     private fun applyNav(screen: Screen, mode: NavMode): UiState {
         val base = _state.value
         val stack = BackStack.apply(BackStack.currentStack(base.backStack, base.screen), screen, mode)
-        return base.copy(screen = stack.last(), backStack = stack, viewingImage = null)
+        val keepUnread = stack.last() == Screen.Chat || stack.last() == Screen.PeerProfile
+        return base.copy(
+            screen = stack.last(),
+            backStack = stack,
+            viewingImage = null,
+            unreadAnchorId = if (keepUnread) base.unreadAnchorId else null,
+        )
     }
 
     fun setDraft(text: String) {
@@ -1448,16 +1461,20 @@ class RopeRepository(private val app: Application) {
 
     private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?) {
         val prefs = store.chatPrefs(chatId)
+        val messages = store.messages(chatId)
+        val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
             group = group,
-            messages = store.messages(chatId),
+            messages = messages,
             draftText = prefs.draft,
             replyTo = null,
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
+            unreadAnchorId = anchorId,
+            scrollToMessageId = anchorId,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)

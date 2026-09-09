@@ -12,7 +12,7 @@ import (
 )
 
 const ProtocolVersion uint16 = 1
-const ServerVersion = "0.3.20"
+const ServerVersion = "0.3.21"
 const HTTPDevFingerprintSeed = "rope-http-dev"
 
 type Config struct {
