@@ -73,6 +73,25 @@ Optional `album_id` / `album_index` / `album_count` group 2–10 photos and/or v
 
 Optional `caption` is UTF-8 text on a photo or video send (one caption per album, on the first member). Empty caption omits the key. Kotlin packs this JSON; the existing Rust `encrypt_typed` / `encryptObject` path encrypts it. The relay never sees plaintext.
 
+`kind=poll` is type=2 with **no** object blob (`object_id` / `sha256` / `key_b64` omitted). Inner JSON:
+
+```json
+{"kind":"poll","g":"<group_uuid>","q":"Куда на обед?","o":["Пицца","Суши"],"m":false,"qzid":"<uuid>"}
+```
+
+`q` ≤ 240 UTF-8; `o` is 2–10 option strings (1–100 chars); `m` is multi-choice. `qzid` is copied into every member’s ciphertext so votes still apply when per-recipient envelope `message_id`s differ. The relay never sees `q` / `o` / `ix`.
+
+### type=5 receipt
+
+UTF-8 JSON inside the AEAD. Existing kinds: `reaction`, `edit`, `delete`, `typing`, `pin`. Polls add `vote` and `poll_close`:
+
+```json
+{"v":1,"kind":"vote","target":"<qzid>","op":"set","ix":[1]}
+{"v":1,"kind":"poll_close","target":"<qzid>","op":"set"}
+```
+
+`op=clear` withdraws a vote. Voter names come from envelope `sender_id` + the local directory, not from this JSON. No new envelope type byte. Go does not tally.
+
 Optional `ff` is the attributed-forward origin display name («Переслано от …»). It is not a reply quote. Forwards must not set reply fields (`r` / `rp` / `rn`). Local Saved Messages / Избранное (`peer_id=saved:`) stays in the client LocalStore and never becomes a mailbox envelope or object on the VPS.
 
 The object store holds only ciphertext. The object key never appears in HTTP headers.

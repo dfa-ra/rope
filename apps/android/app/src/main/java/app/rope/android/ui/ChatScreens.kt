@@ -170,7 +170,11 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.PollRules
+import app.rope.android.data.PollState
+import app.rope.android.data.PollVoter
 import app.rope.android.data.ReactionCodec
+import app.rope.android.data.RoleRules
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -612,6 +616,9 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onSendPoll: (String, List<String>, Boolean) -> Unit = { _, _, _ -> },
+    onVotePoll: (ChatMessage, Int) -> Unit = { _, _ -> },
+    onClosePoll: (ChatMessage) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -648,6 +655,8 @@ fun ChatPane(
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
+    var showPoll by remember { mutableStateOf(false) }
+    var voterSheet by remember { mutableStateOf<List<PollVoter>?>(null) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
@@ -863,6 +872,8 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onVotePoll = { idx -> onVotePoll(m, idx) },
+                                    onShowVoters = { voterSheet = it },
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -992,6 +1003,11 @@ fun ChatPane(
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
+            onClosePoll = {
+                onClosePoll(target)
+                menuMessage = null
+            },
+            canClosePoll = canClosePoll(target, state),
         )
     }
     if (state.recordingVideoNote) {
@@ -1026,7 +1042,31 @@ fun ChatPane(
                 showAttach = false
                 onVideoNoteStart()
             },
+            onPoll = if (state.group != null) {
+                {
+                    showAttach = false
+                    showPoll = true
+                }
+            } else {
+                null
+            },
             onDismiss = { showAttach = false },
+        )
+    }
+    if (showPoll) {
+        PollSheet(
+            onSend = { q, opts, multi ->
+                showPoll = false
+                onSendPoll(q, opts, multi)
+            },
+            onDismiss = { showPoll = false },
+        )
+    }
+    voterSheet?.let { voters ->
+        PollVotersSheet(
+            voters = voters,
+            selfId = state.profile?.deviceId.orEmpty(),
+            onDismiss = { voterSheet = null },
         )
     }
 }
@@ -1140,6 +1180,8 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onVotePoll: (Int) -> Unit = {},
+    onShowVoters: (List<PollVoter>) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1240,6 +1282,7 @@ private fun MessageBubble(
                     },
                 )
             val mediaTile = (m.kind == MessageKind.IMAGE || m.kind == MessageKind.VIDEO) && !m.deleted
+            val poll = if (m.kind == MessageKind.POLL && !m.deleted) pollStateOf(m, state) else null
             if (mediaTile) {
                 Box(bubbleClick) {
                     Column {
@@ -1288,9 +1331,49 @@ private fun MessageBubble(
                     else -> tight
                 },
             ),
-            modifier = bubbleClick,
+            modifier = if (poll != null && !selecting) Modifier.widthIn(max = 300.dp) else bubbleClick,
         ) {
             Box {
+                if (poll != null) {
+                    Column {
+                        if (showName) {
+                            Text(
+                                senderLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = senderColor,
+                                modifier = Modifier
+                                    .padding(start = 10.dp, top = 8.dp, end = 10.dp)
+                                    .combinedClickable(onClick = onTap, onLongClick = onEnterSelect),
+                            )
+                        }
+                        AttributionChrome(
+                            msg = m,
+                            accent = if (mine) outFg else senderColor,
+                            onJump = onJump,
+                        )
+                        PollBubble(
+                            poll = poll,
+                            mine = mine,
+                            selfId = me,
+                            accent = if (mine) outFg else senderColor,
+                            headerModifier = Modifier.combinedClickable(
+                                onClick = onTap,
+                                onLongClick = onEnterSelect,
+                            ),
+                            onVote = onVotePoll,
+                            onShowVoters = onShowVoters,
+                        )
+                        val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
+                        if (meta.isNotBlank()) {
+                            Text(
+                                meta,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
+                            )
+                        }
+                    }
+                } else {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                     if (showName) {
                         Text(senderLabel, style = MaterialTheme.typography.labelMedium, color = senderColor)
@@ -1339,6 +1422,7 @@ private fun MessageBubble(
                             color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
                 }
                 Box(
                     Modifier
@@ -1470,6 +1554,8 @@ private fun MessageTapOverlay(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    onClosePoll: () -> Unit = {},
+    canClosePoll: Boolean = false,
 ) {
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -1510,6 +1596,8 @@ private fun MessageTapOverlay(
                 onPin = onPin,
                 onDelete = onDelete,
                 onOpen = onOpen,
+                onClosePoll = onClosePoll,
+                canClosePoll = canClosePoll,
             )
         }
     }
@@ -1525,6 +1613,8 @@ private fun MessageActionMenu(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    onClosePoll: () -> Unit = {},
+    canClosePoll: Boolean = false,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
@@ -1542,6 +1632,9 @@ private fun MessageActionMenu(
             }
             if (ChatActions.canForward(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)
+            }
+            if (canClosePoll) {
+                MessageMenuRow(Icons.Outlined.Lock, "Закрыть опрос", onClosePoll)
             }
             if (ChatActions.canPin(m)) {
                 MessageMenuRow(
@@ -2395,6 +2488,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onPoll: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2505,6 +2599,13 @@ private fun AttachSheet(
                 Icon(Icons.Outlined.Videocam, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Видеосообщение", modifier = Modifier.weight(1f))
+            }
+            if (onPoll != null) {
+                TextButton(onClick = onPoll, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.Check, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text("Опрос", modifier = Modifier.weight(1f))
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -2788,4 +2889,40 @@ fun ImageViewer(
             Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White)
         }
     }
+}
+
+private fun pollStateOf(msg: ChatMessage, state: UiState): PollState? {
+    if (msg.extra.isBlank()) return null
+    val payload = runCatching { MediaPayload.parse(msg.extra) }.getOrNull() ?: return null
+    if (payload.messageKind() != MessageKind.POLL) return null
+    val group = state.group
+    val ownerIds = state.devices.filter { RoleRules.isOwner(it.role) }.map { it.deviceId }.toMutableSet()
+    val me = state.profile
+    if (me != null && RoleRules.isOwner(me.role)) ownerIds += me.deviceId
+    return PollRules.apply(
+        payload.pollQuestion.orEmpty(),
+        payload.pollOptions,
+        payload.pollMulti,
+        payload.pollQzid ?: msg.id,
+        state.pollReceipts,
+        me?.deviceId.orEmpty(),
+        msg.senderId,
+        group?.let { GroupChatUx.organizerId(it) }.orEmpty(),
+        ownerIds,
+    )
+}
+
+private fun canClosePoll(msg: ChatMessage, state: UiState): Boolean {
+    if (msg.kind != MessageKind.POLL || msg.deleted) return false
+    val poll = pollStateOf(msg, state) ?: return false
+    if (poll.closed) return false
+    val me = state.profile?.deviceId.orEmpty()
+    val group = state.group ?: return false
+    return PollRules.canClose(
+        me,
+        msg.senderId,
+        GroupChatUx.organizerId(group),
+        RoleRules.isOwner(state.profile?.role),
+        me in group.members,
+    )
 }

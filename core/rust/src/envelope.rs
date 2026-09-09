@@ -457,6 +457,29 @@ mod tests {
     }
 
     #[test]
+    fn typed_poll_and_vote_json_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let poll = br#"{"kind":"poll","g":"g1","q":"lunch?","o":["a","b"],"m":false,"qzid":"q1"}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, poll).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_MEDIA);
+        assert_eq!(got.body, poll);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"kind\":\"poll\""));
+        assert!(!json.contains("object_id"));
+        let vote = br#"{"v":1,"kind":"vote","target":"q1","op":"set","ix":[1]}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_RECEIPT, vote).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_RECEIPT);
+        assert_eq!(got.body, vote);
+        let close = br#"{"v":1,"kind":"poll_close","target":"q1","op":"set"}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_RECEIPT, close).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, close);
+    }
+
+    #[test]
     fn typed_text_forwarded_from_json_roundtrip() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();

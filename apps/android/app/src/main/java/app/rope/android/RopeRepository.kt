@@ -62,6 +62,8 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PeerIds
+import app.rope.android.data.PollReceipt
+import app.rope.android.data.PollRules
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
@@ -174,6 +176,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val pollReceipts: List<PollReceipt> = emptyList(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile }
@@ -1111,6 +1114,107 @@ class RopeRepository(private val app: Application) {
         ensureMedia(msg, force = true)
     }
 
+    fun sendPoll(question: String, options: List<String>, multi: Boolean) {
+        val group = _state.value.group ?: return
+        val me = identity?.deviceId() ?: return
+        if (!PollRules.canCreate(inGroup = true, isMember = me in group.members)) {
+            notice("только участники группы")
+            return
+        }
+        if (!PollRules.validate(question, options)) {
+            notice("нужны вопрос и минимум два варианта")
+            return
+        }
+        val qzid = UUID.randomUUID().toString()
+        val payload = MediaPayload.poll(group.groupId, question, options, multi, qzid)
+        val extra = payload.toJson()
+        sendGroupPayload(
+            group,
+            EnvelopeTypes.MEDIA,
+            extra.toByteArray(),
+            payload.preview(),
+            MessageKind.POLL,
+            extra,
+            null,
+            localId = qzid,
+        )
+    }
+
+    fun votePoll(message: ChatMessage, tapped: Int) {
+        val group = _state.value.group ?: return
+        val me = identity?.deviceId() ?: return
+        if (me !in group.members) return
+        val payload = runCatching { MediaPayload.parse(message.extra) }.getOrNull() ?: return
+        if (payload.messageKind() != MessageKind.POLL) return
+        val qzid = payload.pollQzid ?: message.id
+        val poll = pollStateOf(message, payload) ?: return
+        if (poll.closed) return
+        val next = PollRules.nextIx(poll.multi, poll.myIndexes.toList(), tapped)
+        sendPollReceipt(
+            qzid,
+            ChatControl.VOTE,
+            if (next.isEmpty()) ChatControl.OP_CLEAR else ChatControl.OP_SET,
+            next,
+        )
+    }
+
+    fun closePoll(message: ChatMessage) {
+        val group = _state.value.group ?: return
+        val me = identity?.deviceId() ?: return
+        val payload = runCatching { MediaPayload.parse(message.extra) }.getOrNull() ?: return
+        if (payload.messageKind() != MessageKind.POLL) return
+        val poll = pollStateOf(message, payload) ?: return
+        if (poll.closed) return
+        val organizer = GroupChatUx.organizerId(group)
+        val owner = RoleRules.isOwner(_state.value.profile?.role)
+        if (!PollRules.canClose(me, message.senderId, organizer, owner, me in group.members)) return
+        sendPollReceipt(poll.qzid, ChatControl.POLL_CLOSE, ChatControl.OP_SET, emptyList())
+    }
+
+    private fun pollStateOf(message: ChatMessage, payload: MediaPayload) = PollRules.apply(
+        question = payload.pollQuestion.orEmpty(),
+        options = payload.pollOptions,
+        multi = payload.pollMulti,
+        qzid = payload.pollQzid ?: message.id,
+        receipts = store.pollReceipts(payload.pollQzid ?: message.id),
+        selfId = identity?.deviceId().orEmpty(),
+        authorId = message.senderId,
+        organizerId = _state.value.group?.let { GroupChatUx.organizerId(it) }.orEmpty(),
+        ownerIds = ownerDeviceIds(),
+    )
+
+    private fun ownerDeviceIds(): Set<String> {
+        val ids = _state.value.devices.filter { RoleRules.isOwner(it.role) }.map { it.deviceId }.toMutableSet()
+        val me = _state.value.profile
+        if (me != null && RoleRules.isOwner(me.role)) ids += me.deviceId
+        return ids
+    }
+
+    private fun sendPollReceipt(qzid: String, kind: String, op: String, indexes: List<Int>) {
+        val me = identity?.deviceId() ?: return
+        val receipt = PollReceipt(
+            id = UUID.randomUUID().toString(),
+            qzid = qzid,
+            voterId = me,
+            voterName = _state.value.profile?.displayName.orEmpty(),
+            kind = kind,
+            op = op,
+            indexes = indexes,
+            timestampMs = System.currentTimeMillis(),
+        )
+        store.upsertPollReceipt(receipt)
+        refreshOpenChat()
+        val body = ChatControl(kind, qzid, op = op, indexes = indexes).toJson().toByteArray()
+        scope.launch {
+            val sent = sendGroupReceipt(body)
+            if (!sent) {
+                store.deletePollReceipt(receipt.id)
+                notice("нет сети")
+                refreshOpenChat()
+            }
+        }
+    }
+
     fun react(message: ChatMessage, emoji: String) {
         val id = identity ?: return
         val mine = id.deviceId()
@@ -1678,6 +1782,7 @@ class RopeRepository(private val app: Application) {
         reply: ChatMessage? = null,
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
+        localId: String? = null,
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -1689,14 +1794,14 @@ class RopeRepository(private val app: Application) {
                 }
                 val devices = currentDevices()
                 val envelopes = JSONArray()
-                var firstId = ""
+                var firstId = localId.orEmpty()
                 var ts = System.currentTimeMillis()
                 var firstBytes: ByteArray? = null
                 for (memberId in members) {
                     val peer = devices.find { it.deviceId == memberId } ?: continue
                     val env = id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), type, body)
-                    if (firstId.isBlank()) {
-                        firstId = env.messageId
+                    if (firstBytes == null) {
+                        if (firstId.isBlank()) firstId = env.messageId
                         ts = env.timestampMs.toLong()
                         firstBytes = env.bytes
                     }
@@ -1779,29 +1884,36 @@ class RopeRepository(private val app: Application) {
         return VideoRules.looksLikeVideo(name, mime) || looksLikeImage(name, mime)
     }
 
+    private fun sendGroupReceipt(body: ByteArray): Boolean {
+        val id = identity ?: return false
+        val group = _state.value.group ?: return false
+        val others = group.members.filter { it != id.deviceId() }
+        if (others.isEmpty()) return true
+        val devices = currentDevices()
+        val envelopes = JSONArray()
+        for (memberId in others) {
+            val peer = devices.find { it.deviceId == memberId } ?: continue
+            val env = runCatching {
+                id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.RECEIPT, body)
+            }.getOrNull() ?: continue
+            envelopes.put(Base64.encodeToString(env.bytes, Base64.NO_WRAP))
+        }
+        if (envelopes.length() == 0) return false
+        return socket?.send(
+            JSONObject()
+                .put("type", "group_send")
+                .put("group_id", group.groupId)
+                .put("envelopes", envelopes)
+                .toString(),
+        ) == true
+    }
+
     private fun sendControl(type: UByte, body: ByteArray) {
         val id = identity ?: return
         val group = _state.value.group
         if (group != null) {
             scope.launch {
-                val devices = currentDevices()
-                val envelopes = JSONArray()
-                for (memberId in group.members.filter { it != id.deviceId() }) {
-                    val peer = devices.find { it.deviceId == memberId } ?: continue
-                    val env = runCatching {
-                        id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), type, body)
-                    }.getOrNull() ?: continue
-                    envelopes.put(Base64.encodeToString(env.bytes, Base64.NO_WRAP))
-                }
-                if (envelopes.length() > 0) {
-                    socket?.send(
-                        JSONObject()
-                            .put("type", "group_send")
-                            .put("group_id", group.groupId)
-                            .put("envelopes", envelopes)
-                            .toString(),
-                    )
-                }
+                sendGroupReceipt(body)
             }
             return
         }
@@ -2483,8 +2595,10 @@ class RopeRepository(private val app: Application) {
                 val known = _state.value.groups.map { it.groupId }.toSet()
                 val chatId = ChatRouting.mediaChatId(payload.groupId, sender.deviceId, known)
                 val routedGroup = JsonIds.optional(payload.groupId)?.takeIf { it in known }
+                val poll = payload.messageKind() == MessageKind.POLL
+                val rowId = if (poll) payload.pollQzid ?: typed.messageId else typed.messageId
                 val msg = ChatMessage(
-                    id = typed.messageId,
+                    id = rowId,
                     peerDeviceId = chatId,
                     outgoing = false,
                     text = payload.preview(),
@@ -2506,7 +2620,9 @@ class RopeRepository(private val app: Application) {
                 store.insertMessage(msg)
                 ack(typed.messageId)
                 notifyIfHidden(sender.displayName, payload.preview(), chatId, payload.albumId)
-                scope.launch { downloadMedia(msg.id, payload) }
+                if (!poll && payload.objectId.isNotBlank()) {
+                    scope.launch { downloadMedia(msg.id, payload) }
+                }
             }
             EnvelopeTypes.RECEIPT -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
@@ -2529,6 +2645,20 @@ class RopeRepository(private val app: Application) {
                         if (openChatId() == chatId) {
                             _state.value = _state.value.copy(pinnedMessageId = next)
                         }
+                    }
+                    control != null && (control.kind == ChatControl.VOTE || control.kind == ChatControl.POLL_CLOSE) -> {
+                        store.upsertPollReceipt(
+                            PollReceipt(
+                                id = typed.messageId,
+                                qzid = control.targetId,
+                                voterId = sender.deviceId,
+                                voterName = sender.displayName,
+                                kind = control.kind,
+                                op = control.op,
+                                indexes = control.indexes,
+                                timestampMs = typed.timestampMs.toLong(),
+                            ),
+                        )
                     }
                     reaction != null -> store.applyReaction(
                         reaction.targetId,
@@ -2563,6 +2693,8 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun downloadMedia(messageId: String, payload: MediaPayload) {
+        if (payload.messageKind() == MessageKind.POLL) return
+        if (payload.objectId.isBlank()) return
         if (SavedMessagesRules.isLocalObject(payload.objectId)) return
         if (SavedMessagesRules.skipNetwork(store.message(messageId)?.peerDeviceId)) return
         try {
@@ -3189,7 +3321,10 @@ class RopeRepository(private val app: Application) {
             else -> _state.value.peer?.deviceId
         }
         if (openId == peerId) {
-            _state.value = _state.value.copy(messages = store.messages(peerId))
+            _state.value = _state.value.copy(
+                messages = store.messages(peerId),
+                pollReceipts = store.pollReceipts(),
+            )
         }
         refreshConversations()
     }
@@ -3199,7 +3334,10 @@ class RopeRepository(private val app: Application) {
             _state.value.group != null -> ChatIds.group(_state.value.group!!.groupId)
             else -> _state.value.peer?.deviceId
         } ?: return
-        _state.value = _state.value.copy(messages = store.messages(openId))
+        _state.value = _state.value.copy(
+            messages = store.messages(openId),
+            pollReceipts = store.pollReceipts(),
+        )
         refreshConversations()
     }
 

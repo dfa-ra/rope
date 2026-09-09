@@ -112,6 +112,8 @@ class Stage2UxTest {
         assertEquals(MessageKind.UNKNOWN, EnvelopeTypes.kindOf(99u, ""))
         assertEquals(MessageKind.TEXT, EnvelopeTypes.kindOf(EnvelopeTypes.TEXT, ""))
         assertEquals(MessageKind.VOICE, EnvelopeTypes.kindOf(EnvelopeTypes.MEDIA, MediaPayload("voice", "o", "h", "k", "a", "n", 1).toJson()))
+        val pollJson = """{"kind":"poll","g":"g1","q":"обед","o":["a","b"],"m":false,"qzid":"q1"}"""
+        assertEquals(MessageKind.POLL, EnvelopeTypes.kindOf(EnvelopeTypes.MEDIA, pollJson))
     }
 
     @Test
@@ -306,6 +308,12 @@ class Stage2UxTest {
         val pin = ChatControl.parse(ChatControl(ChatControl.PIN, "m9", op = "set").toJson())!!
         assertEquals(ChatControl.PIN, pin.kind)
         assertEquals("m9", pin.targetId)
+        val vote = ChatControl.parse("""{"v":1,"kind":"vote","target":"q1","op":"set","ix":[1]}""")!!
+        assertEquals(ChatControl.VOTE, vote.kind)
+        assertEquals(listOf(1), vote.indexes)
+        val close = ChatControl.parse("""{"v":1,"kind":"poll_close","target":"q1","op":"set"}""")!!
+        assertEquals(ChatControl.POLL_CLOSE, close.kind)
+        assertEquals(null, ChatControl.parse("""{"kind":"nope","target":"x"}"""))
         assertEquals("в сети", MessageTime.lastSeenLabel("", true))
         val seen = java.util.Calendar.getInstance().apply {
             set(java.util.Calendar.HOUR_OF_DAY, 14)

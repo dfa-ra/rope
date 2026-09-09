@@ -19,7 +19,7 @@ import app.rope.android.data.ChatIds
 import app.rope.android.data.MediaPayload
 import java.security.KeyStore
 
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 6) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", null, 7) {
     private val payloadKey: SecretKey by lazy { payloadKey() }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -63,6 +63,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             )
             """.trimIndent(),
         )
+        createPollReceipts(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -96,6 +97,27 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         if (oldVersion < 6) {
             db.execSQL("ALTER TABLE groups ADD COLUMN created_by TEXT NOT NULL DEFAULT ''")
         }
+        if (oldVersion < 7) {
+            createPollReceipts(db)
+        }
+    }
+
+    private fun createPollReceipts(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS poll_receipts (
+              id TEXT PRIMARY KEY,
+              qzid TEXT NOT NULL,
+              voter_id TEXT NOT NULL,
+              voter_name TEXT NOT NULL DEFAULT '',
+              kind TEXT NOT NULL,
+              op TEXT NOT NULL DEFAULT '',
+              indexes_json TEXT NOT NULL DEFAULT '[]',
+              ts INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_poll_receipts_qzid ON poll_receipts(qzid)")
     }
 
     fun saveProfile(p: ServerProfile) {
@@ -201,6 +223,86 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             arrayOf(ReactionCodec.toJson(next), targetId),
         )
         return true
+    }
+
+    fun upsertPollReceipt(receipt: PollReceipt) {
+        writableDatabase.execSQL(
+            """
+            INSERT OR REPLACE INTO poll_receipts(
+              id, qzid, voter_id, voter_name, kind, op, indexes_json, ts
+            ) VALUES(?,?,?,?,?,?,?,?)
+            """.trimIndent(),
+            arrayOf(
+                receipt.id,
+                receipt.qzid,
+                receipt.voterId,
+                receipt.voterName,
+                receipt.kind,
+                receipt.op,
+                JSONArray(receipt.indexes).toString(),
+                receipt.timestampMs,
+            ),
+        )
+    }
+
+    fun deletePollReceipt(id: String) {
+        writableDatabase.execSQL("DELETE FROM poll_receipts WHERE id = ?", arrayOf(id))
+    }
+
+    fun pollReceipts(): List<PollReceipt> {
+        val c = readableDatabase.rawQuery(
+            """
+            SELECT id, qzid, voter_id, voter_name, kind, op, indexes_json, ts
+            FROM poll_receipts
+            """.trimIndent(),
+            null,
+        )
+        val out = mutableListOf<PollReceipt>()
+        c.use {
+            while (it.moveToNext()) {
+                out += pollRow(it)
+            }
+        }
+        return out
+    }
+
+    fun pollReceipts(qzid: String): List<PollReceipt> {
+        val c = readableDatabase.rawQuery(
+            """
+            SELECT id, qzid, voter_id, voter_name, kind, op, indexes_json, ts
+            FROM poll_receipts WHERE qzid = ?
+            """.trimIndent(),
+            arrayOf(qzid),
+        )
+        val out = mutableListOf<PollReceipt>()
+        c.use {
+            while (it.moveToNext()) {
+                out += pollRow(it)
+            }
+        }
+        return out
+    }
+
+    private fun pollRow(c: android.database.Cursor): PollReceipt {
+        val ixRaw = c.getString(6).orEmpty()
+        val indexes = try {
+            val arr = JSONArray(ixRaw)
+            buildList {
+                for (i in 0 until arr.length()) add(arr.optInt(i))
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return PollReceipt(
+            id = c.getString(0),
+            qzid = c.getString(1),
+            voterId = c.getString(2),
+            voterName = c.getString(3).orEmpty(),
+            kind = c.getString(4),
+            op = c.getString(5).orEmpty(),
+            indexes = indexes,
+            timestampMs = c.getLong(7),
+        )
     }
 
     fun updateStatus(id: String, status: MessageStatus) {

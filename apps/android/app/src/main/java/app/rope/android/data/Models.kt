@@ -15,6 +15,7 @@ enum class MessageKind {
     FILE,
     GROUP_TEXT,
     CALL,
+    POLL,
     UNKNOWN,
 }
 

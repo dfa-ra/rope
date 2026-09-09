@@ -25,6 +25,10 @@ data class MediaPayload(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val waveform: List<Int> = emptyList(),
+    val pollQuestion: String? = null,
+    val pollOptions: List<String> = emptyList(),
+    val pollMulti: Boolean = false,
+    val pollQzid: String? = null,
 ) {
     fun withReply(
         replyTo: String?,
@@ -51,36 +55,53 @@ data class MediaPayload(
         quoteEnd = -1,
     )
 
-    fun toJson(): String = JSONObject()
-        .put("kind", kind)
-        .put("object_id", objectId)
-        .put("sha256", sha256)
-        .put("key_b64", keyB64)
-        .put("mime", mime)
-        .put("name", name)
-        .put("size", size)
-        .put("duration_ms", durationMs)
-        .apply {
-            JsonIds.optional(groupId)?.let { put("group_id", it) }
-            val grouped = JsonIds.optional(albumId)
-            if (grouped != null && albumCount > 1) {
-                put("album_id", grouped)
-                put("album_index", albumIndex.coerceAtLeast(0))
-                put("album_count", albumCount)
-            }
-            JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
-            JsonIds.optional(caption)?.let { put("caption", it) }
-            JsonIds.optional(replyTo)?.let { put("r", it) }
-            if (replyPreview.isNotBlank()) put("rp", replyPreview)
-            if (replyName.isNotBlank()) put("rn", replyName)
-            QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
-            if (waveform.isNotEmpty()) {
-                val arr = JSONArray()
-                waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
-                put("wf", arr)
-            }
+    fun toJson(): String {
+        if (kind == PollRules.KIND) {
+            val opts = JSONArray()
+            pollOptions.forEach { opts.put(it) }
+            return JSONObject()
+                .put("kind", PollRules.KIND)
+                .put("q", pollQuestion.orEmpty())
+                .put("o", opts)
+                .put("m", pollMulti)
+                .apply {
+                    JsonIds.optional(groupId)?.let { put("g", it) }
+                    JsonIds.optional(pollQzid)?.let { put("qzid", it) }
+                    JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
+                }
+                .toString()
         }
-        .toString()
+        return JSONObject()
+            .put("kind", kind)
+            .put("object_id", objectId)
+            .put("sha256", sha256)
+            .put("key_b64", keyB64)
+            .put("mime", mime)
+            .put("name", name)
+            .put("size", size)
+            .put("duration_ms", durationMs)
+            .apply {
+                JsonIds.optional(groupId)?.let { put("group_id", it) }
+                val grouped = JsonIds.optional(albumId)
+                if (grouped != null && albumCount > 1) {
+                    put("album_id", grouped)
+                    put("album_index", albumIndex.coerceAtLeast(0))
+                    put("album_count", albumCount)
+                }
+                JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
+                JsonIds.optional(caption)?.let { put("caption", it) }
+                JsonIds.optional(replyTo)?.let { put("r", it) }
+                if (replyPreview.isNotBlank()) put("rp", replyPreview)
+                if (replyName.isNotBlank()) put("rn", replyName)
+                QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
+                if (waveform.isNotEmpty()) {
+                    val arr = JSONArray()
+                    waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
+                    put("wf", arr)
+                }
+            }
+            .toString()
+    }
 
     fun messageKind(): MessageKind = when (kind) {
         "voice" -> MessageKind.VOICE
@@ -88,6 +109,7 @@ data class MediaPayload(
         "video" -> MessageKind.VIDEO
         VideoNoteRules.KIND -> MessageKind.VIDEO_NOTE
         "file" -> MessageKind.FILE
+        PollRules.KIND -> MessageKind.POLL
         else -> MessageKind.UNKNOWN
     }
 
@@ -107,6 +129,7 @@ data class MediaPayload(
             }
             VideoNoteRules.KIND -> VideoNoteRules.preview(durationMs)
             "file" -> name.ifBlank { "Файл" }
+            PollRules.KIND -> PollRules.preview(pollQuestion.orEmpty())
             else -> cap ?: "Вложение"
         }
     }
@@ -115,8 +138,10 @@ data class MediaPayload(
         fun parse(raw: String): MediaPayload {
             val o = JSONObject(raw)
             val quote = QuoteSpanRules.read(o)
+            val kind = o.optString("kind")
+            val pollOptions = readStringList(o.optJSONArray("o"))
             return MediaPayload(
-                kind = o.optString("kind"),
+                kind = kind,
                 objectId = o.optString("object_id"),
                 sha256 = o.optString("sha256"),
                 keyB64 = o.optString("key_b64"),
@@ -124,7 +149,8 @@ data class MediaPayload(
                 name = o.optString("name"),
                 size = o.optLong("size"),
                 durationMs = o.optLong("duration_ms"),
-                groupId = JsonIds.optional(o.optString("group_id")),
+                groupId = JsonIds.optional(o.optString("g"))
+                    ?: JsonIds.optional(o.optString("group_id")),
                 albumId = JsonIds.optional(o.optString("album_id")),
                 albumIndex = o.optInt("album_index", 0).coerceAtLeast(0),
                 albumCount = o.optInt("album_count", 1).let { if (it <= 0) 1 else it },
@@ -137,14 +163,49 @@ data class MediaPayload(
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 waveform = readWaveform(o.optJSONArray("wf")),
+                pollQuestion = if (kind == PollRules.KIND) JsonIds.optional(o.optString("q")) else null,
+                pollOptions = if (kind == PollRules.KIND) pollOptions else emptyList(),
+                pollMulti = kind == PollRules.KIND && o.optBoolean("m", false),
+                pollQzid = if (kind == PollRules.KIND) JsonIds.optional(o.optString("qzid")) else null,
             )
         }
+
+        fun poll(
+            groupId: String,
+            question: String,
+            options: List<String>,
+            multi: Boolean,
+            qzid: String,
+        ): MediaPayload = MediaPayload(
+            kind = PollRules.KIND,
+            objectId = "",
+            sha256 = "",
+            keyB64 = "",
+            mime = "",
+            name = "",
+            size = 0,
+            groupId = groupId,
+            pollQuestion = question.trim(),
+            pollOptions = PollRules.cleanOptions(options),
+            pollMulti = multi,
+            pollQzid = qzid,
+        )
 
         private fun readWaveform(arr: JSONArray?): List<Int> {
             if (arr == null || arr.length() == 0) return emptyList()
             return buildList {
                 for (i in 0 until arr.length().coerceAtMost(VoicePlayback.BARS)) {
                     add(arr.optInt(i, 0).coerceIn(0, 31))
+                }
+            }
+        }
+
+        private fun readStringList(arr: JSONArray?): List<String> {
+            if (arr == null || arr.length() == 0) return emptyList()
+            return buildList {
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i).trim()
+                    if (s.isNotEmpty()) add(s)
                 }
             }
         }
@@ -265,6 +326,7 @@ data class ChatControl(
     val emoji: String = "",
     val op: String = "",
     val text: String = "",
+    val indexes: List<Int> = emptyList(),
 ) {
     fun toJson(): String = JSONObject()
         .put("v", 1)
@@ -273,6 +335,13 @@ data class ChatControl(
         .put("emoji", emoji)
         .put("op", op)
         .put("text", text)
+        .apply {
+            if (kind == VOTE || indexes.isNotEmpty()) {
+                val arr = JSONArray()
+                indexes.forEach { arr.put(it) }
+                put("ix", arr)
+            }
+        }
         .toString()
 
     companion object {
@@ -281,8 +350,12 @@ data class ChatControl(
         const val DELETE = "delete"
         const val TYPING = "typing"
         const val PIN = "pin"
+        const val VOTE = "vote"
+        const val POLL_CLOSE = "poll_close"
+        const val OP_SET = "set"
+        const val OP_CLEAR = "clear"
 
-        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN)
+        private val kinds = setOf(REACTION, EDIT, DELETE, TYPING, PIN, VOTE, POLL_CLOSE)
 
         fun parse(raw: String): ChatControl? {
             val o = try {
@@ -299,7 +372,17 @@ data class ChatControl(
                 emoji = o.optString("emoji").trim(),
                 op = o.optString("op").ifBlank { ReactionPayload.SET },
                 text = o.optString("text"),
+                indexes = readIndexes(o.optJSONArray("ix")),
             )
+        }
+
+        private fun readIndexes(arr: JSONArray?): List<Int> {
+            if (arr == null || arr.length() == 0) return emptyList()
+            return buildList {
+                for (i in 0 until arr.length().coerceAtMost(PollRules.OPT_MAX)) {
+                    add(arr.optInt(i))
+                }
+            }
         }
     }
 }
@@ -366,7 +449,8 @@ object TextBody {
 object ChatActions {
     fun canReply(msg: ChatMessage): Boolean = !msg.deleted
 
-    fun canForward(msg: ChatMessage): Boolean = !msg.deleted
+    fun canForward(msg: ChatMessage): Boolean =
+        !msg.deleted && msg.kind != MessageKind.POLL
 
     fun canEdit(msg: ChatMessage): Boolean =
         msg.outgoing &&
