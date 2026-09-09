@@ -365,6 +365,29 @@ class Stage2UxTest {
     }
 
     @Test
+    fun chatListSearchHighlightStaysInBoundsWhenDottedIExpandsOnLowercase() {
+        fun msg(text: String, t: Long) =
+            ChatMessage("m$t", "p", false, text, MessageStatus.DELIVERED_TO_DEVICE, t)
+        val istanbul = "İstanbul Anna"
+        val triple = "İİİ Anna"
+        assertTrue("İ".lowercase().length > 1)
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(Conversation("i", istanbul, "zzz", false, false, msg("zzz", 1L)), "ann"))
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(Conversation("t", triple, "zzz", false, false, msg("zzz", 2L)), "ann"))
+        assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(Conversation("w", "Мария Анна", "zzz", false, false, msg("zzz", 10L)), "анн"))
+        assertEquals(ChatListHit.TITLE, ChatListRules.hit(Conversation("s", "Марианна", "zzz", false, false, msg("zzz", 20L)), "анн"))
+        val istanbulRange = QueryHighlight.firstRange(istanbul, "ann")!!
+        assertTrue(istanbulRange.first >= 0)
+        assertTrue(istanbulRange.last < istanbul.length)
+        assertEquals("Ann", istanbul.substring(istanbulRange.first, istanbulRange.last + 1))
+        val tripleRange = QueryHighlight.firstRange(triple, "ann")!!
+        assertTrue(tripleRange.first >= 0)
+        assertTrue(tripleRange.last < triple.length)
+        assertEquals("Ann", triple.substring(tripleRange.first, tripleRange.last + 1))
+        assertEquals(istanbul.indexOf('A'), ChatListRules.wordPrefixIndex(istanbul, "ann"))
+        assertEquals(triple.indexOf('A'), ChatListRules.wordPrefixIndex(triple, "ann"))
+    }
+
+    @Test
     fun webrtcSignalsStayInCallPayload() {
         val offer = CallSignal.parse(CallSignal(CallSignal.OFFER, sdp = "v=0").toJson())!!
         assertEquals(CallSignal.OFFER, offer.kind)

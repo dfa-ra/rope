@@ -366,7 +366,8 @@ private fun HighlightedText(
     modifier: Modifier = Modifier,
 ) {
     val range = QueryHighlight.firstRange(text, query)
-    if (range == null) {
+    val inBounds = range != null && range.first >= 0 && range.last < text.length
+    if (range == null || !inBounds) {
         Text(
             text,
             style = style,

@@ -284,10 +284,11 @@ object QueryHighlight {
         val q = ChatListRules.normalize(query)
         if (q.isEmpty() || text.isEmpty()) return null
         val word = ChatListRules.wordPrefixIndex(text, query)
-        if (word >= 0) return word until (word + q.length)
-        val i = text.indexOf(q, ignoreCase = true)
-        if (i < 0) return null
-        return i until (i + q.length)
+        val start = if (word >= 0) word else text.indexOf(q, ignoreCase = true)
+        if (start < 0 || start >= text.length) return null
+        val end = (start + q.length).coerceAtMost(text.length)
+        if (start >= end) return null
+        return start until end
     }
 }
 
@@ -299,18 +300,18 @@ object ChatListRules {
 
     fun searching(query: String): Boolean = normalize(query).isNotEmpty()
 
-    /** First index where a Unicode letter/digit word starts with the normalized query, or -1. */
+    /** First original-string index where a Unicode letter/digit word starts with the normalized query, or -1. */
     fun wordPrefixIndex(text: String, query: String): Int {
         val q = normalize(query)
         if (q.isEmpty() || text.isEmpty()) return -1
-        val hay = text.lowercase()
         var i = 0
-        while (i < hay.length) {
-            while (i < hay.length && !hay[i].isLetterOrDigit()) i++
-            if (i >= hay.length) break
+        while (i < text.length) {
+            while (i < text.length && !text[i].isLetterOrDigit()) i++
+            if (i >= text.length) break
             val start = i
-            while (i < hay.length && hay[i].isLetterOrDigit()) i++
-            if (q.length <= i - start && hay.startsWith(q, startIndex = start)) return start
+            while (i < text.length && text[i].isLetterOrDigit()) i++
+            val folded = text.substring(start, i).lowercase()
+            if (folded.startsWith(q)) return start
         }
         return -1
     }
