@@ -55,9 +55,14 @@ UTF-8 JSON inside the AEAD (not visible to the server):
   "name": "voice.m4a",
   "size": 12345,
   "duration_ms": 3200,
-  "group_id": null
+  "group_id": null,
+  "album_id": null,
+  "album_index": 0,
+  "album_count": 1
 }
 ```
+
+Optional `album_id` / `album_index` / `album_count` group 2–10 photos into one album. Each photo is still its own type=2 envelope and object blob; the relay does not see album linkage. A single photo omits these keys and renders as a normal image.
 
 The object store holds only ciphertext. The object key never appears in HTTP headers.
 

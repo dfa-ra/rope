@@ -13,6 +13,9 @@ data class MediaPayload(
     val size: Long,
     val durationMs: Long = 0,
     val groupId: String? = null,
+    val albumId: String? = null,
+    val albumIndex: Int = 0,
+    val albumCount: Int = 1,
 ) {
     fun toJson(): String = JSONObject()
         .put("kind", kind)
@@ -25,6 +28,12 @@ data class MediaPayload(
         .put("duration_ms", durationMs)
         .apply {
             JsonIds.optional(groupId)?.let { put("group_id", it) }
+            val grouped = JsonIds.optional(albumId)
+            if (grouped != null && albumCount > 1) {
+                put("album_id", grouped)
+                put("album_index", albumIndex.coerceAtLeast(0))
+                put("album_count", albumCount)
+            }
         }
         .toString()
 
@@ -37,7 +46,11 @@ data class MediaPayload(
 
     fun preview(): String = when (kind) {
         "voice" -> "Голосовое · ${formatDuration(durationMs)}"
-        "image" -> "Фото"
+        "image" -> if (!albumId.isNullOrBlank() && albumCount > 1) {
+            "Альбом · $albumCount фото"
+        } else {
+            "Фото"
+        }
         "file" -> name.ifBlank { "Файл" }
         else -> "Вложение"
     }
@@ -55,6 +68,9 @@ data class MediaPayload(
                 size = o.optLong("size"),
                 durationMs = o.optLong("duration_ms"),
                 groupId = JsonIds.optional(o.optString("group_id")),
+                albumId = JsonIds.optional(o.optString("album_id")),
+                albumIndex = o.optInt("album_index", 0).coerceAtLeast(0),
+                albumCount = o.optInt("album_count", 1).let { if (it <= 0) 1 else it },
             )
         }
 

@@ -47,4 +47,23 @@ class PhotoLayoutTest {
         assertEquals(200f / 4000f, tall.widthDp / tall.heightDp, 0.02f)
         assertTrue(tall.heightDp <= PhotoLayout.MAX_HEIGHT_DP + 0.5f)
     }
+
+    @Test
+    fun mosaicTwoUpSideBySide() {
+        val tiles = PhotoLayout.mosaic(2)
+        assertEquals(2, tiles.size)
+        assertEquals(0f, tiles[0].xDp, 0.01f)
+        assertTrue(tiles[1].xDp > tiles[0].widthDp)
+        assertEquals(PhotoLayout.MOSAIC_HEIGHT_DP, tiles[0].heightDp, 0.01f)
+        assertEquals(PhotoLayout.MOSAIC_HEIGHT_DP, tiles[1].heightDp, 0.01f)
+    }
+
+    @Test
+    fun mosaicThreeIsTwoColumn() {
+        val tiles = PhotoLayout.mosaic(3)
+        assertEquals(3, tiles.size)
+        assertEquals(tiles[0].heightDp, PhotoLayout.MOSAIC_HEIGHT_DP, 0.01f)
+        assertTrue(tiles[1].yDp < tiles[2].yDp)
+        assertEquals(tiles[1].xDp, tiles[2].xDp, 0.01f)
+    }
 }

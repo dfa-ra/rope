@@ -41,9 +41,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val galleryPicker = registerForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        uri?.let { (application as RopeApp).repo.sendAttachment(it) }
+        ActivityResultContracts.PickMultipleVisualMedia(app.rope.android.data.AlbumRules.MAX_PHOTOS),
+    ) { uris ->
+        if (uris.isNotEmpty()) (application as RopeApp).repo.sendAttachments(uris)
     }
 
     private val restorePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -129,6 +129,7 @@ class MainActivity : AppCompatActivity() {
                     },
                     onAttachFile = { picker.launch("*/*") },
                     onAttachUri = { (application as RopeApp).repo.sendAttachment(it) },
+                    onAttachUris = { (application as RopeApp).repo.sendAttachments(it) },
                     onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
                     onCall = { withMic("call") { repo.startCall() } },

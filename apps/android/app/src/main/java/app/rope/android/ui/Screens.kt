@@ -118,6 +118,7 @@ fun RopeScaffold(
     onAttachGallery: () -> Unit = {},
     onAttachFile: () -> Unit = {},
     onAttachUri: (Uri) -> Unit = {},
+    onAttachUris: (List<Uri>) -> Unit = {},
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
     onCall: () -> Unit,
@@ -300,6 +301,7 @@ fun RopeScaffold(
                             onAttachGallery = onAttachGallery,
                             onAttachFile = onAttachFile,
                             onAttachUri = onAttachUri,
+                            onAttachUris = onAttachUris,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
@@ -334,7 +336,14 @@ fun RopeScaffold(
         )
     }
     state.viewingImage?.let { img ->
-        app.rope.android.ui.ImageViewer(img, onCloseImage)
+        val siblings = app.rope.android.data.AlbumRules.siblings(state.messages, img)
+        app.rope.android.ui.ImageViewer(
+            msg = img,
+            siblings = siblings.ifEmpty { listOf(img) },
+            onClose = onCloseImage,
+            onShow = onOpenImage,
+            onEnsure = onEnsureMedia,
+        )
     }
     if (splash.visible) {
         RopeSplash(caption = splash.caption, loop = splash.loop, compact = splash.compact)

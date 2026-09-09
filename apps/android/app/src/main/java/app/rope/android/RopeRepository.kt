@@ -11,6 +11,7 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
+import app.rope.android.data.AlbumRules
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
@@ -676,31 +677,62 @@ class RopeRepository(private val app: Application) {
     }
 
     fun sendAttachment(uri: Uri, forcedMime: String? = null) {
+        sendAttachments(listOf(uri), forcedMime)
+    }
+
+    fun sendAttachments(uris: List<Uri>, forcedMime: String? = null) {
         scope.launch {
             try {
-                val cr = app.contentResolver
-                var mime = forcedMime ?: cr.getType(uri) ?: "application/octet-stream"
-                val name = attachmentName(uri, mime)
-                var bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
-                if (bytes.size > 25 * 1024 * 1024) {
-                    notice(UserFacing.FILE_TOO_BIG)
-                    return@launch
+                val prepared = uris.take(AlbumRules.MAX_PHOTOS).mapNotNull { uri ->
+                    prepareOutgoingMedia(uri, forcedMime)
                 }
-                if (mime.startsWith("image/") || looksLikeImage(name, mime)) {
-                    val normalized = ImageCodec.normalizeForSend(bytes, if (mime.startsWith("image/")) mime else "image/jpeg")
-                    bytes = normalized.first
-                    mime = normalized.second
+                if (prepared.isEmpty()) return@launch
+                val slots = AlbumRules.slots(prepared.size)
+                prepared.zip(slots).forEach { (item, slot) ->
+                    sendMediaBytes(
+                        item.bytes,
+                        item.mime,
+                        item.name,
+                        item.kind,
+                        0,
+                        albumId = slot.albumId,
+                        albumIndex = slot.index,
+                        albumCount = slot.count,
+                    )
                 }
-                val kind = when {
-                    mime.startsWith("image/") -> "image"
-                    mime.startsWith("audio/") -> "voice"
-                    else -> "file"
-                }
-                sendMediaBytes(bytes, mime, name, kind, 0)
             } catch (e: Exception) {
                 error(e)
             }
         }
+    }
+
+    private data class OutgoingMedia(
+        val bytes: ByteArray,
+        val mime: String,
+        val name: String,
+        val kind: String,
+    )
+
+    private fun prepareOutgoingMedia(uri: Uri, forcedMime: String?): OutgoingMedia? {
+        val cr = app.contentResolver
+        var mime = forcedMime ?: cr.getType(uri) ?: "application/octet-stream"
+        val name = attachmentName(uri, mime)
+        var bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
+        if (bytes.size > 25 * 1024 * 1024) {
+            notice(UserFacing.FILE_TOO_BIG)
+            return null
+        }
+        if (mime.startsWith("image/") || looksLikeImage(name, mime)) {
+            val normalized = ImageCodec.normalizeForSend(bytes, if (mime.startsWith("image/")) mime else "image/jpeg")
+            bytes = normalized.first
+            mime = normalized.second
+        }
+        val kind = when {
+            mime.startsWith("image/") -> "image"
+            mime.startsWith("audio/") -> "voice"
+            else -> "file"
+        }
+        return OutgoingMedia(bytes, mime, name, kind)
     }
 
     fun startVoice() {
@@ -1120,7 +1152,16 @@ class RopeRepository(private val app: Application) {
         store.profile()?.let { connectSocket(it) }
     }
 
-    private fun sendMediaBytes(bytes: ByteArray, mime: String, name: String, kind: String, durationMs: Long) {
+    private fun sendMediaBytes(
+        bytes: ByteArray,
+        mime: String,
+        name: String,
+        kind: String,
+        durationMs: Long,
+        albumId: String? = null,
+        albumIndex: Int = 0,
+        albumCount: Int = 1,
+    ) {
         val id = identity ?: return
         val api = api ?: throw IllegalStateException("нет сети")
         val group = _state.value.group
@@ -1142,6 +1183,9 @@ class RopeRepository(private val app: Application) {
             size = bytes.size.toLong(),
             durationMs = durationMs,
             groupId = if (inKnownGroup) group?.groupId else null,
+            albumId = if (kind == "image") albumId else null,
+            albumIndex = if (kind == "image") albumIndex else 0,
+            albumCount = if (kind == "image") albumCount else 1,
         )
         val cache = persistPlain(objectId, name, mime, bytes)
         if (inKnownGroup && group != null) {
@@ -1824,7 +1868,7 @@ class RopeRepository(private val app: Application) {
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
-                notifyIfHidden(sender.displayName, payload.preview(), chatId)
+                notifyIfHidden(sender.displayName, payload.preview(), chatId, payload.albumId)
                 scope.launch { downloadMedia(msg.id, payload) }
             }
             EnvelopeTypes.RECEIPT -> {
@@ -2316,7 +2360,7 @@ class RopeRepository(private val app: Application) {
         CallAudio.apply(app, on)
     }
 
-    private fun notifyIfHidden(title: String, body: String, chatId: String) {
+    private fun notifyIfHidden(title: String, body: String, chatId: String, albumId: String? = null) {
         val chatOpen = _state.value.screen == Screen.Chat && openChatId() == chatId
         val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val cur = store.chatPrefs(chatId)
@@ -2325,7 +2369,7 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body)
+            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
         }
     }
 

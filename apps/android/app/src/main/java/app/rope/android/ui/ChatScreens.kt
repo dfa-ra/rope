@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -120,6 +123,7 @@ import androidx.core.content.ContextCompat
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.AlbumRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -572,6 +576,7 @@ fun ChatPane(
     onAttachGallery: () -> Unit = onAttach,
     onAttachFile: () -> Unit = onAttach,
     onAttachUri: (Uri) -> Unit = {},
+    onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
 ) {
     val title = state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
@@ -593,7 +598,9 @@ fun ChatPane(
         state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
-    val threadItems = remember(visible, todayKey) { DateSeparatorRules.items(visible) }
+    val threadItems = remember(visible, todayKey) {
+        AlbumRules.collapse(DateSeparatorRules.items(visible))
+    }
     val list = rememberLazyListState()
     var showSearch by remember { mutableStateOf(false) }
     var flashId by remember { mutableStateOf<String?>(null) }
@@ -619,7 +626,7 @@ fun ChatPane(
     }
     LaunchedEffect(state.scrollToMessageId) {
         val id = state.scrollToMessageId ?: return@LaunchedEffect
-        val idx = DateSeparatorRules.indexOfMessage(threadItems, id)
+        val idx = AlbumRules.indexOfMessage(threadItems, id)
         if (idx >= 0) list.animateScrollToItem(idx)
         flashId = id
         onConsumedScroll()
@@ -791,6 +798,37 @@ fun ChatPane(
                                     },
                                 )
                             }
+                            is ChatThreadItem.Album -> {
+                                val members = item.members
+                                val first = members.first()
+                                val index = visible.indexOfFirst { it.id == first.id }
+                                AlbumBubble(
+                                    members = members,
+                                    state = state,
+                                    onEnsureMedia = onEnsureMedia,
+                                    onJump = onJump,
+                                    onOpenImage = onOpenImage,
+                                    onReact = onReact,
+                                    highlighted = members.any { it.id == flashId },
+                                    clusterFirst = GroupChatUx.firstInCluster(visible, index),
+                                    clusterLast = GroupChatUx.lastInCluster(visible, visible.indexOfFirst { it.id == members.last().id }.coerceAtLeast(index)),
+                                    selected = members.any { it.id in selectedIds },
+                                    selecting = selecting,
+                                    onToggleSelect = {
+                                        val ids = members.map { it.id }.toSet()
+                                        selectedIds = if (ids.any { it in selectedIds }) selectedIds - ids else selectedIds + ids
+                                    },
+                                    onEnterSelect = {
+                                        menuMessage = null
+                                        reactionExpanded = false
+                                        selectedIds = selectedIds + members.map { it.id }
+                                    },
+                                    onLongPressMember = { m ->
+                                        menuMessage = m
+                                        reactionExpanded = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -863,6 +901,10 @@ fun ChatPane(
             onUri = { uri ->
                 showAttach = false
                 onAttachUri(uri)
+            },
+            onUris = { uris ->
+                showAttach = false
+                onAttachUris(uris)
             },
             onDismiss = { showAttach = false },
         )
@@ -1329,6 +1371,150 @@ private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boo
             style = MaterialTheme.typography.labelMedium,
             color = if (mine) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface,
         )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AlbumBubble(
+    members: List<ChatMessage>,
+    state: UiState,
+    onEnsureMedia: (ChatMessage) -> Unit,
+    onJump: (String?) -> Unit,
+    onOpenImage: (ChatMessage) -> Unit,
+    onReact: (ChatMessage, String) -> Unit,
+    highlighted: Boolean,
+    clusterFirst: Boolean,
+    clusterLast: Boolean,
+    selected: Boolean,
+    selecting: Boolean,
+    onToggleSelect: () -> Unit,
+    onEnterSelect: () -> Unit,
+    onLongPressMember: (ChatMessage) -> Unit,
+) {
+    val first = members.firstOrNull() ?: return
+    val last = members.last()
+    val mine = first.outgoing
+    val inGroup = state.group != null
+    val senderLabel = first.senderName.ifBlank { first.senderId.take(8) }
+    val senderColor = Color(GroupChatUx.senderColorArgb(first.senderId, senderLabel))
+    val showName = GroupChatUx.showSenderName(inGroup, mine, clusterFirst) && !first.deleted
+    val selectAlpha by animateFloatAsState(if (selected) 0.28f else 0f, label = "albumSelect")
+    val tiles = PhotoLayout.mosaic(members.size)
+    val meta = MessageTime.meta(last.status, last.outgoing, last.timestampMs, edited = last.edited)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = if (clusterFirst) 8.dp else 2.dp),
+        horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
+    ) {
+        if (showName) {
+            Text(
+                senderLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = senderColor,
+                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+            )
+        }
+        if (!first.replyToId.isNullOrBlank()) {
+            ReplyQuote(
+                name = GroupChatUx.replyQuoteName(first.replyName, first.outgoing),
+                preview = first.replyPreview.ifBlank { "Сообщение" },
+                accent = senderColor,
+                onClick = { onJump(first.replyToId) },
+            )
+        }
+        Box(
+            Modifier
+                .width(PhotoLayout.MOSAIC_WIDTH_DP.dp)
+                .height(PhotoLayout.MOSAIC_HEIGHT_DP.dp)
+                .clip(RoundedCornerShape(RopeShapes.media)),
+        ) {
+            members.forEachIndexed { i, m ->
+                val tile = tiles.getOrElse(i) { tiles.last() }
+                MosaicTile(
+                    m = m,
+                    tile = tile,
+                    overlayMeta = i == members.lastIndex && meta.isNotBlank(),
+                    meta = meta,
+                    onEnsure = onEnsureMedia,
+                    onClick = {
+                        when {
+                            selecting -> onToggleSelect()
+                            else -> onOpenImage(m)
+                        }
+                    },
+                    onLongClick = {
+                        if (selecting) onToggleSelect() else {
+                            onEnterSelect()
+                            onLongPressMember(m)
+                        }
+                    },
+                )
+            }
+            if (selectAlpha > 0f || highlighted) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = if (highlighted) 0.18f else selectAlpha)),
+                )
+            }
+        }
+        if (last.reactions.isNotEmpty()) {
+            ReactionRow(last, state.profile?.deviceId.orEmpty(), mine, onReact)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MosaicTile(
+    m: ChatMessage,
+    tile: PhotoLayout.Tile,
+    overlayMeta: Boolean,
+    meta: String,
+    onEnsure: (ChatMessage) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
+    val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+    Box(
+        Modifier
+            .offset(x = tile.xDp.dp, y = tile.yDp.dp)
+            .width(tile.widthDp.dp)
+            .height(tile.heightDp.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Фото",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                "…",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        if (overlayMeta) {
+            Text(
+                meta,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
     }
 }
 
@@ -1824,10 +2010,19 @@ private fun AttachSheet(
     onGallery: () -> Unit,
     onFile: () -> Unit,
     onUri: (Uri) -> Unit,
+    onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val recents = remember { recentImages(context) }
+    var selected by remember { mutableStateOf(listOf<Uri>()) }
+    fun toggle(uri: Uri) {
+        selected = when {
+            uri in selected -> selected - uri
+            selected.size >= AlbumRules.MAX_PHOTOS -> selected
+            else -> selected + uri
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -1841,14 +2036,20 @@ private fun AttachSheet(
         ) {
             Text("Вложение", style = MaterialTheme.typography.titleMedium)
             if (recents.isNotEmpty()) {
+                Text(
+                    "До ${AlbumRules.MAX_PHOTOS} фото",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(recents, key = { it.toString() }) { uri ->
                         val bmp = remember(uri) { decodeRecentThumb(context, uri) }
+                        val order = selected.indexOf(uri)
                         Box(
                             Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(RopeShapes.media))
-                                .clickable { onUri(uri) }
+                                .clickable { toggle(uri) }
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                         ) {
                             if (bmp != null) {
@@ -1859,8 +2060,38 @@ private fun AttachSheet(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
+                            if (order >= 0) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        "${order + 1}",
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
                         }
                     }
+                }
+            }
+            if (selected.isNotEmpty()) {
+                TextButton(
+                    onClick = { onUris(selected) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (selected.size == 1) "Отправить фото" else "Отправить ${selected.size} фото",
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
             TextButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
@@ -1965,28 +2196,106 @@ fun InitialsAvatar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ImageViewer(msg: ChatMessage, onClose: () -> Unit) {
+fun ImageViewer(
+    msg: ChatMessage,
+    siblings: List<ChatMessage> = listOf(msg),
+    onClose: () -> Unit,
+    onShow: (ChatMessage) -> Unit = {},
+    onEnsure: (ChatMessage) -> Unit = {},
+) {
+    val album = siblings.ifEmpty { listOf(msg) }
+    val start = album.indexOfFirst { it.id == msg.id }.coerceAtLeast(0)
+    val pagerState = rememberPagerState(initialPage = start) { album.size }
+    val albumKey = album.joinToString { it.id }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pagerState.currentPage, albumKey) {
+        album.getOrNull(pagerState.currentPage)?.let { current ->
+            onEnsure(current)
+            if (current.id != msg.id) onShow(current)
+        }
+    }
     BackHandler(onBack = onClose)
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.94f))
-            .clickable(onClick = onClose),
-        contentAlignment = Alignment.Center,
+            .background(Color.Black.copy(alpha = 0.94f)),
     ) {
-        val bmp = msg.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
-        if (bmp != null) {
-            Image(
-                bitmap = bmp.asImageBitmap(),
-                contentDescription = "Фото",
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+        ) { page ->
+            val item = album[page]
+            val bmp = item.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "Фото",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                            .clip(RoundedCornerShape(RopeShapes.media)),
+                    )
+                } else {
+                    Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
+        if (album.size > 1) {
+            Text(
+                "${pagerState.currentPage + 1} / ${album.size}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(RopeShapes.media)),
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             )
-        } else {
-            Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+            LazyRow(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .padding(vertical = 10.dp, horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                itemsIndexed(album, key = { _, m -> m.id }) { index, item ->
+                    val thumb = item.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+                    val active = index == pagerState.currentPage
+                    Box(
+                        Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(
+                                if (active) 2.dp else 0.dp,
+                                Color.White,
+                                RoundedCornerShape(8.dp),
+                            )
+                            .clickable {
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            }
+                            .background(Color.DarkGray),
+                    ) {
+                        if (thumb != null) {
+                            Image(
+                                bitmap = thumb.asImageBitmap(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            }
         }
         IconButton(
             onClick = onClose,

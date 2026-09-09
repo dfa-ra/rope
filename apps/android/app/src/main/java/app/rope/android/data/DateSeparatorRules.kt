@@ -17,6 +17,10 @@ sealed class ChatThreadItem {
     data class Bubble(val msg: ChatMessage) : ChatThreadItem() {
         override val key: String get() = msg.id
     }
+
+    data class Album(val members: List<ChatMessage>) : ChatThreadItem() {
+        override val key: String get() = "album-${members.firstOrNull()?.id ?: "empty"}"
+    }
 }
 
 data class ChatDayGroup(
@@ -146,7 +150,7 @@ object DateSeparatorRules {
     }
 
     fun indexOfMessage(items: List<ChatThreadItem>, id: String): Int =
-        items.indexOfFirst { it is ChatThreadItem.Bubble && it.msg.id == id }
+        AlbumRules.indexOfMessage(items, id)
 
     private fun sameYear(aMs: Long, bMs: Long, timeZone: TimeZone): Boolean {
         val a = Calendar.getInstance(timeZone).apply { timeInMillis = aMs }

@@ -23,7 +23,7 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String) {
+    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
         val intent = PendingIntent.getActivity(
             context,
             1,
@@ -37,7 +37,7 @@ class RopeNotifier(private val context: Context) {
             .setContentIntent(intent)
             .setAutoCancel(true)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(body.hashCode(), n) }
+        runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
     }
 
     fun incomingCall(name: String) {

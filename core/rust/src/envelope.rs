@@ -397,6 +397,27 @@ mod tests {
     }
 
     #[test]
+    fn typed_media_album_json_roundtrip() {
+        let alice = DeviceIdentity::generate();
+        let bob = DeviceIdentity::generate();
+        let album = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1,"album_id":"alb-1","album_index":1,"album_count":3}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, album).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.msg_type, ENVELOPE_TYPE_MEDIA);
+        assert_eq!(got.body, album);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(json.contains("\"album_id\":\"alb-1\""));
+        assert!(json.contains("\"album_index\":1"));
+        assert!(json.contains("\"album_count\":3"));
+        let singleton = br#"{"kind":"image","object_id":"o","sha256":"ab","key_b64":"k","mime":"image/jpeg","name":"a.jpg","size":1}"#;
+        let env = encrypt_typed(&alice, &bob.public_identity(), ENVELOPE_TYPE_MEDIA, singleton).unwrap();
+        let got = decrypt_typed(&bob, &alice.public_identity(), &env.bytes).unwrap();
+        assert_eq!(got.body, singleton);
+        let json = std::str::from_utf8(&got.body).unwrap();
+        assert!(!json.contains("album_id"));
+    }
+
+    #[test]
     fn v1_text_still_works_after_typed_api() {
         let alice = DeviceIdentity::generate();
         let bob = DeviceIdentity::generate();

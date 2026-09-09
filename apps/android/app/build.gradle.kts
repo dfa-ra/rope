@@ -11,8 +11,8 @@ android {
         applicationId = "app.rope.android"
         minSdk = 26
         targetSdk = 34
-        versionCode = 41
-        versionName = "0.3.17"
+        versionCode = 42
+        versionName = "0.3.18"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -75,6 +75,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
