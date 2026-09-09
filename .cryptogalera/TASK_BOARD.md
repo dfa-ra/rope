@@ -4,12 +4,12 @@ PO-owned. Canonical tracker. One owner per row.
 
 | ID | Task | Owner | Status | Source | Depends On |
 | --- | --- | --- | --- | --- | --- |
-| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.8 owner-device 409 | — |
-| CG-068 | Slice: revoke-device 409 on owner devices as 0.3.8 | PO | IN_PROGRESS | REV-01: co-owner device-count gap | CG-007 |
+| CG-007 | Unfreeze for this user task | PO | IN_PROGRESS | unfreeze for 0.3.9 atomic revoke-member | — |
+| CG-068 | Slice: revoke-device 409 on owner devices as 0.3.8 | PO | DONE | shipped v0.3.8 | CG-007 |
 | CG-069 | Go: OwnerDeviceCount gate on POST /v1/admin/revoke-device | GO-01 | DONE | not OwnerCount members | CG-068 |
 | CG-070 | Android: canRevokeDevice uses ownerDeviceCount | AND-01 | DONE | unused API; People stays revoke-member | CG-068 |
-| CG-071 | Independent review | REV-01 | IN_PROGRESS | reviewer ≠ author | CG-069, CG-070 |
-| CG-072 | Ship **0.3.8** | PO | IN_PROGRESS | versionCode 32; do not retag v0.3.7 | CG-071 |
+| CG-071 | Independent review | REV-01 | DONE | PASS_WITH_CONCERNS; concurrent revoke-member gap is 0.3.9 | CG-069, CG-070 |
+| CG-072 | Ship **0.3.8** | PO | DONE | tag v0.3.8 = ff9301c; versionCode 32; release published; v0.2.15 / v0.3.0 / v0.3.1 / v0.3.2 / v0.3.3 / v0.3.4 / v0.3.5 / v0.3.6 / v0.3.7 unchanged | CG-071 |
 | CG-063 | Slice: last-owner revoke-device 409 as 0.3.7 | PO | DONE | shipped v0.3.7 | CG-007 |
 | CG-064 | Go: last-owner POST /v1/admin/revoke-device 409 | GO-01 | DONE | like revoke-member | CG-063 |
 | CG-065 | Android: do not expose unused revokeDevice for last owner | AND-01 | DONE | RevokeRules.canRevokeDevice; drop unused API | CG-063 |
@@ -45,4 +45,4 @@ PO-owned. Canonical tracker. One owner per row.
 | CG-013 | Owner revoke UI | AND-01 | DONE | D-019; shipped in 0.3.6 | CG-058 |
 | CG-014 | architecture.md Room vs SQLite | — | BACKLOG | — | — |
 
-**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, or `v0.3.7`.**
+**Do not move tags `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, or `v0.3.8`.**
