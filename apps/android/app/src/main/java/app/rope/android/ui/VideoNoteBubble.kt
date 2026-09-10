@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
 import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -41,11 +44,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.VideoNoteMuteRules
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.media.VideoCodec
 
 /**
  * Telegram-like кружок: looping circular clip, tap to pause.
+ * Mute chip is independent of CallVideoRenderer.
  */
 @Composable
 fun VideoNoteBubble(
@@ -58,7 +63,12 @@ fun VideoNoteBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var muted by remember(m.id) { mutableStateOf(false) }
+    val player = remember(m.id) { arrayOfNulls<MediaPlayer>(1) }
     val size = VideoNoteRules.DISPLAY_DP.dp
+    LaunchedEffect(muted, playing) {
+        player[0]?.let { applyVideoNoteMute(it, muted) }
+    }
     Box(
         modifier = Modifier
             .size(size)
@@ -76,7 +86,9 @@ fun VideoNoteBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
                         setOnPreparedListener { mp ->
+                            player[0] = mp
                             mp.isLooping = true
+                            applyVideoNoteMute(mp, muted)
                             start()
                         }
                     }
@@ -93,7 +105,10 @@ fun VideoNoteBubble(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    player[0] = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -119,6 +134,25 @@ fun VideoNoteBubble(
                     .align(Alignment.Center)
                     .size(28.dp),
             )
+        }
+        if (!path.isNullOrBlank()) {
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable { muted = VideoNoteMuteRules.toggle(muted) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
+                    contentDescription = VideoNoteMuteRules.contentDescription(muted),
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
         Text(
             if (duration > 0L) MediaPayload.formatDuration(duration) else "кружок",
@@ -240,5 +274,13 @@ fun VideoNoteRecorderOverlay(
         ) {
             Icon(Icons.Outlined.Send, contentDescription = "Отправить кружок", tint = Color.White)
         }
+    }
+}
+
+private fun applyVideoNoteMute(player: MediaPlayer, muted: Boolean) {
+    try {
+        val v = VideoNoteMuteRules.volume(muted)
+        player.setVolume(v, v)
+    } catch (_: Exception) {
     }
 }
