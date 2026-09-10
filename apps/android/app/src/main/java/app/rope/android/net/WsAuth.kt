@@ -8,5 +8,17 @@ package app.rope.android.net
 object WsAuth {
     const val HEADER = "X-Rope-Ws-Auth"
 
-    fun value(deviceId: String, ts: String, sig: String): String = "$deviceId.$ts.$sig"
+    /**
+     * Header value is device_id.ts.sig. Empty if a part has whitespace or
+     * control so OkHttp cannot split the header. Query sig= still sent.
+     */
+    fun value(deviceId: String, ts: String, sig: String): String {
+        if (!wirePart(deviceId) || !wirePart(ts) || !wirePart(sig)) return ""
+        return "$deviceId.$ts.$sig"
+    }
+
+    fun wirePart(s: String): Boolean {
+        if (s.isEmpty()) return false
+        return s.none { it.isWhitespace() || it.isISOControl() }
+    }
 }

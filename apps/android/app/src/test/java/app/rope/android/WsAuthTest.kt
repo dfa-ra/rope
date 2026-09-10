@@ -24,4 +24,16 @@ class WsAuthTest {
         assertTrue(url.contains("sig=$sig"))
         assertEquals("$id.$ts.$sig", WsAuth.value(id, ts, sig))
     }
+
+    @Test
+    fun valueRejectsInteriorWhitespaceAndControl() {
+        assertEquals("", WsAuth.value("abc\nhttp://evil", "1700000000", "sig"))
+        assertEquals("", WsAuth.value("abc", "1700000000\r", "sig"))
+        assertEquals("", WsAuth.value("abc def", "99", "s"))
+        assertEquals("", WsAuth.value("abc", "99", "s\u0000x"))
+        assertEquals("", WsAuth.value("", "99", "s"))
+        assertTrue(WsAuth.wirePart("deadbeef"))
+        assertFalse(WsAuth.wirePart("ab c"))
+        assertEquals("deadbeef.99.s", WsAuth.value("deadbeef", "99", "s"))
+    }
 }
