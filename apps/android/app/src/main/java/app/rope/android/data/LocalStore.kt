@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveAutoLock(ms: Long) {
+        put(AutoLockRules.KEY, AutoLockRules.normalize(ms).toString())
+    }
+
+    fun autoLockMs(): Long = AutoLockRules.parse(get(AutoLockRules.KEY))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

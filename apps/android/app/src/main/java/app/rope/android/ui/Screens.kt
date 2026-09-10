@@ -156,6 +156,8 @@ fun RopeScaffold(
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
     onToggleLinkPreviews: () -> Unit = {},
+    onSetAutoLock: (Long) -> Unit = {},
+    onUnlockIdle: () -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onReply: (app.rope.android.data.ChatMessage) -> Unit,
     onReplySpan: (app.rope.android.data.QuoteSpan?) -> Unit = {},
@@ -349,6 +351,7 @@ fun RopeScaffold(
                             onToggleNotifications,
                             onCopyText,
                             onToggleLinkPreviews,
+                            onSetAutoLock,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup, onRenameGroup) { onBack() }
@@ -376,6 +379,9 @@ fun RopeScaffold(
             onShow = onOpenImage,
             onEnsure = onEnsureMedia,
         )
+    }
+    if (state.idleLocked) {
+        app.rope.android.ui.IdleLockGate(onUnlock = onUnlockIdle)
     }
     state.call?.let { call ->
         app.rope.android.ui.CallOverlay(

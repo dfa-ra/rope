@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import app.rope.android.data.CallMediaStart
 import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
@@ -138,6 +139,14 @@ class MainActivity : AppCompatActivity() {
                 if (canInstallPackages() && startedInstallFor == null) tryInstallPending()
             }
         })
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                repo.noteAppBackground()
+            }
+            override fun onStart(owner: LifecycleOwner) {
+                repo.noteAppForeground()
+            }
+        })
         setContent {
             val state by repo.state.collectAsState()
             LaunchedEffect(Unit) { composeReady.set(true) }
@@ -236,6 +245,8 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onSetAutoLock = repo::setAutoLock,
+                    onUnlockIdle = repo::unlockIdle,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,
