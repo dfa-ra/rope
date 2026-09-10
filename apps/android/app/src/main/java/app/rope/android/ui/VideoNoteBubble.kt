@@ -1,5 +1,7 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -42,10 +44,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.VideoNoteRules
+import app.rope.android.data.VideoNoteSpeedRules
 import app.rope.android.media.VideoCodec
 
 /**
  * Telegram-like кружок: looping circular clip, tap to pause.
+ * 1x/1.5x/2x matches voice notes. Not CallVideoRenderer.
  */
 @Composable
 fun VideoNoteBubble(
@@ -58,7 +62,12 @@ fun VideoNoteBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var speed by remember(m.id) { mutableStateOf(VideoNoteSpeedRules.clamp(1f)) }
+    val player = remember(m.id) { arrayOfNulls<MediaPlayer>(1) }
     val size = VideoNoteRules.DISPLAY_DP.dp
+    LaunchedEffect(speed, playing) {
+        player[0]?.let { applyVideoNoteSpeed(it, speed) }
+    }
     Box(
         modifier = Modifier
             .size(size)
@@ -76,7 +85,9 @@ fun VideoNoteBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
                         setOnPreparedListener { mp ->
+                            player[0] = mp
                             mp.isLooping = true
+                            applyVideoNoteSpeed(mp, speed)
                             start()
                         }
                     }
@@ -93,7 +104,10 @@ fun VideoNoteBubble(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    player[0] = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -118,6 +132,20 @@ fun VideoNoteBubble(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(28.dp),
+            )
+        }
+        if (!path.isNullOrBlank()) {
+            Text(
+                VideoNoteSpeedRules.label(speed),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable { speed = VideoNoteSpeedRules.next(speed) }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
         Text(
@@ -240,5 +268,17 @@ fun VideoNoteRecorderOverlay(
         ) {
             Icon(Icons.Outlined.Send, contentDescription = "Отправить кружок", tint = Color.White)
         }
+    }
+}
+
+private fun applyVideoNoteSpeed(player: MediaPlayer, speed: Float) {
+    try {
+        val params = try {
+            player.playbackParams
+        } catch (_: Exception) {
+            PlaybackParams()
+        }
+        player.playbackParams = params.setSpeed(VideoNoteSpeedRules.clamp(speed))
+    } catch (_: Exception) {
     }
 }
