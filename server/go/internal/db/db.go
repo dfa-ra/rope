@@ -632,6 +632,11 @@ func (s *Store) InsertGroup(id, name, createdBy string, epoch uint32) error {
 	return err
 }
 
+func (s *Store) UpdateGroupName(id, name string) error {
+	_, err := s.SQL.Exec(`UPDATE chat_groups SET name = ? WHERE group_id = ?`, name, id)
+	return err
+}
+
 func (s *Store) Group(id string) (Group, error) {
 	var g Group
 	err := s.SQL.QueryRow(`SELECT group_id, name, created_by, epoch FROM chat_groups WHERE group_id = ?`, id).

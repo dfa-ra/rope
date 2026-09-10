@@ -62,4 +62,11 @@ object RoleRules {
     }
 
     fun canLeaveGroup(isMember: Boolean): Boolean = isMember
+
+    fun canRenameGroup(
+        isMember: Boolean,
+        myId: String?,
+        organizerId: String,
+        serverRole: String?,
+    ): Boolean = canManageGroupMembers(isMember, myId, organizerId, serverRole)
 }

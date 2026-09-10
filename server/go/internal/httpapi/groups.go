@@ -14,12 +14,13 @@ func (s *Server) createGroup(w http.ResponseWriter, _ *http.Request, a authed, b
 		Name string `json:"name"`
 	}
 	_ = json.Unmarshal(body, &req)
-	if len([]rune(req.Name)) < 1 || len([]rune(req.Name)) > 40 {
+	name, ok := validGroupName(req.Name)
+	if !ok {
 		writeJSON(w, 400, map[string]string{"error": "bad group name"})
 		return
 	}
 	id := uuid.NewString()
-	if err := s.Store.InsertGroup(id, req.Name, a.Device.ID, 1); err != nil {
+	if err := s.Store.InsertGroup(id, name, a.Device.ID, 1); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}

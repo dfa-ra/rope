@@ -125,6 +125,11 @@ class ServerApi(
         return parseGroup(authed("POST", "/v1/groups", body))
     }
 
+    fun renameGroup(groupId: String, name: String): RopeGroup {
+        val body = JSONObject().put("name", name).toString().toByteArray()
+        return parseGroup(authed("PATCH", "/v1/groups/$groupId", body))
+    }
+
     fun listGroups(): List<RopeGroup> {
         val obj = authed("GET", "/v1/groups", ByteArray(0))
         val arr = obj.optJSONArray("groups") ?: JSONArray()

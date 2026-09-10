@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupNameRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -91,7 +92,7 @@ fun NewGroupPane(
                 "Создать",
                 onCreate,
                 Modifier.fillMaxWidth(),
-                enabled = state.groupNameDraft.isNotBlank(),
+                enabled = GroupNameRules.parse(state.groupNameDraft) != null,
             )
         }
     }
@@ -103,6 +104,7 @@ fun GroupInfoPane(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
+    onRename: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -118,8 +120,10 @@ fun GroupInfoPane(
     val organizer = GroupChatUx.organizerId(g)
     val isMember = me != null && me in g.members
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
+    val canRename = RoleRules.canRenameGroup(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
+    var renameDraft by remember(g.groupId, g.name) { mutableStateOf(g.name) }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -136,6 +140,23 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (canRename) {
+                            OutlinedTextField(
+                                renameDraft,
+                                { renameDraft = it },
+                                label = { Text("Название") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(RopeShapes.field),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                            TextButton(
+                                onClick = { onRename(renameDraft) },
+                                enabled = GroupNameRules.parse(renameDraft) != null &&
+                                    GroupNameRules.parse(renameDraft) != g.name,
+                            ) { Text("Сохранить название") }
+                        }
                     }
                 }
             }

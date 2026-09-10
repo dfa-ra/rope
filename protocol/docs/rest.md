@@ -192,6 +192,8 @@ Returns `application/octet-stream` plus `X-Rope-SHA256`. Any authenticated membe
 
 ### `POST /v1/groups`
 
+1–40 Unicode runes. CR/LF/NUL rejected before trim.
+
 ```json
 { "name": "crew" }
 ```
@@ -213,6 +215,18 @@ Returns `application/octet-stream` plus `X-Rope-SHA256`. Any authenticated membe
 ```
 
 Bumps epoch. Caller must already be a member.
+
+### `PATCH /v1/groups/{id}`
+
+Organizer or server owner (and already a member). 1–40 Unicode runes. CR/LF/NUL rejected before trim.
+
+```json
+{ "name": "deck" }
+```
+
+```json
+{ "group_id": "uuid", "name": "deck", "epoch": 2, "members": [] }
+```
 
 ### `POST /v1/groups/{id}/remove`
 

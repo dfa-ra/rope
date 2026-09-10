@@ -83,6 +83,7 @@ func (s *Server) Router() http.Handler {
 	r.Get("/v1/objects/{id}", s.withAuth(s.downloadObject))
 	r.Post("/v1/groups", s.withAuth(s.createGroup))
 	r.Get("/v1/groups", s.withAuth(s.listGroups))
+	r.Patch("/v1/groups/{id}", s.withAuth(s.renameGroup))
 	r.Post("/v1/groups/{id}/members", s.withAuth(s.groupAdd))
 	r.Post("/v1/groups/{id}/remove", s.withAuth(s.groupRemove))
 	r.Get("/v1/ws", s.ws)

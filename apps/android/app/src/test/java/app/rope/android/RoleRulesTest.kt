@@ -80,6 +80,9 @@ class RoleRulesTest {
         assertTrue(RoleRules.canManageGroupMembers(true, "mem", "org", "owner"))
         assertTrue(RoleRules.canLeaveGroup(true))
         assertFalse(RoleRules.canLeaveGroup(false))
+        assertTrue(RoleRules.canRenameGroup(true, "org", "org", "guest"))
+        assertFalse(RoleRules.canRenameGroup(true, "mem", "org", "guest"))
+        assertTrue(RoleRules.canRenameGroup(true, "mem", "org", "owner"))
     }
 
     @Test

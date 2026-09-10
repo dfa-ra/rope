@@ -47,6 +47,7 @@ import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
+import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -1185,8 +1186,8 @@ class RopeRepository(private val app: Application) {
     }
 
     fun createGroup() {
-        val name = _state.value.groupNameDraft.trim()
-        if (name.isBlank()) {
+        val name = GroupNameRules.parse(_state.value.groupNameDraft)
+        if (name == null) {
             notice("Название группы")
             return
         }
@@ -1217,6 +1218,27 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             try {
                 val updated = api?.addGroupMember(g.groupId, deviceId)?.copy(createdBy = g.createdBy) ?: return@launch
+                store.upsertGroup(updated)
+                _state.value = _state.value.copy(group = updated)
+                refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun renameOpenGroup(raw: String) {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!RoleRules.canRenameGroup(me in g.members, me, organizer, _state.value.profile?.role)) return
+        val name = GroupNameRules.parse(raw) ?: run {
+            notice("Название группы")
+            return
+        }
+        scope.launch {
+            try {
+                val updated = api?.renameGroup(g.groupId, name)?.copy(createdBy = g.createdBy) ?: return@launch
                 store.upsertGroup(updated)
                 _state.value = _state.value.copy(group = updated)
                 refreshDirectory()
