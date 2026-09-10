@@ -9,6 +9,7 @@ import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import java.net.InetAddress
 import java.net.URI
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -118,8 +119,9 @@ object OgHtml {
 }
 
 object NetworkLinkOgFetcher : LinkOgFetcher {
-    private val ogDns = Dns { hostname ->
-        OgDnsRules.lookup(hostname) { Dns.SYSTEM.lookup(it) }
+    private val ogDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> =
+            OgDnsRules.lookup(hostname) { Dns.SYSTEM.lookup(it) }
     }
 
     private val http: OkHttpClient by lazy {
