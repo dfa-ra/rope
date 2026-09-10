@@ -27,15 +27,7 @@ object ShareMediaRules {
 
     fun mimeFor(msg: ChatMessage, file: File): String {
         val extra = runCatching { MediaPayload.parse(msg.extra).mime }.getOrNull()
-        val clean = extra?.trim().orEmpty()
-        if (clean.isNotEmpty() &&
-            '/' in clean &&
-            '\n' !in clean &&
-            '\r' !in clean &&
-            '\u0000' !in clean
-        ) {
-            return clean
-        }
+        sanitizedMime(extra)?.let { return it }
         return when (msg.kind) {
             MessageKind.IMAGE -> when (file.extension.lowercase()) {
                 "png" -> "image/png"
@@ -46,6 +38,13 @@ object ShareMediaRules {
             MessageKind.VIDEO -> "video/mp4"
             else -> "application/octet-stream"
         }
+    }
+
+    fun sanitizedMime(raw: String?): String? {
+        val v = raw ?: return null
+        if ('\n' in v || '\r' in v || '\u0000' in v) return null
+        val clean = v.trim()
+        return clean.takeIf { it.isNotEmpty() && '/' in it }
     }
 
     fun shareFile(msg: ChatMessage, mediaDir: File): File? {

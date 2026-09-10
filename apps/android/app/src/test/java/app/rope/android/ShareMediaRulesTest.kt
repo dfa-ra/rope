@@ -55,10 +55,14 @@ class ShareMediaRulesTest {
     @Test
     fun mimePrefersPayloadThenExtension() {
         val png = MediaPayload("image", "o", "ab", "K", "image/png", "a.png", 12).toJson()
-        val dirty = """{"kind":"image","object_id":"o","sha256":"ab","key_b64":"K","mime":"image/png\n","name":"a.png","size":12}"""
         val img = File("a.jpg")
         assertEquals("image/png", ShareMediaRules.mimeFor(media(MessageKind.IMAGE, extra = png), img))
-        assertEquals("image/jpeg", ShareMediaRules.mimeFor(media(MessageKind.IMAGE, extra = dirty), img))
+        assertNull(ShareMediaRules.sanitizedMime("image/png\n"))
+        assertNull(ShareMediaRules.sanitizedMime("image/png\r"))
+        assertNull(ShareMediaRules.sanitizedMime("image/png\u0000"))
+        assertNull(ShareMediaRules.sanitizedMime("png"))
+        assertNull(ShareMediaRules.sanitizedMime("  "))
+        assertEquals("image/png", ShareMediaRules.sanitizedMime("  image/png  "))
         assertEquals("image/jpeg", ShareMediaRules.mimeFor(media(MessageKind.IMAGE), img))
         assertEquals("image/webp", ShareMediaRules.mimeFor(media(MessageKind.IMAGE), File("a.webp")))
         assertEquals("video/mp4", ShareMediaRules.mimeFor(media(MessageKind.VIDEO), File("a.mp4")))
