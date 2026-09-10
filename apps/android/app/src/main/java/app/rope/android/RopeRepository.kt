@@ -66,6 +66,7 @@ import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
+import app.rope.android.data.PhotoQualRules
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val photoQual: String = PhotoQualRules.COMPRESSED,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    photoQual = store.photoQual(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -597,6 +600,13 @@ class RopeRepository(private val app: Application) {
         } else {
             scheduleUnfurl(_state.value.draftText)
         }
+    }
+
+    fun setPhotoQual(id: String) {
+        val next = PhotoQualRules.normalize(id)
+        if (_state.value.photoQual == next) return
+        store.savePhotoQual(next)
+        _state.value = _state.value.copy(photoQual = next)
     }
 
     fun dismissComposerPreview() {
@@ -952,9 +962,17 @@ class RopeRepository(private val app: Application) {
             return null
         }
         if (mime.startsWith("image/") || looksLikeImage(name, mime)) {
-            val normalized = ImageCodec.normalizeForSend(bytes, if (mime.startsWith("image/")) mime else "image/jpeg")
-            bytes = normalized.first
-            mime = normalized.second
+            val qual = PhotoQualRules.normalize(_state.value.photoQual)
+            if (PhotoQualRules.compress(qual)) {
+                val normalized = ImageCodec.normalizeForSend(
+                    bytes,
+                    if (mime.startsWith("image/")) mime else "image/jpeg",
+                    PhotoQualRules.maxEdge(qual),
+                    PhotoQualRules.jpegQuality(qual),
+                )
+                bytes = normalized.first
+                mime = normalized.second
+            }
         }
         val kind = VideoRules.kind(mime, name)
         return OutgoingMedia(bytes, mime, name, kind)

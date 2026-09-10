@@ -39,12 +39,18 @@ object ImageCodec {
         return dest
     }
 
-    fun normalizeForSend(bytes: ByteArray, mime: String): Pair<ByteArray, String> {
+    fun normalizeForSend(
+        bytes: ByteArray,
+        mime: String,
+        maxEdge: Int = MAX_EDGE,
+        quality: Int = 85,
+    ): Pair<ByteArray, String> {
         if (!mime.startsWith("image/")) return bytes to mime
         val src = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes to mime
-        val scaled = scale(src, MAX_EDGE)
+        val scaled = scale(src, maxEdge.coerceAtLeast(1))
         val out = ByteArrayOutputStream()
-        val ok = scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        val q = quality.coerceIn(40, 100)
+        val ok = scaled.compress(Bitmap.CompressFormat.JPEG, q, out)
         if (!ok || out.size() == 0) return bytes to mime
         return out.toByteArray() to "image/jpeg"
     }

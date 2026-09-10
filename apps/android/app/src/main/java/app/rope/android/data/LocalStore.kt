@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun savePhotoQual(id: String) {
+        put(PhotoQualRules.KEY, PhotoQualRules.normalize(id))
+    }
+
+    fun photoQual(): String = PhotoQualRules.normalize(get(PhotoQualRules.KEY))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
