@@ -40,7 +40,7 @@ object RevokeRules {
     fun actionLabel(): String = "Исключить"
 
     fun confirmPrompt(name: String): String {
-        val who = name.trim().ifBlank { "этого человека" }
+        val who = displayName(name, "этого человека")
         return "Исключить $who с сервера?"
     }
 
@@ -51,8 +51,16 @@ object RevokeRules {
     fun cancelAction(): String = "Отмена"
 
     fun noticeRevoked(name: String): String {
-        val who = name.trim().ifBlank { "человек" }
+        val who = displayName(name, "человек")
         return "$who исключён"
+    }
+
+    /** CR/LF/NUL in a directory name must not split confirm/notice chrome. */
+    private fun displayName(name: String, blank: String): String {
+        if (name.indexOf('\n') >= 0 || name.indexOf('\r') >= 0 || name.indexOf('\u0000') >= 0) {
+            return blank
+        }
+        return name.trim().ifBlank { blank }
     }
 
     fun peopleHint(): String = "Исключить — доступ к вашему серверу пропадёт."

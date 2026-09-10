@@ -86,4 +86,20 @@ class RevokeRulesTest {
         assertTrue(RevokeRules.settingsHint().contains("Люди"))
         assertTrue(RevokeRules.peopleHint().contains("сервер"))
     }
+
+    @Test
+    fun crlfNameFallsBackBeforeTrim() {
+        assertEquals(
+            "Исключить этого человека с сервера?",
+            RevokeRules.confirmPrompt("Боб\nAdmin"),
+        )
+        assertEquals("человек исключён", RevokeRules.noticeRevoked("Боб\r"))
+        assertEquals("человек исключён", RevokeRules.noticeRevoked("Боб\u0000x"))
+        assertEquals(
+            "Исключить этого человека с сервера?",
+            RevokeRules.confirmPrompt("Боб\n"),
+        )
+        assertFalse(RevokeRules.confirmPrompt("a\nb").contains('\n'))
+        assertEquals("Исключить Боб с сервера?", RevokeRules.confirmPrompt("  Боб  "))
+    }
 }
