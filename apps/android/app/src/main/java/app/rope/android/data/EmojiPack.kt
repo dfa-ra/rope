@@ -115,6 +115,10 @@ object EmojiPack {
 
     fun category(id: String): EmojiCategory? = categories.find { it.id == id }
 
+    /**
+     * Fail closed on CR/LF/NUL before trim so a newline prefix cannot hit a
+     * live category alias. Spaces still trim. Empty after trim still lists all.
+     */
     fun search(query: String): List<String> {
         if (query.indexOf('\n') >= 0 || query.indexOf('\r') >= 0 || query.indexOf('\u0000') >= 0) {
             return emptyList()
