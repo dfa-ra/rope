@@ -274,7 +274,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun consumeNotifyChat(intent: Intent?) {
-        val id = NotifyChatRules.chatId(intent?.getStringExtra(NotifyChatRules.EXTRA_CHAT_ID)) ?: return
+        if (intent == null) return
+        val id = NotifyChatRules.chatId(intent.getStringExtra(NotifyChatRules.EXTRA_CHAT_ID)) ?: return
         intent.removeExtra(NotifyChatRules.EXTRA_CHAT_ID)
         (application as RopeApp).repo.openFromNotification(id)
     }
