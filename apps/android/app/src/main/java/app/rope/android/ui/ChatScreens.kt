@@ -145,6 +145,7 @@ import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
+import app.rope.android.data.CallAgainRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -1003,6 +1004,15 @@ fun ChatPane(
                                             reactionExpanded = false
                                         }
                                     },
+                                    onCallAgain = if (
+                                        CallAgainRules.canRedial(m, isGroup = state.group != null, saved = saved)
+                                    ) {
+                                        {
+                                            if (CallAgainRules.usesVideo(m.text)) onVideoCall() else onCall()
+                                        }
+                                    } else {
+                                        null
+                                    },
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
@@ -1370,6 +1380,7 @@ private fun MessageBubble(
     onToggleSelect: () -> Unit = {},
     onEnterSelect: () -> Unit = {},
     onTap: () -> Unit = {},
+    onCallAgain: (() -> Unit)? = null,
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
@@ -1554,7 +1565,31 @@ private fun MessageBubble(
                             )
                             MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
                             MessageKind.FILE -> FileBubble(m)
-                            MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
+                            MessageKind.CALL -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(
+                                        "📞 ${m.text}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    if (onCallAgain != null) {
+                                        Icon(
+                                            imageVector = if (CallAgainRules.usesVideo(m.text)) {
+                                                Icons.Outlined.Videocam
+                                            } else {
+                                                Icons.Outlined.Call
+                                            },
+                                            contentDescription = CallAgainRules.a11y(m.text),
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .clickable(onClick = onCallAgain),
+                                        )
+                                    }
+                                }
+                            }
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                             else -> {
                                 val context = LocalContext.current
