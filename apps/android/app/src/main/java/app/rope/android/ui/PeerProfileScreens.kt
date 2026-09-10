@@ -17,16 +17,20 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -35,9 +39,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.media.ImageCodec
+import app.rope.android.media.VideoCodec
 
 @Composable
 fun PeerProfilePane(
@@ -134,20 +140,28 @@ private fun SharedPhotoTile(
     onClick: () -> Unit,
 ) {
     LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
-    val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+    val video = m.kind == MessageKind.VIDEO
+    val label = PeerProfileRules.tileLabel(m.kind)
+    val bmp = remember(m.id, m.localPath, video) {
+        m.localPath?.let { path ->
+            runCatching {
+                if (video) VideoCodec.poster(path) else ImageCodec.decodePreview(path)
+            }.getOrNull()
+        }
+    }
     Box(
         Modifier
             .aspectRatio(1f)
             .padding(1.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
-            .semantics { contentDescription = "Фото" },
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         if (bmp != null) {
             Image(
                 bitmap = bmp.asImageBitmap(),
-                contentDescription = "Фото",
+                contentDescription = label,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -156,6 +170,17 @@ private fun SharedPhotoTile(
                 "…",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (video) {
+            Icon(
+                Icons.Outlined.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), CircleShape)
+                    .padding(4.dp),
             )
         }
     }

@@ -21,23 +21,26 @@ class PeerProfileRulesTest {
     }
 
     @Test
-    fun photosAreNewestFirstSkipDeletedAndNonImages() {
+    fun photosAreNewestFirstSkipDeletedAndNonMedia() {
         val older = img("a", 10L, localPath = "/a.jpg")
         val newer = img("b", 20L, localPath = "/b.jpg")
         val text = img("t", 30L, kind = MessageKind.TEXT)
         val deleted = img("d", 40L, deleted = true)
         val voice = img("v", 50L, kind = MessageKind.VOICE)
+        val video = img("m", 25L, kind = MessageKind.VIDEO, localPath = "/m.mp4")
         val missingFile = img("c", 15L, localPath = null)
-        val photos = PeerProfileRules.photos(listOf(older, newer, text, deleted, voice, missingFile))
-        assertEquals(listOf("b", "c", "a"), photos.map { it.id })
+        val photos = PeerProfileRules.photos(listOf(older, newer, text, deleted, voice, video, missingFile))
+        assertEquals(listOf("b", "m", "c", "a"), photos.map { it.id })
         assertFalse(photos.any { it.deleted })
-        assertTrue(photos.all { it.kind == MessageKind.IMAGE })
+        assertTrue(photos.all { PeerProfileRules.isSharedMedia(it.kind) })
+        assertEquals("Видео", PeerProfileRules.tileLabel(MessageKind.VIDEO))
+        assertEquals("Фото", PeerProfileRules.tileLabel(MessageKind.IMAGE))
     }
 
     @Test
     fun emptyCopyAndSectionLabel() {
         assertEquals("Нет общих медиа", PeerProfileRules.emptyTitle())
-        assertEquals("Фото из этой переписки появятся здесь.", PeerProfileRules.emptyBody())
+        assertEquals("Фото и видео из этой переписки появятся здесь.", PeerProfileRules.emptyBody())
         assertEquals("Общие медиа", PeerProfileRules.sectionLabel(0))
         assertEquals("Общие медиа · 3", PeerProfileRules.sectionLabel(3))
         assertEquals("Анна", PeerProfileRules.title("Анна"))
