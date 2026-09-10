@@ -9,7 +9,9 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.PendingIntentCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.NotifMuteRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -29,21 +31,48 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        chatId: String? = null,
+    ) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, MSG)
+        val builder = NotificationCompat.Builder(context, MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
-            .build()
-        runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+        val id = NotifMuteRules.chatId(chatId)
+        if (id != null && NotifMuteRules.allows(id)) {
+            val muteIntent = Intent(context, NotifMuteReceiver::class.java).apply {
+                action = NotifMuteRules.ACTION
+                putExtra(NotifMuteRules.EXTRA_CHAT_ID, id)
+                putExtra(NotifMuteRules.EXTRA_NOTIFY_ID, notifyId)
+            }
+            val mutePi = PendingIntentCompat.getBroadcast(
+                context,
+                NotifMuteRules.requestCode(id),
+                muteIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT,
+                false,
+            )
+            if (mutePi != null) {
+                builder.addAction(
+                    android.R.drawable.ic_lock_silent_mode,
+                    NotifMuteRules.LABEL,
+                    mutePi,
+                )
+            }
+        }
+        runCatching { NotificationManagerCompat.from(context).notify(notifyId, builder.build()) }
     }
 
     fun incomingCall(name: String) {

@@ -49,6 +49,7 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.NotifMuteRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -769,6 +770,14 @@ class RopeRepository(private val app: Application) {
     fun toggleMuteChat(id: String) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
+        refreshConversations()
+    }
+
+    fun muteChatFromNotification(chatId: String) {
+        val id = NotifMuteRules.chatId(chatId) ?: return
+        if (!NotifMuteRules.allows(id)) return
+        val cur = store.chatPrefs(id)
+        store.saveChatPrefs(id, NotifMuteRules.apply(cur))
         refreshConversations()
     }
 
@@ -3429,7 +3438,7 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            notifier.message(title, body, AlbumRules.notifyId(body, albumId), chatId)
         }
     }
 

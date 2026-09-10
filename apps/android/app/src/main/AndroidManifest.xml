@@ -63,6 +63,9 @@
             </intent-filter>
         </receiver>
         <receiver
+            android:name=".notify.NotifMuteReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".update.InstallStatusReceiver"
             android:exported="false" />
         <provider
