@@ -152,6 +152,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.ForwardCommentRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -2278,6 +2279,7 @@ private fun ComposerBar(
         state.recording,
         recordingLocked,
         pendingMedia = state.pendingAttachments.isNotEmpty(),
+        pendingForward = state.forwarding != null,
     )
     val micScale by animateFloatAsState(
         targetValue = if (state.recording && !recordingLocked) 1.18f else 1f,
@@ -2292,6 +2294,11 @@ private fun ComposerBar(
             state.editTarget?.let { target ->
                 ComposerHint(
                     copy = ComposerHintRules.edit(target.preview()),
+                    onCancel = onCancelComposer,
+                )
+            } ?: state.forwarding?.let { target ->
+                ComposerHint(
+                    copy = ForwardCommentRules.hint(target.preview()),
                     onCancel = onCancelComposer,
                 )
             } ?: state.replyTo?.let { target ->

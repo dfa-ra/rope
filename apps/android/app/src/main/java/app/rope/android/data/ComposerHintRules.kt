@@ -1,6 +1,6 @@
 package app.rope.android.data
 
-enum class ComposerHintKind { REPLY, EDIT, MEDIA }
+enum class ComposerHintKind { REPLY, EDIT, MEDIA, FORWARD }
 
 data class ComposerHintCopy(
     val kind: ComposerHintKind,

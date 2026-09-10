@@ -750,11 +750,17 @@ object ComposerRules {
         recording: Boolean,
         recordingLocked: Boolean = false,
         pendingMedia: Boolean = false,
+        pendingForward: Boolean = false,
     ): Boolean =
-        (pendingMedia && !recording) || (draft.isNotBlank() && !recording) || recordingLocked
+        (pendingMedia && !recording) || (pendingForward && !recording) || (draft.isNotBlank() && !recording) || recordingLocked
 
-    fun showMicButton(draft: String, recording: Boolean, recordingLocked: Boolean = false): Boolean =
-        (draft.isBlank() || recording) && !recordingLocked
+    fun showMicButton(
+        draft: String,
+        recording: Boolean,
+        recordingLocked: Boolean = false,
+        pendingForward: Boolean = false,
+    ): Boolean =
+        !pendingForward && (draft.isBlank() || recording) && !recordingLocked
 
     fun shouldLockVoice(deltaY: Float): Boolean = deltaY <= -VOICE_LOCK_SLIDE_UP
 

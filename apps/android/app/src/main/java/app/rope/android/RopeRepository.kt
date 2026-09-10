@@ -31,6 +31,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
+import app.rope.android.data.ForwardCommentRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
@@ -627,6 +628,45 @@ class RopeRepository(private val app: Application) {
             applyEdit(edit, text)
             return
         }
+        val pendingFwd = _state.value.forwarding
+        if (pendingFwd != null && !_state.value.recording) {
+            val comment = _state.value.draftText
+            val group = _state.value.group
+            val peer = _state.value.peer
+            val saved = SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(peer?.deviceId)
+            _state.value = _state.value.copy(
+                forwarding = null,
+                draftText = "",
+                replyTo = null,
+                replySpan = null,
+                composerPreview = null,
+                composerPreviewDismissedUrl = null,
+            )
+            persistOpenDraft()
+            scope.launch {
+                try {
+                    when {
+                        saved -> forwardToSaved(pendingFwd)
+                        group != null -> forwardToGroup(group, pendingFwd)
+                        peer != null -> forwardToPeer(peer, pendingFwd)
+                        else -> notice("некуда переслать")
+                    }
+                    if (ForwardCommentRules.sendComment(comment)) {
+                        when {
+                            group != null -> sendGroupText(group, comment)
+                            saved -> saveLocalText(comment)
+                            else -> {
+                                val dest = peer ?: return@launch
+                                sendPeerText(dest, comment, ReplyPack(), null)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    error(e)
+                }
+            }
+            return
+        }
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
             val caption = _state.value.draftText
@@ -710,6 +750,7 @@ class RopeRepository(private val app: Application) {
             replyTo = null,
             replySpan = null,
             editTarget = null,
+            forwarding = null,
         )
     }
 
@@ -818,28 +859,12 @@ class RopeRepository(private val app: Application) {
     }
 
     fun completeForward(c: Conversation) {
-        val src = _state.value.forwarding ?: return
-        _state.value = _state.value.copy(forwarding = null)
-        scope.launch {
-            try {
-                when {
-                    SavedMessagesRules.isSaved(c.id) -> {
-                        forwardToSaved(src)
-                        openSaved()
-                    }
-                    c.group != null -> {
-                        forwardToGroup(c.group, src)
-                        openGroup(c.group)
-                    }
-                    c.peer != null -> {
-                        forwardToPeer(c.peer, src)
-                        openChat(c.peer)
-                    }
-                    else -> notice("некуда переслать")
-                }
-            } catch (e: Exception) {
-                error(e)
-            }
+        if (_state.value.forwarding == null) return
+        when {
+            SavedMessagesRules.isSaved(c.id) -> openSaved()
+            c.group != null -> openGroup(c.group)
+            c.peer != null -> openChat(c.peer)
+            else -> notice("некуда переслать")
         }
     }
 
@@ -2155,6 +2180,7 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun persistOpenDraft() {
+        if (_state.value.forwarding != null) return
         val id = openChatId() ?: return
         val cur = store.chatPrefs(id)
         if (cur.draft == _state.value.draftText) return
