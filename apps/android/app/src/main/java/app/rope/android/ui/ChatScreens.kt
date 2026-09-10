@@ -161,6 +161,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.VideoHoldRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -3075,16 +3076,39 @@ fun ImageViewer(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val item = album[page]
+            val video = item.kind == MessageKind.VIDEO
+            var holding by remember(item.id) { mutableStateOf(false) }
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(onClick = onClose),
+                    .then(
+                        if (video) {
+                            Modifier.pointerInput(item.id) {
+                                awaitVideoHold(
+                                    onHolding = { holding = it },
+                                    onTap = onClose,
+                                )
+                            }
+                        } else {
+                            Modifier.clickable(onClick = onClose)
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (item.kind == MessageKind.VIDEO) {
+                if (video) {
                     val path = item.localPath
                     if (!path.isNullOrBlank()) {
-                        VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
+                        VideoViewerSurface(
+                            path,
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            speed = VideoHoldRules.speed(holding),
+                        )
+                        VideoHoldChip(
+                            holding = holding,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 24.dp),
+                        )
                     } else {
                         Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }

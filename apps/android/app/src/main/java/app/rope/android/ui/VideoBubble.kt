@@ -1,10 +1,15 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -31,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,7 +46,9 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.VideoHoldRules
 import app.rope.android.media.VideoCodec
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
@@ -60,12 +69,18 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var holding by remember(m.id) { mutableStateOf(false) }
+    val player = remember(m.id) { arrayOfNulls<MediaPlayer>(1) }
+    val speed = VideoHoldRules.speed(holding, playing)
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
         PhotoLayout.Box(PhotoLayout.MAX_WIDTH_DP, PhotoLayout.MAX_WIDTH_DP * 9f / 16f)
     }
     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
+    LaunchedEffect(speed, playing) {
+        player[0]?.let { applyVideoHoldSpeed(it, speed) }
+    }
     Box(
         modifier = Modifier
             .width(box.widthDp.dp)
@@ -81,7 +96,15 @@ fun VideoMessageBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        setOnCompletionListener { playing = false }
+                        setOnPreparedListener { mp ->
+                            player[0] = mp
+                            applyVideoHoldSpeed(mp, speed)
+                        }
+                        setOnCompletionListener {
+                            playing = false
+                            holding = false
+                            player[0] = null
+                        }
                     }
                 },
                 update = { view ->
@@ -95,8 +118,19 @@ fun VideoMessageBubble(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(m.id) {
+                        awaitVideoHold(onHolding = { holding = it })
+                    },
+            )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    holding = false
+                    player[0] = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -160,6 +194,13 @@ fun VideoMessageBubble(
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
+        VideoHoldChip(
+            holding = holding,
+            playing = playing,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(8.dp),
+        )
         if (path.isNullOrBlank()) {
             Text(
                 "Видео · загружается…",
@@ -174,17 +215,71 @@ fun VideoMessageBubble(
 }
 
 @Composable
-fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
+fun VideoViewerSurface(path: String, modifier: Modifier = Modifier, speed: Float = 1f) {
+    val player = remember(path) { arrayOfNulls<MediaPlayer>(1) }
+    LaunchedEffect(speed, path) {
+        player[0]?.let { applyVideoHoldSpeed(it, speed) }
+    }
     AndroidView(
         factory = { ctx ->
             VideoView(ctx).apply {
                 setVideoPath(path)
                 setOnPreparedListener { mp ->
+                    player[0] = mp
                     mp.isLooping = false
+                    applyVideoHoldSpeed(mp, speed)
                     start()
                 }
             }
         },
         modifier = modifier,
     )
+}
+
+@Composable
+fun VideoHoldChip(holding: Boolean, playing: Boolean = true, modifier: Modifier = Modifier) {
+    if (!VideoHoldRules.chipVisible(holding, playing)) return
+    Text(
+        VideoHoldRules.LABEL,
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
+internal suspend fun PointerInputScope.awaitVideoHold(
+    onHolding: (Boolean) -> Unit,
+    onTap: (() -> Unit)? = null,
+) {
+    awaitEachGesture {
+        awaitFirstDown()
+        var held = false
+        try {
+            val up = withTimeoutOrNull(VideoHoldRules.HOLD_MS) { waitForUpOrCancellation() }
+            if (up == null) {
+                held = true
+                onHolding(true)
+                waitForUpOrCancellation()
+            } else {
+                onTap?.invoke()
+            }
+        } finally {
+            if (held) onHolding(false)
+        }
+    }
+}
+
+internal fun applyVideoHoldSpeed(player: MediaPlayer, speed: Float) {
+    try {
+        val params = try {
+            player.playbackParams
+        } catch (_: Exception) {
+            PlaybackParams()
+        }
+        player.playbackParams = params.setSpeed(speed)
+    } catch (_: Exception) {
+    }
 }
