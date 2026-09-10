@@ -35,7 +35,7 @@ class PinListRulesTest {
     fun remoteSetAppendsAndClearRemovesOnlyTarget() {
         val ids = listOf("m1", "m2")
         assertEquals(listOf("m1", "m2", "m3"), PinListRules.applyRemote(ids, "m3", clear = false))
-        assertEquals(listOf("m1", "m3"), PinListRules.applyRemote(ids, "m2", clear = true))
+        assertEquals(listOf("m1"), PinListRules.applyRemote(ids, "m2", clear = true))
         assertEquals(ids, PinListRules.applyRemote(ids, "  ", clear = false))
         val moved = PinListRules.applyRemote(ids, "m1", clear = false)
         assertEquals(listOf("m2", "m1"), moved)
