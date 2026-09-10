@@ -24,6 +24,7 @@ import app.rope.android.data.CallEffect
 import app.rope.android.data.CallMachine
 import app.rope.android.data.CallSignal
 import app.rope.android.data.CallToneRules
+import app.rope.android.data.CallToRules
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
@@ -3311,8 +3312,8 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun sendCall(callId: String, to: String, event: String, payload: String): Boolean {
-        val dest = PeerIds.normalize(to)
-        if (dest.isBlank() || ChatIds.isGroup(to)) return false
+        val dest = CallToRules.parse(to) ?: return false
+        if (ChatIds.isGroup(dest)) return false
         if (payload.isNotEmpty() && !VideoCallRules.fitsWss(payload)) {
             notice(VideoCallRules.sdpTooLargeNotice())
             return false

@@ -746,7 +746,8 @@ type pendingCall struct {
 }
 
 func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
-	if in.CallID == "" || strings.TrimSpace(in.To) == "" {
+	to, ok := validCallTo(in.To)
+	if in.CallID == "" || !ok {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
 		return
 	}
@@ -772,7 +773,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}
-	target := s.resolveCallTarget(in.To)
+	target := s.resolveCallTarget(to)
 	if dest, ok := s.Hub.Get(target); ok {
 		if isCallTerminal(event) {
 			s.dropPendingCall(in.CallID)
