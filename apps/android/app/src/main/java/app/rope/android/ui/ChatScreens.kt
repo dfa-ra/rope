@@ -171,6 +171,7 @@ import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupSenderRules
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
@@ -755,6 +756,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onOpenSender: (ChatMessage) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1006,6 +1008,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onOpenSender = onOpenSender,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1038,6 +1041,7 @@ fun ChatPane(
                                         reactionExpanded = false
                                     },
                                     onSwipeReply = { target -> onReply(target) },
+                                    onOpenSender = onOpenSender,
                                 )
                             }
                         }
@@ -1373,6 +1377,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onOpenSender: (ChatMessage) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1406,6 +1411,8 @@ private fun MessageBubble(
     val senderColor = Color(GroupChatUx.senderColorArgb(m.senderId, senderLabel))
     val showName = GroupChatUx.showSenderName(inGroup, mine, clusterFirst) && !m.deleted
     val showAvatar = inGroup && !mine && clusterLast
+    val canTapSender = !selecting && GroupSenderRules.canOpen(inGroup, m, state.profile?.deviceId)
+    val openSender = { onOpenSender(m) }
     val topPad = if (clusterFirst) 8.dp else 2.dp
     val corner = RopeShapes.bubble
     val tight = 8.dp
@@ -1445,7 +1452,12 @@ private fun MessageBubble(
                 horizontalArrangement = if (mine) Arrangement.spacedBy(6.dp, Alignment.End) else Arrangement.spacedBy(6.dp),
             ) {
             if (inGroup && !mine) {
-                Box(Modifier.width(28.dp), contentAlignment = Alignment.BottomCenter) {
+                Box(
+                    Modifier
+                        .width(28.dp)
+                        .senderOpen(showAvatar && canTapSender, openSender),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
                     if (showAvatar) {
                         InitialsAvatar(
                             title = senderLabel.ifBlank { "?" },
@@ -1481,7 +1493,9 @@ private fun MessageBubble(
                                 senderLabel,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = senderColor,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                                modifier = Modifier
+                                    .padding(start = 4.dp, bottom = 4.dp)
+                                    .senderOpen(canTapSender, openSender),
                             )
                         }
                         AttributionChrome(
@@ -1526,7 +1540,12 @@ private fun MessageBubble(
             Box {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                     if (showName) {
-                        Text(senderLabel, style = MaterialTheme.typography.labelMedium, color = senderColor)
+                        Text(
+                            senderLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = senderColor,
+                            modifier = Modifier.senderOpen(canTapSender, openSender),
+                        )
                     }
                     AttributionChrome(
                         msg = m,
@@ -2008,6 +2027,7 @@ private fun AlbumBubble(
     onEnterSelect: () -> Unit,
     onLongPressMember: (ChatMessage) -> Unit,
     onSwipeReply: (ChatMessage) -> Unit = {},
+    onOpenSender: (ChatMessage) -> Unit = {},
 ) {
     val first = members.firstOrNull() ?: return
     val last = members.last()
@@ -2016,6 +2036,7 @@ private fun AlbumBubble(
     val senderLabel = first.senderName.ifBlank { first.senderId.take(8) }
     val senderColor = Color(GroupChatUx.senderColorArgb(first.senderId, senderLabel))
     val showName = GroupChatUx.showSenderName(inGroup, mine, clusterFirst) && !first.deleted
+    val canTapSender = !selecting && GroupSenderRules.canOpen(inGroup, first, state.profile?.deviceId)
     val selectAlpha by animateFloatAsState(if (selected) 0.28f else 0f, label = "albumSelect")
     val tiles = PhotoLayout.mosaic(members.size)
     val meta = MessageTime.meta(last.status, last.outgoing, last.timestampMs, edited = last.edited)
@@ -2035,7 +2056,9 @@ private fun AlbumBubble(
                 senderLabel,
                 style = MaterialTheme.typography.labelMedium,
                 color = senderColor,
-                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 4.dp)
+                    .senderOpen(canTapSender) { onOpenSender(first) },
             )
         }
         AttributionChrome(
@@ -2991,6 +3014,9 @@ private fun decodeRecentThumb(
         resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
     }.getOrNull()
 }
+
+private fun Modifier.senderOpen(enabled: Boolean, onOpen: () -> Unit): Modifier =
+    if (!enabled) this else clickable(onClickLabel = GroupSenderRules.ACTION, onClick = onOpen)
 
 @Composable
 fun InitialsAvatar(

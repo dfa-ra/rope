@@ -33,6 +33,7 @@ import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupSenderRules
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
@@ -539,6 +540,18 @@ class RopeRepository(private val app: Application) {
     fun openChat(device: DirectoryDevice) {
         persistOpenDraft()
         enterChat(device.deviceId, device, null)
+    }
+
+    fun openGroupSender(msg: ChatMessage) {
+        val s = _state.value
+        if (!GroupSenderRules.canOpen(s.group != null, msg, s.profile?.deviceId)) return
+        val peer = GroupSenderRules.peerFor(msg, s.devices, s.onlineIds)
+        if (peer == null) {
+            notice(GroupSenderRules.NOTICE_MISSING)
+            return
+        }
+        persistOpenDraft()
+        enterChat(peer.deviceId, peer, null)
     }
 
     fun openGroup(group: RopeGroup) {
