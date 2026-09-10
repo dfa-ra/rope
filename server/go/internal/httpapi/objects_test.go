@@ -78,6 +78,9 @@ func TestObjectUploadDownloadAndHashMismatch(t *testing.T) {
 	if resp.Header.Get("X-Rope-SHA256") != sum {
 		t.Fatalf("download hash %s want %s", resp.Header.Get("X-Rope-SHA256"), sum)
 	}
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("download Cache-Control %q", resp.Header.Get("Cache-Control"))
+	}
 	if !bytes.Equal(got, body) {
 		t.Fatal("downloaded body mismatch")
 	}

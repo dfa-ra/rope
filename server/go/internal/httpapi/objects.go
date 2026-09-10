@@ -92,6 +92,7 @@ func (s *Server) downloadObject(w http.ResponseWriter, r *http.Request, _ authed
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("X-Rope-SHA256", meta.SHA256)
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(200)
 	_, _ = w.Write(raw)
 }
