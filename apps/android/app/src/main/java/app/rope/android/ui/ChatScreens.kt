@@ -146,6 +146,7 @@ import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
+import app.rope.android.data.ChatColorRules
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
@@ -1377,8 +1378,8 @@ private fun MessageBubble(
     val mine = m.outgoing
     val inGroup = state.group != null
     val dark = MaterialTheme.colorScheme.background == RopeDarkBg
-    val outBg = if (dark) OutBubbleDark else OutBubbleLight
-    val outFg = if (dark) Color(0xFFF4F4F5) else Color.White
+    val outBg = Color(ChatColorRules.outArgb(state.chatColor, dark))
+    val outFg = Color(ChatColorRules.outFgArgb(state.chatColor, dark))
     val me = state.profile?.deviceId.orEmpty()
     val marked = selected || highlighted
     var appeared by remember(m.id) { mutableStateOf(false) }
