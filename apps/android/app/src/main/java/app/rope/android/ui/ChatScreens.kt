@@ -1716,7 +1716,7 @@ private fun MentionText(
         text = annotated,
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
-            val hit = hidden.firstOrNull { range -> SpoilerRules.covers(listOf(range), offset) }
+            val hit = hidden.firstOrNull { range -> range.contains(offset) }
             if (hit != null) {
                 revealed = revealed + listOf(hit)
                 return@ClickableText
