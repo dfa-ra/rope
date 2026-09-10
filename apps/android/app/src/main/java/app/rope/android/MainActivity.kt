@@ -244,6 +244,7 @@ class MainActivity : AppCompatActivity() {
                     onCancelComposer = repo::cancelComposerExtra,
                     onDismissLinkPreview = repo::dismissComposerPreview,
                     onCancelPendingMedia = repo::cancelPendingMedia,
+                    onTogglePendingViewOnce = repo::togglePendingViewOnce,
                     onCancelForward = repo::cancelForward,
                     onChatQuery = repo::setChatQuery,
                     onMessageQuery = repo::setMessageQuery,

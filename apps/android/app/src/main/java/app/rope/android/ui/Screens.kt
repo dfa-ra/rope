@@ -164,6 +164,7 @@ fun RopeScaffold(
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
+    onTogglePendingViewOnce: () -> Unit = {},
     onCancelForward: () -> Unit,
     onChatQuery: (String) -> Unit,
     onMessageQuery: (String) -> Unit,
@@ -319,6 +320,7 @@ fun RopeScaffold(
                             onCancelComposer = onCancelComposer,
                             onDismissLinkPreview = onDismissLinkPreview,
                             onCancelPendingMedia = onCancelPendingMedia,
+                            onTogglePendingViewOnce = onTogglePendingViewOnce,
                             onCopy = onCopy,
                             onPinMessage = onPinMessage,
                             onJump = onJump,
@@ -363,10 +365,12 @@ fun RopeScaffold(
         }
     }
     state.viewingImage?.let { img ->
-        val siblings = if (state.screen == Screen.PeerProfile) {
-            app.rope.android.data.PeerProfileRules.photos(state.messages).ifEmpty { listOf(img) }
-        } else {
-            app.rope.android.data.AlbumRules.siblings(state.messages, img)
+        val siblings = when {
+            app.rope.android.data.ViewOnceRules.viewerAlone(img) -> listOf(img)
+            state.screen == Screen.PeerProfile -> {
+                app.rope.android.data.PeerProfileRules.photos(state.messages).ifEmpty { listOf(img) }
+            }
+            else -> app.rope.android.data.AlbumRules.siblings(state.messages, img)
         }
         app.rope.android.ui.ImageViewer(
             msg = img,

@@ -55,6 +55,7 @@ import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.data.VideoRules
+import app.rope.android.data.ViewOnceRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -185,6 +186,8 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val pendingViewOnce: Boolean = false,
+    val viewedOnce: Set<String> = emptySet(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -256,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    viewedOnce = store.viewedOnce(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -633,16 +637,18 @@ class RopeRepository(private val app: Application) {
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
             val destGroup = _state.value.group
+            val once = _state.value.pendingViewOnce
             _state.value = _state.value.copy(
                 draftText = "",
                 pendingAttachments = emptyList(),
+                pendingViewOnce = false,
                 replyTo = null,
                 replySpan = null,
                 composerPreview = null,
                 composerPreviewDismissedUrl = null,
             )
             persistOpenDraft()
-            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
+            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup, once = once)
             return
         }
         val text = _state.value.draftText
@@ -702,6 +708,7 @@ class RopeRepository(private val app: Application) {
             replySpan = null,
             draftText = msg.text,
             pendingAttachments = emptyList(),
+            pendingViewOnce = false,
         )
     }
 
@@ -714,7 +721,12 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelPendingMedia() {
-        _state.value = _state.value.copy(pendingAttachments = emptyList())
+        _state.value = _state.value.copy(pendingAttachments = emptyList(), pendingViewOnce = false)
+    }
+
+    fun togglePendingViewOnce() {
+        if (_state.value.pendingAttachments.isEmpty()) return
+        _state.value = _state.value.copy(pendingViewOnce = !_state.value.pendingViewOnce)
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -806,7 +818,15 @@ class RopeRepository(private val app: Application) {
 
     fun openImage(msg: ChatMessage) {
         if ((msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VIDEO) || msg.deleted) return
-        _state.value = _state.value.copy(viewingImage = msg)
+        val flagged = ViewOnceRules.flagged(msg)
+        if (!ViewOnceRules.canOpen(msg.outgoing, flagged, msg.id in _state.value.viewedOnce)) return
+        if (ViewOnceRules.consumeOnOpen(msg.outgoing, flagged)) {
+            val next = ViewOnceRules.mark(_state.value.viewedOnce, msg.id)
+            store.saveViewedOnce(next)
+            _state.value = _state.value.copy(viewingImage = msg, viewedOnce = next)
+        } else {
+            _state.value = _state.value.copy(viewingImage = msg)
+        }
     }
 
     fun closeImage() {
@@ -865,6 +885,7 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = ReplyPack(),
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
+        once: Boolean = false,
     ) {
         val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
         if (pack.id == null && resolved.id != null) {
@@ -894,6 +915,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        once = once,
                     )
                 }
                 rest.forEach { item ->
@@ -906,6 +928,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        once = once,
                     )
                 }
             } catch (e: Exception) {
@@ -1174,6 +1197,9 @@ class RopeRepository(private val app: Application) {
             scope.launch { downloadLinkThumb(msg.id, lp) }
         }
         if (msg.extra.isBlank()) return
+        val viewed = msg.id in _state.value.viewedOnce
+        val viewing = _state.value.viewingImage?.id == msg.id
+        if (!viewing && ViewOnceRules.skipDownload(msg.outgoing, ViewOnceRules.flagged(msg), viewed)) return
         if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE && msg.kind != MessageKind.VIDEO && msg.kind != MessageKind.VIDEO_NOTE) return
         val path = msg.localPath
         if (!force && path != null && File(path).isFile && File(path).length() > 8) return
@@ -1590,6 +1616,7 @@ class RopeRepository(private val app: Application) {
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
         waveform: List<Int> = emptyList(),
+        once: Boolean = false,
     ) {
         val id = identity ?: return
         val group = destGroup
@@ -1616,6 +1643,7 @@ class RopeRepository(private val app: Application) {
             albumCount = if (grouped) albumCount else 1,
             caption = cap,
             waveform = waveform,
+            once = ViewOnceRules.pack(kind, once),
         ).withReply(
             pack.id,
             pack.preview,
@@ -2126,11 +2154,13 @@ class RopeRepository(private val app: Application) {
         val prefs = store.chatPrefs(chatId)
         val messages = store.messages(chatId)
         val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
-        val pending = if (MediaSendRules.keepPendingOnEnter(openChatId(), chatId)) {
+        val keepPending = MediaSendRules.keepPendingOnEnter(openChatId(), chatId)
+        val pending = if (keepPending) {
             _state.value.pendingAttachments
         } else {
             emptyList()
         }
+        val pendingViewOnce = keepPending && _state.value.pendingViewOnce
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
@@ -2145,6 +2175,7 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            pendingViewOnce = pendingViewOnce,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
         )

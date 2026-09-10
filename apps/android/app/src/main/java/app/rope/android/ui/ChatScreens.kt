@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -178,6 +179,7 @@ import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.ViewOnceRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
@@ -755,6 +757,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onTogglePendingViewOnce: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -999,8 +1002,19 @@ fun ChatPane(
                                     },
                                     onTap = {
                                         if (!m.deleted) {
-                                            menuMessage = m
-                                            reactionExpanded = false
+                                            val onceOpen = ViewOnceRules.canMark(m.kind) &&
+                                                ViewOnceRules.flagged(m) &&
+                                                ViewOnceRules.canOpen(
+                                                    m.outgoing,
+                                                    true,
+                                                    m.id in state.viewedOnce,
+                                                )
+                                            if (onceOpen && !m.outgoing) {
+                                                onOpenImage(m)
+                                            } else {
+                                                menuMessage = m
+                                                reactionExpanded = false
+                                            }
                                         }
                                     },
                                     onSwipeReply = { onReply(m) },
@@ -1112,6 +1126,7 @@ fun ChatPane(
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
+                onTogglePendingViewOnce = onTogglePendingViewOnce,
             )
         }
     }
@@ -1489,7 +1504,11 @@ private fun MessageBubble(
                             accent = senderColor,
                             onJump = onJump,
                         )
-                        if (m.kind == MessageKind.VIDEO) {
+                        if (ViewOnceRules.placeholder(m, state.viewedOnce)) {
+                            ViewOncePlaceholder()
+                        } else if (ViewOnceRules.locked(m, state.viewedOnce)) {
+                            ViewOnceLocked(m, onEnsureMedia)
+                        } else if (m.kind == MessageKind.VIDEO) {
                             VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
                         } else {
                             ImageBubble(m, onEnsureMedia, overlayMeta = true)
@@ -2056,10 +2075,13 @@ private fun AlbumBubble(
                     tile = tile,
                     overlayMeta = i == members.lastIndex && meta.isNotBlank(),
                     meta = meta,
+                    consumed = ViewOnceRules.placeholder(m, state.viewedOnce),
+                    locked = ViewOnceRules.locked(m, state.viewedOnce),
                     onEnsure = onEnsureMedia,
                     onClick = {
                         when {
                             selecting -> onToggleSelect()
+                            ViewOnceRules.placeholder(m, state.viewedOnce) -> {}
                             else -> onOpenImage(m)
                         }
                     },
@@ -2094,6 +2116,8 @@ private fun MosaicTile(
     tile: PhotoLayout.Tile,
     overlayMeta: Boolean,
     meta: String,
+    consumed: Boolean = false,
+    locked: Boolean = false,
     onEnsure: (ChatMessage) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -2112,7 +2136,21 @@ private fun MosaicTile(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        if (bmp != null) {
+        if (consumed) {
+            Text(
+                ViewOnceRules.VIEWED,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center).padding(4.dp),
+            )
+        } else if (locked) {
+            Text(
+                ViewOnceRules.LABEL,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center).padding(4.dp),
+            )
+        } else if (bmp != null) {
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = if (video) "Видео" else "Фото",
@@ -2127,7 +2165,7 @@ private fun MosaicTile(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        if (video) {
+        if (video && !consumed && !locked) {
             Text(
                 extra?.durationMs?.takeIf { it > 0 }?.let { MediaPayload.formatDuration(it) } ?: "видео",
                 style = MaterialTheme.typography.labelSmall,
@@ -2140,7 +2178,7 @@ private fun MosaicTile(
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
-        if (overlayMeta) {
+        if (overlayMeta && !consumed && !locked) {
             Text(
                 meta,
                 style = MaterialTheme.typography.labelSmall,
@@ -2205,6 +2243,43 @@ private fun ImageBubble(
 }
 
 @Composable
+private fun ViewOnceLocked(m: ChatMessage, onEnsure: (ChatMessage) -> Unit) {
+    LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
+    Box(
+        modifier = Modifier
+            .width(PhotoLayout.MAX_WIDTH_DP.dp)
+            .height((PhotoLayout.MAX_WIDTH_DP * 9f / 16f).dp)
+            .clip(RoundedCornerShape(RopeShapes.media))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            ViewOnceRules.LABEL,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ViewOncePlaceholder() {
+    Box(
+        modifier = Modifier
+            .width(PhotoLayout.MAX_WIDTH_DP.dp)
+            .height((PhotoLayout.MAX_WIDTH_DP * 9f / 16f).dp)
+            .clip(RoundedCornerShape(RopeShapes.media))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            ViewOnceRules.VIEWED,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
 private fun MediaCaptionLine(caption: String?) {
     val text = caption?.trim().orEmpty()
     if (text.isEmpty()) return
@@ -2225,6 +2300,7 @@ private fun FileBubble(m: ChatMessage) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposerBar(
     state: UiState,
@@ -2237,6 +2313,7 @@ private fun ComposerBar(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
+    onTogglePendingViewOnce: () -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
@@ -2321,6 +2398,18 @@ private fun ComposerBar(
                     copy = MediaSendRules.hint(state.pendingAttachments.size, videos),
                     onCancel = onCancelPendingMedia,
                 )
+                val onceOk = ViewOnceRules.pendingEligible(
+                    state.pendingAttachments.map { context.contentResolver.getType(it).orEmpty() },
+                    state.pendingAttachments.map { it.lastPathSegment.orEmpty() },
+                )
+                if (onceOk) {
+                    FilterChip(
+                        selected = state.pendingViewOnce,
+                        onClick = onTogglePendingViewOnce,
+                        label = { Text(ViewOnceRules.LABEL) },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    )
+                }
             }
             state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
                 ComposerLinkPreview(
