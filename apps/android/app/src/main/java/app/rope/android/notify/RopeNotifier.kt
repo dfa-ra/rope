@@ -6,21 +6,20 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.NotifySoundRules
 
 class RopeNotifier(private val context: Context) {
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             val mgr = context.getSystemService(NotificationManager::class.java)
-            mgr.createNotificationChannel(
-                NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                },
-            )
+            ensureMessageChannel(NotifySoundRules.DEFAULT)
             mgr.createNotificationChannel(
                 NotificationChannel(CALL, "Звонки", NotificationManager.IMPORTANCE_HIGH).apply {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
@@ -29,14 +28,21 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        sound: String = NotifySoundRules.DEFAULT,
+    ) {
+        val channel = NotifySoundRules.channelId(sound)
+        ensureMessageChannel(sound)
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, MSG)
+        val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
@@ -83,8 +89,27 @@ class RopeNotifier(private val context: Context) {
         NotificationManagerCompat.from(context).cancel(CALL_ID)
     }
 
+    private fun ensureMessageChannel(sound: String) {
+        if (Build.VERSION.SDK_INT < 26) return
+        val mgr = context.getSystemService(NotificationManager::class.java) ?: return
+        val id = NotifySoundRules.channelId(sound)
+        if (mgr.getNotificationChannel(id) != null) return
+        val ch = NotificationChannel(id, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            when {
+                NotifySoundRules.isSilent(sound) -> setSound(null, null)
+                NotifySoundRules.useRingtone(sound) -> setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .build(),
+                )
+            }
+        }
+        mgr.createNotificationChannel(ch)
+    }
+
     companion object {
-        private const val MSG = "rope-messages"
         private const val CALL = "rope-calls"
         private const val CALL_ID = 7102
     }

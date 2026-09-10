@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.NotifySoundRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetNotifySound: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -99,6 +101,22 @@ fun SettingsPane(
                         },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
                     )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(NotifySoundRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    NotifySoundRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NotifySoundRules.OPTIONS.forEach { opt ->
+                        FilterChip(
+                            selected = NotifySoundRules.normalize(state.notifySound) == opt.id,
+                            onClick = { onSetNotifySound(opt.id) },
+                            label = { Text(opt.label) },
+                        )
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(
