@@ -314,7 +314,11 @@ class Stage2UxTest {
             set(java.util.Calendar.MILLISECOND, 0)
         }
         val rfc = java.time.Instant.ofEpochMilli(seen.timeInMillis).toString()
-        assertEquals("был(а) 14:05", MessageTime.lastSeenLabel(rfc, false, seen.timeInMillis))
+        assertEquals("был(а) только что", MessageTime.lastSeenLabel(rfc, false, seen.timeInMillis))
+        assertEquals(
+            "был(а) в 14:05",
+            MessageTime.lastSeenLabel(rfc, false, seen.timeInMillis + 5 * 60_000L),
+        )
     }
 
     @Test

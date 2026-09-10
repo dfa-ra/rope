@@ -683,11 +683,17 @@ data class ReactionPayload(
 }
 
 object MessageTime {
+    const val JUST_NOW_MS = 60_000L
+    const val LAST_SEEN_PREFIX = "был(а)"
+    const val JUST_NOW = "только что"
+    const val ONLINE = "в сети"
+    const val OFFLINE_HINT = "не в сети — дойдёт, когда появится"
+
     fun label(ms: Long, now: Long = System.currentTimeMillis()): String {
         if (ms <= 0L) return ""
         val cal = java.util.Calendar.getInstance().apply { timeInMillis = ms }
         val today = java.util.Calendar.getInstance().apply { timeInMillis = now }
-        val hm = "%02d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
+        val hm = clock(cal)
         val sameDay = cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
             cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
         return if (sameDay) hm else "${cal.get(java.util.Calendar.DAY_OF_MONTH)}.${cal.get(java.util.Calendar.MONTH) + 1} $hm"
@@ -706,10 +712,28 @@ object MessageTime {
         return listOf(time, edit, mark).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
+    /**
+     * Telegram last-seen line: online, «только что», today «в HH:MM»,
+     * yesterday, weekday, or a date. Bubble [label] stays compact.
+     */
     fun lastSeenLabel(raw: String, online: Boolean, now: Long = System.currentTimeMillis()): String {
-        if (online) return "в сети"
-        val ms = parseRfc3339(raw) ?: return "не в сети — дойдёт, когда появится"
-        return "был(а) ${label(ms, now)}"
+        if (online) return ONLINE
+        val ms = parseRfc3339(raw) ?: return OFFLINE_HINT
+        return lastSeenWhen(ms, now)
+    }
+
+    fun lastSeenWhen(ms: Long, now: Long): String {
+        if (ms <= 0L) return OFFLINE_HINT
+        val delta = now - ms
+        if (delta < JUST_NOW_MS) return "$LAST_SEEN_PREFIX $JUST_NOW"
+        val hm = clock(java.util.Calendar.getInstance().apply { timeInMillis = ms })
+        val ago = DateSeparatorRules.daysAgo(ms, now)
+        return when {
+            ago <= 0 -> "$LAST_SEEN_PREFIX в $hm"
+            ago == 1 -> "$LAST_SEEN_PREFIX вчера в $hm"
+            ago in 2..6 -> "$LAST_SEEN_PREFIX ${DateSeparatorRules.label(ms, now)} в $hm"
+            else -> "$LAST_SEEN_PREFIX ${DateSeparatorRules.label(ms, now)}"
+        }
     }
 
     fun parseRfc3339(raw: String): Long? {
@@ -720,6 +744,9 @@ object MessageTime {
             null
         }
     }
+
+    private fun clock(cal: java.util.Calendar): String =
+        "%02d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
 }
 
 enum class VoiceGesture { HOLD, CANCEL, LOCK }
