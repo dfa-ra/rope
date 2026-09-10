@@ -4,8 +4,8 @@ package app.rope.android.data
  * RECEIPT envelopes are E2EE from any org member who can message you.
  * UI already limits edit/delete to outgoing; apply the same author check
  * on the wire so a peer cannot tombstone or rewrite someone else's rows.
- * Pin / react stay in a thread the actor shares with this device.
- * Not envelope crypto.
+ * Pin / react / vote / poll_close stay in a thread the actor shares
+ * with this device. Not envelope crypto.
  */
 object ChatControlRules {
     /** Edit/delete only the actor's own messages (sender device id). */
@@ -33,6 +33,9 @@ object ChatControlRules {
      * Same membership gate as pin / react. Missing UUID is a no-op.
      */
     fun allowVote(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean =
+        allowThreadOp(actorId, msg, groupMembers)
+
+    fun allowPollClose(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean =
         allowThreadOp(actorId, msg, groupMembers)
 
     private fun allowThreadOp(actorId: String?, msg: ChatMessage?, groupMembers: Collection<String>?): Boolean {

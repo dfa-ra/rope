@@ -2821,7 +2821,12 @@ class RopeRepository(private val app: Application) {
                         val gid = JsonIds.optional(target?.groupId)
                             ?: target?.peerDeviceId?.takeIf { ChatIds.isGroup(it) }?.let { ChatIds.rawGroupId(it) }
                         val members = gid?.let { store.group(it)?.members }
-                        if (!ChatControlRules.allowVote(sender.deviceId, target, members)) {
+                        val allowed = if (control.kind == ChatControl.POLL_CLOSE) {
+                            ChatControlRules.allowPollClose(sender.deviceId, target, members)
+                        } else {
+                            ChatControlRules.allowVote(sender.deviceId, target, members)
+                        }
+                        if (!allowed) {
                             // drop: actor is not in the poll's thread
                         }
                     }
