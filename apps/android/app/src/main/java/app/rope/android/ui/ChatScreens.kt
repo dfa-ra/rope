@@ -2404,7 +2404,6 @@ private fun ComposerBar(
                 )
             }
             if (state.editTarget == null && state.pendingAttachments.isNotEmpty()) {
-                val context = LocalContext.current
                 val videos = remember(state.pendingAttachments) {
                     MediaSendRules.videoCount(
                         state.pendingAttachments.map { context.contentResolver.getType(it).orEmpty() },
