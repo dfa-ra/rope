@@ -31,6 +31,7 @@ import app.rope.android.data.Reaction
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.RoleRules
+import app.rope.android.data.RopeGroup
 import app.rope.android.data.TextBody
 import app.rope.android.media.ImageCodec
 import org.json.JSONObject
@@ -98,9 +99,10 @@ class Stage2UxTest {
         assertEquals(null, fromAndroidOptString.groupId)
         val dm = MediaPayload("image", "o", "ab", "KEY", "image/jpeg", "p.jpg", 1)
         assertFalse(dm.toJson().contains("group_id"))
-        assertEquals("peer-1", ChatRouting.mediaChatId("null", "peer-1", setOf("real-group")))
-        assertEquals("peer-1", ChatRouting.mediaChatId(null, "peer-1", emptySet()))
-        assertEquals(ChatIds.group("real-group"), ChatRouting.mediaChatId("real-group", "peer-1", setOf("real-group")))
+        val known = listOf(RopeGroup("real-group", "g", 1, listOf("peer-1")))
+        assertEquals("peer-1", ChatRouting.mediaChatId("null", "peer-1", known))
+        assertEquals("peer-1", ChatRouting.mediaChatId(null, "peer-1", emptyList()))
+        assertEquals(ChatIds.group("real-group"), ChatRouting.mediaChatId("real-group", "peer-1", known))
         assertFalse(ChatIds.isOpenableGroup("g:null"))
         assertFalse(ChatRouting.showLeftoverThread("g:null"))
         assertTrue(ChatRouting.showLeftoverThread("peer-1"))

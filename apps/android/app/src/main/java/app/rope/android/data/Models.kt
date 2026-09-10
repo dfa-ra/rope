@@ -150,9 +150,16 @@ object JsonIds {
 }
 
 object ChatRouting {
-    fun mediaChatId(groupId: String?, senderDeviceId: String, knownGroups: Set<String>): String {
-        val gid = JsonIds.optional(groupId)
-        return if (gid != null && gid in knownGroups) ChatIds.group(gid) else senderDeviceId
+    /**
+     * Incoming MEDIA chat id. Group thread only when this device already knows
+     * the group and the sender is in local members. Otherwise the sender's 1:1
+     * (unknown group_id must not invent a group; a non-member must not post into one).
+     */
+    fun mediaChatId(groupId: String?, senderDeviceId: String, groups: Collection<RopeGroup>): String {
+        val gid = JsonIds.optional(groupId) ?: return senderDeviceId
+        val group = groups.find { PeerIds.same(it.groupId, gid) } ?: return senderDeviceId
+        if (!group.members.any { PeerIds.same(it, senderDeviceId) }) return senderDeviceId
+        return ChatIds.group(group.groupId)
     }
 
     fun showLeftoverThread(id: String): Boolean = !ChatIds.isGroup(id) && !ChatIds.isSaved(id)

@@ -2749,9 +2749,8 @@ class RopeRepository(private val app: Application) {
             EnvelopeTypes.MEDIA -> {
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
                 val payload = MediaPayload.parse(String(typed.body))
-                val known = _state.value.groups.map { it.groupId }.toSet()
-                val chatId = ChatRouting.mediaChatId(payload.groupId, sender.deviceId, known)
-                val routedGroup = JsonIds.optional(payload.groupId)?.takeIf { it in known }
+                val chatId = ChatRouting.mediaChatId(payload.groupId, sender.deviceId, store.groups())
+                val routedGroup = if (ChatIds.isGroup(chatId)) ChatIds.rawGroupId(chatId) else null
                 val msg = ChatMessage(
                     id = typed.messageId,
                     peerDeviceId = chatId,
