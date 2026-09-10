@@ -16,6 +16,7 @@ import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
+import app.rope.android.data.VideoQualRules
 import app.rope.android.data.VideoRules
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -63,7 +64,14 @@ object VideoCodec {
         }
     }
 
-    fun normalizeForSend(context: Context, uri: Uri, mime: String, name: String, cacheDir: File): CompressedVideo? {
+    fun normalizeForSend(
+        context: Context,
+        uri: Uri,
+        mime: String,
+        name: String,
+        cacheDir: File,
+        qual: String = VideoQualRules.COMPRESSED,
+    ): CompressedVideo? {
         cacheDir.mkdirs()
         val src = File(cacheDir, "vin-${System.nanoTime()}")
         try {
@@ -73,10 +81,13 @@ object VideoCodec {
             if (!src.isFile || src.length() <= 0L) return null
             val duration = durationMs(src.absolutePath)
             val outName = name.ifBlank { "video.mp4" }.substringBeforeLast('.') + ".mp4"
-            if (!VideoRules.mustCompress(src.length(), mime, name) && VideoRules.fitsCap(src.length())) {
-                return CompressedVideo(src.readBytes(), "video/mp4", duration, outName)
+            if (VideoQualRules.skipTranscode(qual, src.length(), mime, name) && VideoRules.fitsCap(src.length())) {
+                val keepOriginal = VideoQualRules.keepOriginalContainer(qual)
+                val keepMime = if (keepOriginal && mime.isNotBlank()) mime else "video/mp4"
+                val keepName = if (keepOriginal) name.ifBlank { "video.mp4" } else outName
+                return CompressedVideo(src.readBytes(), keepMime, duration, keepName)
             }
-            for (height in listOf(VideoRules.TARGET_HEIGHT, VideoRules.FALLBACK_HEIGHT, 360)) {
+            for (height in VideoQualRules.heights(qual)) {
                 val dest = File(cacheDir, "vout-${System.nanoTime()}.mp4")
                 val ok = transcode(context, src, dest, height)
                 if (ok && VideoRules.fitsCap(dest.length())) {

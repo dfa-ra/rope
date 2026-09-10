@@ -27,6 +27,7 @@ import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.VideoQualRules
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetVideoQual: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -121,6 +123,23 @@ fun SettingsPane(
                         },
                         modifier = Modifier.semantics { contentDescription = "Предпросмотр ссылок" },
                     )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(VideoQualRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    VideoQualRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    VideoQualRules.OPTIONS.forEach { opt ->
+                        FilterChip(
+                            selected = VideoQualRules.normalize(state.videoQual) == opt.id,
+                            onClick = { onSetVideoQual(opt.id) },
+                            label = { Text(opt.label) },
+                            modifier = Modifier.semantics { contentDescription = opt.label },
+                        )
+                    }
                 }
             }
         }

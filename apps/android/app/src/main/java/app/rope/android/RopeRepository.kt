@@ -54,6 +54,7 @@ import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.VideoQualRules
 import app.rope.android.data.VideoRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val videoQual: String = VideoQualRules.COMPRESSED,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    videoQual = store.videoQual(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -599,6 +602,13 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun setVideoQual(id: String) {
+        val next = VideoQualRules.normalize(id)
+        if (_state.value.videoQual == next) return
+        store.saveVideoQual(next)
+        _state.value = _state.value.copy(videoQual = next)
+    }
+
     fun dismissComposerPreview() {
         val url = _state.value.composerPreview?.url
             ?: LinkPreviewRules.firstHttps(_state.value.draftText)
@@ -933,6 +943,7 @@ class RopeRepository(private val app: Application) {
                 mime,
                 name,
                 File(app.cacheDir, "video-out"),
+                VideoQualRules.normalize(_state.value.videoQual),
             )
             if (compressed == null) {
                 notice(UserFacing.FILE_TOO_BIG)
