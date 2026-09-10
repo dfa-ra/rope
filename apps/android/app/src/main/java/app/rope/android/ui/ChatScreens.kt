@@ -171,6 +171,7 @@ import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.HashtagRules
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
@@ -1006,6 +1007,13 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onHashtag = { raw ->
+                                        val q = HashtagRules.query(raw)
+                                        if (q != null) {
+                                            showSearch = true
+                                            onMessageQuery(q)
+                                        }
+                                    },
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1373,6 +1381,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onHashtag: (String) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1564,6 +1573,7 @@ private fun MessageBubble(
                                     mentionColor = if (mine) outFg else senderColor,
                                     styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
                                     onPlainTap = onTap,
+                                    onHashtag = onHashtag,
                                 )
                                 val preview = m.linkPreview
                                 if (preview != null) {
@@ -1662,13 +1672,15 @@ private fun MentionText(
     mentionColor: Color,
     styleLarge: Boolean,
     onPlainTap: () -> Unit = {},
+    onHashtag: (String) -> Unit = {},
 ) {
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
     val links = remember(text) { LinkPreviewRules.spans(text) }
+    val tags = remember(text) { HashtagRules.spans(text) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
-    if (spans.isEmpty() && links.isEmpty()) {
+    if (spans.isEmpty() && links.isEmpty() && tags.isEmpty()) {
         Text(text, style = style)
         return
     }
@@ -1680,6 +1692,14 @@ private fun MentionText(
                 range.first,
                 range.last + 1,
             )
+        }
+        tags.forEach { tag ->
+            addStyle(
+                SpanStyle(color = linkColor, fontWeight = FontWeight.SemiBold),
+                tag.start,
+                tag.endExclusive,
+            )
+            addStringAnnotation("HASHTAG", tag.tag, tag.start, tag.endExclusive)
         }
         links.forEach { link ->
             addStyle(
@@ -1695,7 +1715,12 @@ private fun MentionText(
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
-            if (url != null) openHttps(context, url) else onPlainTap()
+            val tag = annotated.getStringAnnotations("HASHTAG", offset, offset).firstOrNull()?.item
+            when {
+                url != null -> openHttps(context, url)
+                tag != null -> onHashtag(tag)
+                else -> onPlainTap()
+            }
         },
     )
 }
