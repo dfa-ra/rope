@@ -157,7 +157,6 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkOpenRules
-import app.rope.android.data.LinkOpenRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
