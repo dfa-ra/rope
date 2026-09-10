@@ -21,8 +21,12 @@ object SecretKv {
         if (stored.isNullOrBlank()) return null
         if (!isWrapped(stored)) return stored
         val raw = stored.substring(PREFIX.length)
-        val ct = Base64.getDecoder().decode(raw)
-        return String(decrypt(ct), Charsets.UTF_8)
+        return try {
+            val ct = Base64.getDecoder().decode(raw)
+            String(decrypt(ct), Charsets.UTF_8)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun isWrapped(stored: String): Boolean = stored.startsWith(PREFIX)

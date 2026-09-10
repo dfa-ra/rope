@@ -28,4 +28,12 @@ class SecretKvTest {
         val once = SecretKv.wrap("tok") { it }
         assertEquals(once, SecretKv.wrap(once) { error("must not re-encrypt") })
     }
+
+    @Test
+    fun unwrapCorruptOrKeystoreMissIsNull() {
+        assertNull(SecretKv.unwrap(SecretKv.PREFIX + "%%%") { it })
+        val wrapped = SecretKv.wrap("tok") { it.reversedArray() }
+        assertNull(SecretKv.unwrap(wrapped) { error("keystore miss") })
+        assertEquals("ghp_old", SecretKv.unwrap("ghp_old") { error("no decrypt") })
+    }
 }
