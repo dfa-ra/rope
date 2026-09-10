@@ -131,6 +131,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -159,6 +160,8 @@ import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
+import app.rope.android.data.TextFmtKind
+import app.rope.android.data.TextFmtRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.data.UnreadBadgeKind
@@ -1614,7 +1617,9 @@ private fun AttributionChrome(msg: ChatMessage, accent: Color, onJump: (String) 
     if (!msg.deleted && !replyId.isNullOrBlank() && !ForwardRules.hidesReplyQuote(msg)) {
         ReplyQuote(
             name = GroupChatUx.replyQuoteName(msg.replyName, msg.outgoing),
-            preview = QuoteSpanRules.displayPreview(msg.replyPreview, msg.quoteText).ifBlank { "Сообщение" },
+            preview = TextFmtRules.plain(
+                QuoteSpanRules.displayPreview(msg.replyPreview, msg.quoteText),
+            ).ifBlank { "Сообщение" },
             accent = accent,
             onClick = { onJump(replyId) },
         )
@@ -1662,18 +1667,24 @@ private fun MentionText(
     mentionColor: Color,
     styleLarge: Boolean,
     onPlainTap: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
-    val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
-    val links = remember(text) { LinkPreviewRules.spans(text) }
+    val formatted = remember(text) { TextFmtRules.parse(text) }
+    val display = formatted.display
+    val spans = remember(display, names) { GroupChatUx.mentionSpans(display, names) }
+    val links = remember(display) { LinkPreviewRules.spans(display) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
-    if (spans.isEmpty() && links.isEmpty()) {
-        Text(text, style = style)
+    if (formatted.spans.isEmpty() && spans.isEmpty() && links.isEmpty()) {
+        Text(display, style = style, modifier = modifier)
         return
     }
     val annotated = buildAnnotatedString {
-        append(text)
+        append(display)
+        formatted.spans.forEach { span ->
+            addStyle(fmtSpanStyle(span.kind), span.start, span.endExclusive)
+        }
         spans.forEach { range ->
             addStyle(
                 SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold),
@@ -1682,22 +1693,42 @@ private fun MentionText(
             )
         }
         links.forEach { link ->
+            val struck = formatted.spans.any {
+                it.kind == TextFmtKind.STRIKE && it.start < link.endExclusive && link.start < it.endExclusive
+            }
+            val deco = if (struck) {
+                TextDecoration.Underline + TextDecoration.LineThrough
+            } else {
+                TextDecoration.Underline
+            }
             addStyle(
-                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                SpanStyle(color = linkColor, textDecoration = deco),
                 link.start,
                 link.endExclusive,
             )
             addStringAnnotation("URL", link.url, link.start, link.endExclusive)
         }
     }
+    if (links.isEmpty()) {
+        Text(annotated, style = style, modifier = modifier)
+        return
+    }
     ClickableText(
         text = annotated,
         style = style.copy(color = LocalContentColor.current),
+        modifier = modifier,
         onClick = { offset ->
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
             if (url != null) openHttps(context, url) else onPlainTap()
         },
     )
+}
+
+private fun fmtSpanStyle(kind: TextFmtKind): SpanStyle = when (kind) {
+    TextFmtKind.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+    TextFmtKind.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+    TextFmtKind.CODE, TextFmtKind.PRE -> SpanStyle(fontFamily = FontFamily.Monospace)
+    TextFmtKind.STRIKE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
 }
 
 @Composable
@@ -2208,9 +2239,11 @@ private fun ImageBubble(
 private fun MediaCaptionLine(caption: String?) {
     val text = caption?.trim().orEmpty()
     if (text.isEmpty()) return
-    Text(
+    MentionText(
         text,
-        style = MaterialTheme.typography.bodyMedium,
+        emptyList(),
+        mentionColor = MaterialTheme.colorScheme.primary,
+        styleLarge = false,
         modifier = Modifier
             .widthIn(max = PhotoLayout.MAX_WIDTH_DP.dp)
             .padding(start = 4.dp, end = 4.dp, top = 4.dp),

@@ -133,4 +133,15 @@ class ChatListPreviewRulesTest {
         val presence = Conversation("2", "Кира", "в сети", false, true, last = null)
         assertEquals(ChatListHit.NONE, ChatListRules.hit(presence, "сети"))
     }
+
+    @Test
+    fun lastAndDraftStripTelegramMarkup() {
+        val last = msg("*привет* _мир_", outgoing = false, senderName = "Аня")
+        val copy = ChatListPreviewRules.copy(last, draft = "", isGroup = false, myDeviceId = "me")
+        assertEquals("привет мир", copy.text)
+        val draft = ChatListPreviewRules.copy(last, draft = "черновик `x`", isGroup = false)
+        assertEquals("Черновик: черновик x", draft.text)
+        val group = ChatListPreviewRules.copy(last, draft = "", isGroup = true, myDeviceId = "me")
+        assertEquals("Аня: привет мир", group.text)
+    }
 }

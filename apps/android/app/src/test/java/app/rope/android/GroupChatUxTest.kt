@@ -34,6 +34,8 @@ class GroupChatUxTest {
     fun groupListPreviewIsNameColonText() {
         val incoming = msg("1", false, "привет", senderId = "d2", senderName = "Аня")
         assertEquals("Аня: привет", GroupChatUx.listPreview(incoming, "me"))
+        val formatted = msg("1b", false, "*привет*", senderId = "d2", senderName = "Аня")
+        assertEquals("Аня: привет", GroupChatUx.listPreview(formatted, "me"))
         val mine = msg("2", true, "ок", senderId = "me", senderName = "Боря")
         assertEquals("Вы: ок", GroupChatUx.listPreview(mine, "me"))
         val byId = msg("3", false, "фото", senderId = "me", senderName = "Боря")

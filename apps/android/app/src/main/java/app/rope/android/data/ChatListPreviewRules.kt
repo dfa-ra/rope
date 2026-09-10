@@ -36,8 +36,8 @@ object ChatListPreviewRules {
         }
         if (last != null) {
             val body = when {
-                saved -> last.preview()
-                isGroup -> GroupChatUx.listPreview(last, myDeviceId) ?: last.preview()
+                saved -> TextFmtRules.plain(last.preview())
+                isGroup -> GroupChatUx.listPreview(last, myDeviceId) ?: TextFmtRules.plain(last.preview())
                 else -> dmLast(last, myDeviceId)
             }
             return ChatListPreviewCopy(body, ChatListPreviewKind.LAST)
@@ -52,7 +52,7 @@ object ChatListPreviewRules {
     }
 
     fun dmLast(last: ChatMessage, myDeviceId: String): String {
-        val body = last.preview()
+        val body = TextFmtRules.plain(last.preview())
         val mine = last.outgoing || (myDeviceId.isNotBlank() && last.senderId == myDeviceId)
         return if (mine) "$YOU: $body" else body
     }
@@ -60,7 +60,7 @@ object ChatListPreviewRules {
     fun isDraft(text: String): Boolean = text.startsWith("$DRAFT_LABEL: ")
 
     fun clip(raw: String): String {
-        val one = raw.replace(whitespace, " ").trim()
+        val one = TextFmtRules.plain(raw).replace(whitespace, " ").trim()
         if (one.length <= BODY_MAX) return one
         return one.take(BODY_MAX).trimEnd()
     }

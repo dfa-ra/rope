@@ -19,7 +19,7 @@ object GroupChatUx {
 
     fun listPreview(last: ChatMessage?, myDeviceId: String = ""): String? {
         if (last == null) return null
-        val body = last.preview()
+        val body = TextFmtRules.plain(last.preview())
         val name = when {
             last.outgoing || (myDeviceId.isNotBlank() && last.senderId == myDeviceId) -> YOU
             last.senderName.isNotBlank() -> last.senderName
