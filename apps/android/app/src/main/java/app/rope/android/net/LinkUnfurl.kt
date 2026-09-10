@@ -118,9 +118,13 @@ object OgHtml {
 }
 
 object NetworkLinkOgFetcher : LinkOgFetcher {
+    private val ogDns = Dns { hostname ->
+        OgDnsRules.lookup(hostname) { Dns.SYSTEM.lookup(it) }
+    }
+
     private val http: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .dns { hostname -> OgDnsRules.lookup(hostname) { Dns.SYSTEM.lookup(it) } }
+            .dns(ogDns)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .callTimeout(5, TimeUnit.SECONDS)
