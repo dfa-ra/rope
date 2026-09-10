@@ -356,6 +356,10 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onOpenLink = { link ->
+                                onJump(link.messageId)
+                                onBack()
+                            },
                         )
                     }
                 }

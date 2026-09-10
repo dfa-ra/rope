@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.SharedLink
 import app.rope.android.media.ImageCodec
 
 @Composable
@@ -45,12 +47,14 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onOpenLink: (SharedLink) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val links = PeerProfileRules.links(state.messages)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -101,7 +105,7 @@ fun PeerProfilePane(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            if (photos.isEmpty()) {
+            if (PeerProfileRules.showPhotoEmpty(photos.size, links.size)) {
                 item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
                     Column(
                         Modifier
@@ -123,6 +127,58 @@ fun PeerProfilePane(
                     SharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
                 }
             }
+            if (links.isNotEmpty()) {
+                item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                    Text(
+                        PeerProfileRules.linksSectionLabel(links.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .semantics { contentDescription = PeerProfileRules.LINKS },
+                    )
+                }
+                items(links, key = { "link-${it.messageId}-${it.url}" }, span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) { link ->
+                    SharedLinkRow(link) { onOpenLink(link) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharedLinkRow(
+    link: SharedLink,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics { contentDescription = link.host },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.Outlined.Link,
+            contentDescription = null,
+            modifier = Modifier.size(28.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                link.host,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                link.url,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
