@@ -55,6 +55,7 @@ import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.data.VideoRules
+import app.rope.android.data.VoiceQualRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val voiceQual: String = VoiceQualRules.COMPRESSED,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    voiceQual = store.voiceQual(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -597,6 +600,13 @@ class RopeRepository(private val app: Application) {
         } else {
             scheduleUnfurl(_state.value.draftText)
         }
+    }
+
+    fun setVoiceQual(id: String) {
+        val next = VoiceQualRules.normalize(id)
+        if (_state.value.voiceQual == next) return
+        store.saveVoiceQual(next)
+        _state.value = _state.value.copy(voiceQual = next)
     }
 
     fun dismissComposerPreview() {
@@ -963,7 +973,11 @@ class RopeRepository(private val app: Application) {
     fun startVoice() {
         if (_state.value.recording || _state.value.recordingVideoNote) return
         try {
-            voiceRecorder.start()
+            val qual = VoiceQualRules.normalize(_state.value.voiceQual)
+            voiceRecorder.start(
+                VoiceQualRules.bitrate(qual),
+                VoiceQualRules.sampleRate(qual),
+            )
             unfurlJob?.cancel()
             unfurlResult = null
             _state.value = _state.value.copy(recording = true, recordMs = 0, error = null)

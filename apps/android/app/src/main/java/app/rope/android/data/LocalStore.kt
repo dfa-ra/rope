@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveVoiceQual(id: String) {
+        put(VoiceQualRules.KEY, VoiceQualRules.normalize(id))
+    }
+
+    fun voiceQual(): String = VoiceQualRules.normalize(get(VoiceQualRules.KEY))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

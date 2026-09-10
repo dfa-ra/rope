@@ -9,6 +9,7 @@ import android.media.MediaRecorder
 import android.media.PlaybackParams
 import android.os.Build
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceQualRules
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -27,7 +28,10 @@ class VoiceRecorder(private val context: Context) {
 
     val recording: Boolean get() = recorder != null
 
-    fun start(): File {
+    fun start(
+        bitrate: Int = VoiceQualRules.BITRATE_COMPRESSED,
+        sampleRate: Int = VoiceQualRules.SAMPLE_COMPRESSED,
+    ): File {
         cancel()
         val dest = File(context.cacheDir, "voice-${System.currentTimeMillis()}.m4a")
         val rec = if (Build.VERSION.SDK_INT >= 31) {
@@ -39,8 +43,8 @@ class VoiceRecorder(private val context: Context) {
         rec.setAudioSource(MediaRecorder.AudioSource.MIC)
         rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        rec.setAudioEncodingBitRate(64_000)
-        rec.setAudioSamplingRate(44_100)
+        rec.setAudioEncodingBitRate(bitrate)
+        rec.setAudioSamplingRate(sampleRate)
         rec.setMaxDuration(MAX_MS.toInt())
         rec.setOutputFile(dest.absolutePath)
         rec.prepare()
