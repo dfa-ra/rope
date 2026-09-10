@@ -1,8 +1,9 @@
 package app.rope.android.data
 
 /**
- * Telegram-like 1:1 peer profile. Shared photos are the IMAGE rows already
- * in LocalStore for this chat — no FCM, no cloud gallery.
+ * Telegram-like 1:1 peer profile. Shared photos are IMAGE rows and shared
+ * files are FILE rows already in LocalStore for this chat — no FCM, no
+ * cloud gallery, not the Saved chips Все / Фото / Файлы / Ссылки.
  */
 object PeerProfileRules {
     const val GRID_COLUMNS = 3
