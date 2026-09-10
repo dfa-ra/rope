@@ -25,10 +25,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.ChatIds
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.PinChatRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -103,6 +107,7 @@ fun GroupInfoPane(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
+    onPinChat: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -120,6 +125,10 @@ fun GroupInfoPane(
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
+    val chatId = ChatIds.group(g.groupId)
+    val canPin = PinChatRules.canPin(chatId, state.conversations)
+    val pinned = PinChatRules.isPinned(state.conversations, chatId)
+    val pinLabel = PinChatRules.profileAction(pinned)
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -136,6 +145,14 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (canPin) {
+                            TextButton(
+                                onClick = { onPinChat(chatId) },
+                                modifier = Modifier.semantics { contentDescription = pinLabel },
+                            ) {
+                                Text(pinLabel)
+                            }
+                        }
                     }
                 }
             }

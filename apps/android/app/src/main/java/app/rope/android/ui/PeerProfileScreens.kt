@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -37,6 +38,7 @@ import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.PinChatRules
 import app.rope.android.media.ImageCodec
 
 @Composable
@@ -45,12 +47,17 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onPinChat: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val chatId = peer?.deviceId
+    val canPin = PinChatRules.canPin(chatId, state.conversations)
+    val pinned = PinChatRules.isPinned(state.conversations, chatId)
+    val pinLabel = PinChatRules.profileAction(pinned)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +99,14 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (canPin && chatId != null) {
+                        TextButton(
+                            onClick = { onPinChat(chatId) },
+                            modifier = Modifier.semantics { contentDescription = pinLabel },
+                        ) {
+                            Text(pinLabel)
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
