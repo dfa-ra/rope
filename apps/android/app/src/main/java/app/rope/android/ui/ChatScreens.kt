@@ -77,6 +77,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -154,6 +157,7 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.MessageInfoRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -792,12 +796,16 @@ fun ChatPane(
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var infoMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
     val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
     val singleSelected = selectedMsgs.singleOrNull()
     BackHandler(enabled = menuMessage != null) {
         if (reactionExpanded) reactionExpanded = false else menuMessage = null
+    }
+    BackHandler(enabled = infoMessage != null && menuMessage == null) {
+        infoMessage = null
     }
     BackHandler(enabled = showSearch && menuMessage == null) {
         showSearch = false
@@ -1136,7 +1144,14 @@ fun ChatPane(
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
+            onInfo = {
+                if (MessageInfoRules.canShow(target)) infoMessage = target
+                menuMessage = null
+            },
         )
+    }
+    infoMessage?.let { info ->
+        MessageInfoSheet(info) { infoMessage = null }
     }
     if (state.recordingVideoNote) {
         VideoNoteRecorderOverlay(
@@ -1838,8 +1853,8 @@ private fun MessageTapOverlay(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    onInfo: () -> Unit = {},
 ) {
-    Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxSize()
@@ -1878,6 +1893,7 @@ private fun MessageTapOverlay(
                 onPin = onPin,
                 onDelete = onDelete,
                 onOpen = onOpen,
+                onInfo = onInfo,
             )
         }
     }
@@ -1893,6 +1909,7 @@ private fun MessageActionMenu(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    onInfo: () -> Unit = {},
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
@@ -1924,6 +1941,9 @@ private fun MessageActionMenu(
             if (ChatActions.canOpen(m)) {
                 MessageMenuRow(Icons.Outlined.OpenInFull, "Открыть", onOpen)
             }
+            if (ChatActions.canInfo(m)) {
+                MessageMenuRow(Icons.Outlined.Info, MessageInfoRules.LABEL, onInfo)
+            }
         }
     }
 }
@@ -1940,6 +1960,41 @@ private fun MessageMenuRow(icon: ImageVector, label: String, onClick: () -> Unit
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MessageInfoSheet(msg: ChatMessage, onDismiss: () -> Unit) {
+    val rows = MessageInfoRules.rows(msg)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                MessageInfoRules.LABEL,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { contentDescription = MessageInfoRules.LABEL },
+            )
+            rows.forEach { row ->
+                Column(Modifier.fillMaxWidth()) {
+                    Text(
+                        row.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(row.value, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
     }
 }
 

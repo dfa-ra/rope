@@ -401,6 +401,8 @@ object ChatActions {
 
     fun canOpen(msg: ChatMessage): Boolean =
         !msg.deleted && (msg.kind == MessageKind.IMAGE || msg.kind == MessageKind.VIDEO)
+
+    fun canInfo(msg: ChatMessage): Boolean = MessageInfoRules.canShow(msg)
 }
 
 data class ChatPrefs(
