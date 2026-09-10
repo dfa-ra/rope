@@ -1,6 +1,7 @@
 package app.rope.android.ui
 
 import android.content.Intent
+import android.content.ClipboardManager
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
@@ -102,6 +103,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -120,12 +123,21 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -139,6 +151,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
@@ -179,6 +192,7 @@ import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
+import app.rope.android.data.PasteImgRules
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
@@ -1112,6 +1126,7 @@ fun ChatPane(
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
+                onPasteUris = onAttachUris,
             )
         }
     }
@@ -2237,8 +2252,87 @@ private fun ComposerBar(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
+    onPasteUris: (List<Uri>) -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val composeView = LocalView.current
+    val editing = state.editTarget != null
+    fun clipboardImageUris(): List<Uri> {
+        val cm = context.getSystemService(ClipboardManager::class.java) ?: return emptyList()
+        val clip = cm.primaryClip ?: return emptyList()
+        val desc = clip.description
+        val mimes = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }
+        val pieces = (0 until clip.itemCount).map { i ->
+            val item = clip.getItemAt(i)
+            PasteImgRules.Piece(
+                item.uri?.toString(),
+                item.uri?.let { context.contentResolver.getType(it) },
+                item.text?.toString(),
+            )
+        }
+        return PasteImgRules.intercept(
+            editing,
+            state.recording,
+            pieces,
+            PasteImgRules.descriptionHasImage(mimes),
+        ).map(Uri::parse)
+    }
+    DisposableEffect(composeView, editing, state.recording) {
+        ViewCompat.setOnReceiveContentListener(composeView, PasteImgRules.MIME_TYPES) { _, payload ->
+            val clip = payload.clip
+            val desc = clip.description
+            val mimes = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }
+            val pieces = (0 until clip.itemCount).map { i ->
+                val item = clip.getItemAt(i)
+                PasteImgRules.Piece(
+                    item.uri?.toString(),
+                    item.uri?.let { context.contentResolver.getType(it) },
+                    item.text?.toString(),
+                )
+            }
+            val uris = PasteImgRules.intercept(
+                editing,
+                state.recording,
+                pieces,
+                PasteImgRules.descriptionHasImage(mimes),
+            ).map(Uri::parse)
+            if (uris.isEmpty()) {
+                payload
+            } else {
+                onPasteUris(uris)
+                null
+            }
+        }
+        onDispose { ViewCompat.setOnReceiveContentListener(composeView, null, null) }
+    }
+    val parentToolbar = LocalTextToolbar.current
+    val imageToolbar = remember(parentToolbar, editing, state.recording) {
+        object : TextToolbar {
+            override val status: TextToolbarStatus get() = parentToolbar.status
+            override fun hide() = parentToolbar.hide()
+            override fun showMenu(
+                rect: androidx.compose.ui.geometry.Rect,
+                onCopyRequested: (() -> Unit)?,
+                onPasteRequested: (() -> Unit)?,
+                onCutRequested: (() -> Unit)?,
+                onSelectAllRequested: (() -> Unit)?,
+            ) {
+                val images = clipboardImageUris()
+                val paste = {
+                    if (images.isNotEmpty()) onPasteUris(images) else onPasteRequested?.invoke()
+                    Unit
+                }
+                parentToolbar.showMenu(
+                    rect,
+                    onCopyRequested,
+                    paste.takeIf { onPasteRequested != null || images.isNotEmpty() },
+                    onCutRequested,
+                    onSelectAllRequested,
+                )
+            }
+        }
+    }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
     var showEmoji by remember { mutableStateOf(false) }
     var localText by remember { mutableStateOf(state.draftText) }
@@ -2381,6 +2475,7 @@ private fun ComposerBar(
                                     tint = if (showEmoji) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            CompositionLocalProvider(LocalTextToolbar provides imageToolbar) {
                             BasicTextField(
                                 value = localText,
                                 onValueChange = {
@@ -2389,7 +2484,17 @@ private fun ComposerBar(
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(vertical = 12.dp, horizontal = 4.dp),
+                                    .padding(vertical = 12.dp, horizontal = 4.dp)
+                                    .onPreviewKeyEvent { ev ->
+                                        if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                        val paste = ev.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_PASTE ||
+                                            (ev.isCtrlPressed && ev.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_V)
+                                        if (!paste) return@onPreviewKeyEvent false
+                                        val images = clipboardImageUris()
+                                        if (images.isEmpty()) return@onPreviewKeyEvent false
+                                        onPasteUris(images)
+                                        true
+                                    },
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                                     color = MaterialTheme.colorScheme.onSurface,
                                 ),
@@ -2412,6 +2517,7 @@ private fun ComposerBar(
                                     }
                                 },
                             )
+                            }
                         }
                     }
                 }
