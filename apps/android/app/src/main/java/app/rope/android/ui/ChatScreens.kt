@@ -1490,7 +1490,7 @@ private fun MessageBubble(
                             onJump = onJump,
                         )
                         if (m.kind == MessageKind.VIDEO) {
-                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
+                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true, autoplay = state.videoAutoplay)
                         } else {
                             ImageBubble(m, onEnsureMedia, overlayMeta = true)
                         }
@@ -1552,7 +1552,7 @@ private fun MessageBubble(
                                 onSeek = onSeekVoice,
                                 onCycleSpeed = onCycleVoiceSpeed,
                             )
-                            MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
+                            MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia, autoplay = state.videoAutoplay)
                             MessageKind.FILE -> FileBubble(m)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))

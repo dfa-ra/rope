@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -35,8 +36,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.RopeShapes
+import app.rope.android.data.AutoplayRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
 import app.rope.android.media.VideoCodec
@@ -44,13 +47,15 @@ import app.rope.android.media.VideoCodec
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
  * Tap/long-press on the bubble still opens the 0.3.2 menu; the play control
- * starts the in-thread player.
+ * starts the in-thread player. Autoplay (Settings) starts muted when the
+ * bubble is on screen.
  */
 @Composable
 fun VideoMessageBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
+    autoplay: Boolean = false,
 ) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
@@ -60,12 +65,24 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var muted by remember(m.id) { mutableStateOf(false) }
+    var userPaused by remember(m.id) { mutableStateOf(false) }
+    val player = remember(m.id) { arrayOfNulls<MediaPlayer>(1) }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
         PhotoLayout.Box(PhotoLayout.MAX_WIDTH_DP, PhotoLayout.MAX_WIDTH_DP * 9f / 16f)
     }
     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
+    LaunchedEffect(m.id, autoplay, path, userPaused) {
+        if (AutoplayRules.startOnVisible(autoplay, !path.isNullOrBlank()) && !userPaused) {
+            muted = AutoplayRules.startMuted(MessageKind.VIDEO)
+            playing = true
+        }
+    }
+    LaunchedEffect(muted, playing) {
+        player[0]?.let { applyAutoplayMute(it, muted) }
+    }
     Box(
         modifier = Modifier
             .width(box.widthDp.dp)
@@ -81,7 +98,15 @@ fun VideoMessageBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        setOnCompletionListener { playing = false }
+                        setOnPreparedListener { mp ->
+                            player[0] = mp
+                            applyAutoplayMute(mp, muted)
+                        }
+                        setOnCompletionListener {
+                            playing = false
+                            userPaused = true
+                            player[0] = null
+                        }
                     }
                 },
                 update = { view ->
@@ -96,7 +121,10 @@ fun VideoMessageBubble(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    player[0] = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -113,7 +141,11 @@ fun VideoMessageBubble(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(enabled = !path.isNullOrBlank()) { playing = true },
+                    .clickable(enabled = !path.isNullOrBlank()) {
+                        muted = false
+                        userPaused = false
+                        playing = true
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -130,7 +162,10 @@ fun VideoMessageBubble(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.35f))
-                    .clickable { playing = false },
+                    .clickable {
+                        userPaused = true
+                        playing = false
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
@@ -187,4 +222,9 @@ fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
         },
         modifier = modifier,
     )
+}
+
+private fun applyAutoplayMute(player: MediaPlayer, muted: Boolean) {
+    val vol = if (muted) 0f else 1f
+    runCatching { player.setVolume(vol, vol) }
 }

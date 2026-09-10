@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.rope.android.data.AutoplayRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.VideoNoteRules
@@ -51,6 +52,7 @@ import app.rope.android.media.VideoCodec
 fun VideoNoteBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
+    autoplay: Boolean = false,
 ) {
     LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
@@ -58,13 +60,27 @@ fun VideoNoteBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var userPaused by remember(m.id) { mutableStateOf(false) }
+    LaunchedEffect(m.id, autoplay, path, userPaused) {
+        if (AutoplayRules.startOnVisible(autoplay, !path.isNullOrBlank()) && !userPaused) {
+            playing = true
+        }
+    }
     val size = VideoNoteRules.DISPLAY_DP.dp
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
             .background(Color.Black)
-            .clickable(enabled = !path.isNullOrBlank()) { playing = !playing },
+            .clickable(enabled = !path.isNullOrBlank()) {
+                if (playing) {
+                    userPaused = true
+                    playing = false
+                } else {
+                    userPaused = false
+                    playing = true
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (playing && !path.isNullOrBlank()) {

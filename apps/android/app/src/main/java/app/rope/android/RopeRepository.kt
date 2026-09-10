@@ -167,6 +167,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val videoAutoplay: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    videoAutoplay = store.videoAutoplay(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -597,6 +599,12 @@ class RopeRepository(private val app: Application) {
         } else {
             scheduleUnfurl(_state.value.draftText)
         }
+    }
+
+    fun toggleVideoAutoplay() {
+        val next = !_state.value.videoAutoplay
+        store.saveVideoAutoplay(next)
+        _state.value = _state.value.copy(videoAutoplay = next)
     }
 
     fun dismissComposerPreview() {
