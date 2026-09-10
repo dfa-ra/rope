@@ -84,6 +84,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -146,6 +147,7 @@ import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
+import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
@@ -157,6 +159,7 @@ import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
+import app.rope.android.data.LiveLocRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
@@ -755,6 +758,8 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onAttachLiveLoc: (Long) -> Unit = {},
+    onStopLiveLoc: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -791,6 +796,7 @@ fun ChatPane(
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
+    var showLiveDurations by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
@@ -907,6 +913,15 @@ fun ChatPane(
                         Icon(Icons.Outlined.Videocam, contentDescription = "Видеозвонок")
                     }
                 }
+            }
+        }
+        val liveChatId = state.group?.let { ChatIds.group(it.groupId) } ?: state.peer?.deviceId
+        if (LiveLocRules.here(state.liveLoc, liveChatId, System.currentTimeMillis())) {
+            TextButton(
+                onClick = onStopLiveLoc,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("${LiveLocRules.LABEL} · ${LiveLocRules.STOP}")
             }
         }
         if (showSearch && !selecting) {
@@ -1170,7 +1185,20 @@ fun ChatPane(
                 showAttach = false
                 onVideoNoteStart()
             },
+            onLive = {
+                showAttach = false
+                showLiveDurations = true
+            },
             onDismiss = { showAttach = false },
+        )
+    }
+    if (showLiveDurations) {
+        LiveLocDurationSheet(
+            onPick = { ms ->
+                showLiveDurations = false
+                onAttachLiveLoc(ms)
+            },
+            onDismiss = { showLiveDurations = false },
         )
     }
 }
@@ -2770,6 +2798,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onLive: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2880,6 +2909,42 @@ private fun AttachSheet(
                 Icon(Icons.Outlined.Videocam, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Видеосообщение", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onLive, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.MyLocation, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text(LiveLocRules.LABEL, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LiveLocDurationSheet(
+    onPick: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(LiveLocRules.LABEL, style = MaterialTheme.typography.titleMedium)
+            LiveLocRules.CHOICES.forEach { choice ->
+                TextButton(
+                    onClick = { onPick(choice.ms) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(choice.label, modifier = Modifier.weight(1f))
+                }
             }
             Spacer(Modifier.height(16.dp))
         }

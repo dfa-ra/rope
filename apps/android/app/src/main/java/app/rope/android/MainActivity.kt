@@ -21,6 +21,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.rope.android.data.CallMediaStart
+import app.rope.android.data.LiveLocRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
 import com.journeyapps.barcodescanner.ScanContract
@@ -119,6 +120,23 @@ class MainActivity : AppCompatActivity() {
 
     private val notifyPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    private val locPerm = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        val fine = granted[Manifest.permission.ACCESS_FINE_LOCATION] == true || hasFineLoc()
+        val coarse = granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true || hasCoarseLoc()
+        val repo = (application as RopeApp).repo
+        val pending = pendingLiveMs
+        pendingLiveMs = 0L
+        if (LiveLocRules.permissionOk(fine, coarse) && pending > 0L) {
+            repo.startLiveLoc(pending)
+        } else {
+            repo.liveLocDenied()
+        }
+    }
+
+    private var pendingLiveMs: Long = 0L
+
     private val installSources = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         waitingForInstallPerm = false
         tryInstallPending()
@@ -194,6 +212,8 @@ class MainActivity : AppCompatActivity() {
                     onVideoNoteFinish = repo::finishVideoNote,
                     onVideoNotePreview = repo::bindVideoNotePreview,
                     onVideoNotePreviewGone = repo::unbindVideoNotePreview,
+                    onAttachLiveLoc = { ms -> withLoc(ms) { repo.startLiveLoc(ms) } },
+                    onStopLiveLoc = repo::stopLiveLoc,
                     onCall = { withMic("call") { repo.startCall() } },
                     onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,
@@ -325,6 +345,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun withLoc(ms: Long, granted: () -> Unit) {
+        pendingLiveMs = ms
+        if (LiveLocRules.permissionOk(hasFineLoc(), hasCoarseLoc())) {
+            granted()
+        } else {
+            locPerm.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+        }
+    }
+
+    private fun hasFineLoc(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasCoarseLoc(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun hasMic(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==

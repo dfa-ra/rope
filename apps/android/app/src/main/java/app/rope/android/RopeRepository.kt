@@ -1,9 +1,12 @@
 package app.rope.android
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -13,6 +16,7 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
+import androidx.core.content.ContextCompat
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.CallInfo
@@ -48,6 +52,9 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
+import app.rope.android.data.LiveLocFix
+import app.rope.android.data.LiveLocRules
+import app.rope.android.data.LiveLocSession
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -168,6 +175,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val liveLoc: LiveLocSession? = null,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -240,6 +248,7 @@ class RopeRepository(private val app: Application) {
     private var iceCachedAtMs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toneOutgoing: Boolean? = null
+    private val liveLocTick = Runnable { tickLiveLoc() }
 
     fun start(pendingLink: String?) {
         if (!sessionStarted.compareAndSet(false, true)) {
@@ -616,6 +625,116 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", value))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun liveLocDenied() {
+        _state.value = _state.value.copy(notice = LiveLocRules.noticeDenied())
+    }
+
+    fun startLiveLoc(durationMs: Long) {
+        val choice = LiveLocRules.choice(durationMs) ?: return
+        val chatId = LiveLocRules.cleanChatId(openChatId()) ?: return
+        if (_state.value.recording || _state.value.recordingVideoNote) return
+        val fix = lastKnownFix()
+        if (fix == null) {
+            _state.value = _state.value.copy(notice = LiveLocRules.noticeMissing())
+            return
+        }
+        val text = LiveLocRules.text(fix.lat, fix.lon, choice)
+        if (text == null) {
+            _state.value = _state.value.copy(notice = LiveLocRules.noticeMissing())
+            return
+        }
+        val until = System.currentTimeMillis() + choice.ms
+        mainHandler.removeCallbacks(liveLocTick)
+        scope.launch {
+            sendLiveNow(text)
+            val msgId = _state.value.messages.lastOrNull {
+                it.outgoing && LiveLocRules.isLive(it.text) && !it.deleted
+            }?.id
+            _state.value = _state.value.copy(
+                liveLoc = LiveLocSession(chatId, until, choice.ms, msgId),
+            )
+            mainHandler.postDelayed(liveLocTick, LiveLocRules.PERIOD_MS)
+        }
+    }
+
+    fun stopLiveLoc() {
+        mainHandler.removeCallbacks(liveLocTick)
+        _state.value = _state.value.copy(liveLoc = null)
+    }
+
+    private fun tickLiveLoc() {
+        val session = _state.value.liveLoc ?: return
+        val now = System.currentTimeMillis()
+        if (!LiveLocRules.active(session.untilMs, now)) {
+            stopLiveLoc()
+            return
+        }
+        val choice = LiveLocRules.choice(session.choiceMs) ?: run {
+            stopLiveLoc()
+            return
+        }
+        val fix = lastKnownFix()
+        val text = fix?.let { LiveLocRules.text(it.lat, it.lon, choice) }
+        if (text != null) {
+            val msg = session.messageId?.let { id ->
+                _state.value.messages.find { it.id == id && it.outgoing && !it.deleted }
+            }
+            if (msg != null) {
+                applyEdit(msg, text)
+            } else {
+                scope.launch {
+                    sendLiveNow(text)
+                    val msgId = _state.value.messages.lastOrNull {
+                        it.outgoing && LiveLocRules.isLive(it.text) && !it.deleted
+                    }?.id
+                    val cur = _state.value.liveLoc
+                    if (cur != null && msgId != null) {
+                        _state.value = _state.value.copy(liveLoc = cur.copy(messageId = msgId))
+                    }
+                }
+            }
+        }
+        if (LiveLocRules.active(session.untilMs, System.currentTimeMillis())) {
+            mainHandler.postDelayed(liveLocTick, LiveLocRules.PERIOD_MS)
+        } else {
+            stopLiveLoc()
+        }
+    }
+
+    private suspend fun sendLiveNow(text: String) {
+        val reply = _state.value.replyTo
+        val pack = replyPack(reply)
+        _state.value = _state.value.copy(replyTo = null, replySpan = null)
+        persistOpenDraft()
+        val group = _state.value.group
+        val peer = _state.value.peer
+        val saved = SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(peer?.deviceId)
+        when {
+            group != null -> sendGroupText(group, text, reply, pack)
+            saved -> saveLocalText(text, reply, pack = pack)
+            else -> {
+                val dest = peer ?: return
+                sendPeerText(dest, text, pack, null)
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun lastKnownFix(): LiveLocFix? {
+        val fine = ContextCompat.checkSelfPermission(app, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(app, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!LiveLocRules.permissionOk(fine, coarse)) return null
+        val lm = app.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+        val fixes = LiveLocRules.PROVIDERS.mapNotNull { provider ->
+            runCatching { lm.getLastKnownLocation(provider) }.getOrNull()?.let { loc ->
+                LiveLocFix(lat = loc.latitude, lon = loc.longitude, timeMs = loc.time)
+            }
+        }
+        return LiveLocRules.pick(fixes)
     }
 
     fun sendDraft() {
