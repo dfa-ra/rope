@@ -134,6 +134,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -154,6 +156,7 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.MarkAllReadRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -208,6 +211,7 @@ fun ChatsPane(
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
+    onMarkAllRead: (List<String>) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -278,12 +282,31 @@ fun ChatsPane(
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
         val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
         val inArchive = listMode == ChatListMode.ARCHIVE
+        val markIds = MarkAllReadRules.ids(rows)
+        val showMarkAll = MarkAllReadRules.visible(
+            markIds.size,
+            isForwarding,
+            ChatListRules.searching(state.chatQuery),
+        )
         val empty = ChatListEmptyRules.copy(
             listMode,
             state.chatQuery,
             isForwarding,
             state.profile?.role,
         )
+        if (showMarkAll) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(
+                    onClick = { onMarkAllRead(markIds) },
+                    modifier = Modifier.semantics { contentDescription = MarkAllReadRules.ACTION },
+                ) {
+                    Text(MarkAllReadRules.ACTION)
+                }
+            }
+        }
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty() && !showArchiveRow) {
                 RopeEmptyState(

@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.MarkAllReadRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -769,6 +770,19 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun markAllRead(ids: List<String>) {
+        val now = System.currentTimeMillis()
+        var n = 0
+        for (id in ids) {
+            if (!MarkAllReadRules.canMark(id)) continue
+            val cur = store.chatPrefs(id)
+            if (cur.unread <= 0) continue
+            store.saveChatPrefs(id, MarkAllReadRules.prefsAfter(cur, now))
+            n++
+        }
+        if (n > 0) refreshConversations()
     }
 
     fun copyMessage(msg: ChatMessage) {
