@@ -23,6 +23,9 @@ class SendFileRulesTest {
     fun asFileSkipsAlbumAndVisualPrep() {
         assertTrue(SendFileRules.skipVisualPrep(true))
         assertFalse(SendFileRules.skipVisualPrep(false))
+        assertFalse(SendFileRules.stageVisual(looksVisual = true, asFile = true))
+        assertTrue(SendFileRules.stageVisual(looksVisual = true, asFile = false))
+        assertFalse(SendFileRules.stageVisual(looksVisual = false, asFile = false))
         assertFalse(SendFileRules.albumEligible("image", asFile = true))
         assertFalse(SendFileRules.albumEligible("video", asFile = true))
         assertTrue(SendFileRules.albumEligible("image", asFile = false))

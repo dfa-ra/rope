@@ -12,7 +12,12 @@ object SendFileRules {
     fun kind(mime: String, name: String, asFile: Boolean): String =
         if (asFile) KIND else VideoRules.kind(mime, name)
 
+    /** Файл picker and «Как файл» skip ImageCodec / VideoCodec. */
     fun skipVisualPrep(asFile: Boolean): Boolean = asFile
+
+    /** Gallery / recents stage photos into the album editor; as-file does not. */
+    fun stageVisual(looksVisual: Boolean, asFile: Boolean): Boolean =
+        looksVisual && !asFile
 
     fun albumEligible(kind: String, asFile: Boolean): Boolean =
         !asFile && VideoRules.albumEligible(kind)

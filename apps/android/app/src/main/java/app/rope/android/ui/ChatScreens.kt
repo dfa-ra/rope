@@ -754,7 +754,6 @@ fun ChatPane(
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
     onAttachAsFileUris: (List<Uri>) -> Unit = {},
     onToggleSendAsFile: () -> Unit = {},
-    onArmSendAsFile: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
@@ -1163,7 +1162,6 @@ fun ChatPane(
             },
             onFile = {
                 showAttach = false
-                onArmSendAsFile()
                 onAttachFile()
             },
             onUri = { uri ->

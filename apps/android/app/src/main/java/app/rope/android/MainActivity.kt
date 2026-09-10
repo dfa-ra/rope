@@ -38,7 +38,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val picker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { (application as RopeApp).repo.sendAttachment(it) }
+        uri?.let { (application as RopeApp).repo.sendAttachment(it, asFile = true) }
     }
 
     private val galleryPicker = registerForActivityResult(
@@ -188,7 +188,6 @@ class MainActivity : AppCompatActivity() {
                     onAttachUris = { (application as RopeApp).repo.stageAttachments(it) },
                     onAttachAsFileUris = { (application as RopeApp).repo.sendAttachmentsAsFile(it) },
                     onToggleSendAsFile = repo::toggleSendAsFile,
-                    onArmSendAsFile = repo::armSendAsFile,
                     onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
                     onSeekVoice = repo::seekVoice,
