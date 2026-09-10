@@ -3,6 +3,8 @@ package app.rope.android.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,11 +26,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.QuietHoursRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsPane(
     state: UiState,
@@ -36,6 +39,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetQuietHours: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -99,6 +103,23 @@ fun SettingsPane(
                         },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
                     )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(QuietHoursRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    QuietHoursRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuietHoursRules.OPTIONS.forEach { opt ->
+                        FilterChip(
+                            selected = QuietHoursRules.normalize(state.quietHours) == opt.id,
+                            onClick = { onSetQuietHours(opt.id) },
+                            label = { Text(opt.label) },
+                            modifier = Modifier.semantics { contentDescription = opt.label },
+                        )
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(

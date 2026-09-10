@@ -65,6 +65,7 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.QuietHoursRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -167,6 +168,7 @@ data class UiState(
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
+    val quietHours: String = QuietHoursRules.OFF,
     val linkPreviewsEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                 _state.value = _state.value.copy(
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
+                    quietHours = store.quietHours(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
                 store.rehomeMisroutedMedia()
@@ -585,6 +588,13 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun setQuietHours(id: String) {
+        val next = QuietHoursRules.normalize(id)
+        if (next == _state.value.quietHours) return
+        store.saveQuietHours(next)
+        _state.value = _state.value.copy(quietHours = next)
     }
 
     fun toggleLinkPreviews() {
@@ -3428,7 +3438,10 @@ class RopeRepository(private val app: Application) {
             store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
             refreshConversations()
         }
-        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted) &&
+            !QuietHoursRules.active(_state.value.quietHours, hour)
+        ) {
             notifier.message(title, body, AlbumRules.notifyId(body, albumId))
         }
     }

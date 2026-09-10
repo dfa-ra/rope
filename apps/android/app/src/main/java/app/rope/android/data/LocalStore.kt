@@ -388,6 +388,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
 
+    fun saveQuietHours(id: String) {
+        put(QuietHoursRules.KEY, QuietHoursRules.normalize(id))
+    }
+
+    fun quietHours(): String = QuietHoursRules.normalize(get(QuietHoursRules.KEY))
+
     fun saveLinkPreviews(enabled: Boolean) {
         put("link_previews", if (enabled) "1" else "0")
     }
