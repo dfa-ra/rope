@@ -52,16 +52,23 @@ class IdentityVault(private val context: Context) {
     companion object {
         private const val ALIAS = "rope-identity-wrap"
 
-        /** On-disk layout: 1-byte IV length, IV, ciphertext. */
+        /** AES-GCM IV length used by Android Keystore. */
+        const val IV_LEN = 12
+
+        /** GCM tag is 16 bytes; ciphertext cannot be shorter. */
+        const val TAG_LEN = 16
+
+        /** On-disk layout: 1-byte IV length, 12-byte IV, ciphertext+tag. */
         fun pack(iv: ByteArray, ct: ByteArray): ByteArray {
-            require(iv.isNotEmpty() && iv.size <= 255)
-            return byteArrayOf(iv.size.toByte()) + iv + ct
+            require(iv.size == IV_LEN)
+            require(ct.size >= TAG_LEN)
+            return byteArrayOf(IV_LEN.toByte()) + iv + ct
         }
 
         fun unpack(blob: ByteArray): Pair<ByteArray, ByteArray> {
             if (blob.isEmpty()) error("empty wrap")
             val ivLen = blob[0].toInt() and 0xff
-            if (ivLen < 1 || blob.size < 1 + ivLen) error("bad wrap")
+            if (ivLen != IV_LEN || blob.size < 1 + IV_LEN + TAG_LEN) error("bad wrap")
             val iv = blob.copyOfRange(1, 1 + ivLen)
             val ct = blob.copyOfRange(1 + ivLen, blob.size)
             return iv to ct
