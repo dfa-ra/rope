@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,20 +24,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
+import app.rope.android.data.AddContactRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.SavedMessagesRules
 import app.rope.android.media.ImageCodec
 
 @Composable
@@ -92,6 +97,21 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (AddContactRules.show(SavedMessagesRules.isSaved(peer?.deviceId), peer?.displayName)) {
+                        val context = LocalContext.current
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_INSERT).apply {
+                                    type = AddContactRules.MIME
+                                    putExtra(AddContactRules.EXTRA_NAME, AddContactRules.name(peer?.displayName))
+                                }
+                                runCatching { context.startActivity(intent) }
+                            },
+                            modifier = Modifier.semantics { contentDescription = AddContactRules.LABEL },
+                        ) {
+                            Text(AddContactRules.LABEL)
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
