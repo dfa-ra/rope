@@ -70,6 +70,7 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceVolRules
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -155,6 +156,7 @@ data class UiState(
     val voicePositionMs: Long = 0,
     val voiceDurationMs: Long = 0,
     val voiceSpeed: Float = VoicePlayback.SPEED_1X,
+    val voiceVolume: Float = VoiceVolRules.VOL_100,
     val call: CallInfo? = null,
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
@@ -256,12 +258,14 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    voiceVolume = store.voiceVolume(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
                     vault.save(it.toBytes())
                 }
                 store.profile()?.let { attached(it) }
+                voicePlayer.setVolume(store.voiceVolume())
                 checkAppUpdate(openStatus = false)
                 if (!pendingLink.isNullOrBlank() && store.profile() == null) {
                     prepareJoin(pendingLink)
@@ -1142,6 +1146,12 @@ class RopeRepository(private val app: Application) {
         publishVoiceProgress()
     }
 
+    fun cycleVoiceVolume() {
+        val next = voicePlayer.cycleVolume()
+        store.saveVoiceVolume(next)
+        publishVoiceProgress()
+    }
+
     private fun publishVoiceProgress() {
         _state.value = _state.value.copy(
             playingVoiceId = voicePlayer.playingId,
@@ -1149,6 +1159,7 @@ class RopeRepository(private val app: Application) {
             voicePositionMs = voicePlayer.positionMs(),
             voiceDurationMs = voicePlayer.durationMs(),
             voiceSpeed = voicePlayer.speed,
+            voiceVolume = voicePlayer.volume,
         )
     }
 

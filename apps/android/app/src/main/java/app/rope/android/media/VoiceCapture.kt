@@ -9,6 +9,7 @@ import android.media.MediaRecorder
 import android.media.PlaybackParams
 import android.os.Build
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceVolRules
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -112,6 +113,8 @@ class VoicePlayer {
         private set
     var speed: Float = VoicePlayback.SPEED_1X
         private set
+    var volume: Float = VoiceVolRules.VOL_100
+        private set
 
     /** Playing now, or paused with a kept position. */
     val activeId: String? get() = playingId ?: loadedId.takeIf { player != null }
@@ -180,6 +183,16 @@ class VoicePlayer {
         return speed
     }
 
+    fun setVolume(next: Float) {
+        volume = VoiceVolRules.clamp(next)
+        applyVolume()
+    }
+
+    fun cycleVolume(): Float {
+        setVolume(VoiceVolRules.next(volume))
+        return volume
+    }
+
     private fun prepare(id: String, path: String, start: Boolean) {
         stop()
         val p = MediaPlayer()
@@ -189,6 +202,7 @@ class VoicePlayer {
         player = p
         loadedId = id
         applySpeed()
+        applyVolume()
         if (start) {
             p.start()
             playingId = id
@@ -204,6 +218,15 @@ class VoicePlayer {
                 PlaybackParams()
             }
             p.playbackParams = params.setSpeed(speed)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun applyVolume() {
+        val p = player ?: return
+        try {
+            val v = VoiceVolRules.clamp(volume)
+            p.setVolume(v, v)
         } catch (_: Exception) {
         }
     }

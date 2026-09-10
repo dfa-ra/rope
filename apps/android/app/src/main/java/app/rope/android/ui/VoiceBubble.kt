@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceVolRules
 
 /**
  * Telegram-like voice bubble: play/pause, seekable waveform, 1x/1.5x/2x.
@@ -48,9 +49,11 @@ fun VoiceMessageBubble(
     positionMs: Long,
     playerDurationMs: Long,
     speed: Float,
+    volume: Float,
     onPlay: (ChatMessage) -> Unit,
     onSeek: (ChatMessage, Long) -> Unit,
     onCycleSpeed: () -> Unit,
+    onCycleVolume: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val extra = runCatching { MediaPayload.parse(message.extra) }.getOrNull()
@@ -113,15 +116,26 @@ fun VoiceMessageBubble(
                     style = MaterialTheme.typography.labelSmall,
                 )
                 if (extra != null && !downloading) {
-                    Text(
-                        VoicePlayback.speedLabel(speed),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onCycleSpeed)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            VoicePlayback.speedLabel(speed),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onCycleSpeed)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                        Text(
+                            VoiceVolRules.label(volume),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onCycleVolume)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                 }
             }
         }
