@@ -52,8 +52,12 @@ class DeviceBackupTest {
         val raw = sample().toBytes()
         assertFalse(DeviceBackup.isSealed(raw))
         assertFalse(DeviceBackup.allowAutoRestore(raw))
-        val opened = DeviceBackup.open(raw) { error("must not decrypt v1 json") }
-        assertEquals("ghp_test", opened.githubToken)
+        try {
+            DeviceBackup.open(raw) { error("must not decrypt v1 json") }
+            org.junit.Assert.fail("expected sealed backup")
+        } catch (_: IllegalStateException) {
+        }
+        assertEquals("ghp_test", DeviceBackup.parse(raw).githubToken)
     }
 
     @Test
