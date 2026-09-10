@@ -755,6 +755,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onRememberEmoji: (String) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1112,6 +1113,7 @@ fun ChatPane(
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
+                onRememberEmoji = onRememberEmoji,
             )
         }
     }
@@ -1126,6 +1128,7 @@ fun ChatPane(
                 reactionExpanded = false
             },
             onReact = { emoji ->
+                onRememberEmoji(emoji)
                 onReact(target, emoji)
                 menuMessage = null
                 reactionExpanded = false
@@ -1136,6 +1139,7 @@ fun ChatPane(
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
+            recents = state.recentEmojis,
         )
     }
     if (state.recordingVideoNote) {
@@ -1838,6 +1842,7 @@ private fun MessageTapOverlay(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    recents: List<String> = emptyList(),
 ) {
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -1868,6 +1873,7 @@ private fun MessageTapOverlay(
                 onPick = onReact,
                 expanded = expanded,
                 onToggleExpand = onToggleExpand,
+                recents = recents,
             )
             MessageActionMenu(
                 m = message,
@@ -2237,6 +2243,7 @@ private fun ComposerBar(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
+    onRememberEmoji: (String) -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
@@ -2331,9 +2338,11 @@ private fun ComposerBar(
             if (showEmoji && !state.recording) {
                 EmojiPickerPanel(
                     onPick = {
+                        onRememberEmoji(it)
                         localText += it
                         persistDraft(localText)
                     },
+                    recents = state.recentEmojis,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }

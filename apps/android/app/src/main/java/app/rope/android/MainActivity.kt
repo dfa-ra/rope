@@ -198,6 +198,7 @@ class MainActivity : AppCompatActivity() {
                     onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,
                     onReact = repo::react,
+                    onRememberEmoji = repo::rememberEmoji,
                     onEnsureMedia = repo::ensureMedia,
                     onGroupName = repo::setGroupName,
                     onToggleMember = repo::toggleMember,

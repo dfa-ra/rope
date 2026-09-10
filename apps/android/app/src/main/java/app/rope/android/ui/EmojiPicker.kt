@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.RopeGrayDark
 import app.rope.android.RopeShapes
 import app.rope.android.data.EmojiPack
+import app.rope.android.data.RecentEmojiRules
 import kotlinx.coroutines.delay
 
 /**
@@ -53,12 +54,12 @@ fun EmojiPickerPanel(
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
     showSearch: Boolean = true,
+    recents: List<String> = emptyList(),
 ) {
-    var categoryId by remember { mutableStateOf(EmojiPack.categories.first().id) }
+    var categoryId by remember { mutableStateOf(RecentEmojiRules.initialCategory(recents)) }
     var query by remember { mutableStateOf("") }
-    val shown = remember(categoryId, query) {
-        val q = query.trim()
-        if (q.isNotEmpty()) EmojiPack.search(q) else EmojiPack.category(categoryId)?.emojis.orEmpty()
+    val shown = remember(categoryId, query, recents) {
+        RecentEmojiRules.shown(categoryId, query, recents)
     }
     Column(
         modifier
@@ -73,7 +74,7 @@ fun EmojiPickerPanel(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            EmojiPack.categories.forEach { cat ->
+            RecentEmojiRules.tabs(recents).forEach { cat ->
                 val selected = cat.id == categoryId && query.isBlank()
                 Text(
                     "${cat.icon} ${cat.label}",
@@ -135,6 +136,7 @@ fun ReactionPicker(
     onPick: (String) -> Unit,
     expanded: Boolean,
     onToggleExpand: () -> Unit,
+    recents: List<String> = emptyList(),
 ) {
     BackHandler(enabled = expanded) { onToggleExpand() }
     Surface(
@@ -165,6 +167,7 @@ fun ReactionPicker(
                 EmojiPickerPanel(
                     onPick = onPick,
                     showSearch = true,
+                    recents = recents,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
