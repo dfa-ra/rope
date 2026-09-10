@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SentSoundRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val sentSound: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    sentSound = store.sentSoundEnabled(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -586,6 +589,27 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(notificationsMuted = next)
     }
 
+    fun toggleSentSound() {
+        val next = !_state.value.sentSound
+        store.saveSentSound(next)
+        _state.value = _state.value.copy(sentSound = next)
+    }
+
+    private fun playSentSound() {
+        if (!SentSoundRules.shouldPlay(_state.value.sentSound, _state.value.notificationsMuted)) return
+        try {
+            val gen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, SentSoundRules.VOLUME)
+            gen.startTone(SentSoundRules.TONE, SentSoundRules.DURATION_MS)
+            mainHandler.postDelayed({
+                try {
+                    gen.release()
+                } catch (_: Exception) {
+                }
+            }, SentSoundRules.DURATION_MS + 80L)
+        } catch (_: Exception) {
+        }
+    }
+
     fun toggleLinkPreviews() {
         val next = !_state.value.linkPreviewsEnabled
         store.saveLinkPreviews(next)
@@ -629,6 +653,7 @@ class RopeRepository(private val app: Application) {
         }
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
+            playSentSound()
             val caption = _state.value.draftText
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
@@ -647,6 +672,7 @@ class RopeRepository(private val app: Application) {
         }
         val text = _state.value.draftText
         if (text.isBlank() || _state.value.recording) return
+        playSentSound()
         val reply = _state.value.replyTo
         val pack = replyPack(reply)
         val attached = _state.value.composerPreview
