@@ -740,6 +740,7 @@ fun ChatPane(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
+    onCopyText: (String) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
@@ -841,6 +842,15 @@ fun ChatPane(
                 if (singleSelected != null && ChatActions.canEdit(singleSelected)) {
                     IconButton(onClick = { onEdit(singleSelected); selectedIds = emptySet() }) {
                         Icon(Icons.Outlined.Edit, contentDescription = "Изменить")
+                    }
+                }
+                if (ChatSelection.copyText(selectedMsgs).isNotBlank()) {
+                    IconButton(onClick = {
+                        val packed = ChatSelection.copyText(selectedMsgs)
+                        if (packed.isNotBlank()) onCopyText(packed)
+                        selectedIds = emptySet()
+                    }) {
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = ChatSelection.COPY)
                     }
                 }
                 if (selectedMsgs.any { ChatActions.canForward(it) }) {
@@ -1133,6 +1143,13 @@ fun ChatPane(
             onReply = { onReply(target); menuMessage = null },
             onCopy = { onCopy(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
+            onSelect = {
+                if (ChatSelection.canSelect(target)) {
+                    selectedIds = selectedIds + target.id
+                    menuMessage = null
+                    reactionExpanded = false
+                }
+            },
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
@@ -1835,6 +1852,7 @@ private fun MessageTapOverlay(
     onReply: () -> Unit,
     onCopy: () -> Unit,
     onForward: () -> Unit,
+    onSelect: () -> Unit = {},
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
@@ -1875,6 +1893,7 @@ private fun MessageTapOverlay(
                 onReply = onReply,
                 onCopy = onCopy,
                 onForward = onForward,
+                onSelect = onSelect,
                 onPin = onPin,
                 onDelete = onDelete,
                 onOpen = onOpen,
@@ -1890,6 +1909,7 @@ private fun MessageActionMenu(
     onReply: () -> Unit,
     onCopy: () -> Unit,
     onForward: () -> Unit,
+    onSelect: () -> Unit = {},
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
@@ -1910,6 +1930,9 @@ private fun MessageActionMenu(
             }
             if (ChatActions.canForward(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)
+            }
+            if (ChatSelection.canSelect(m)) {
+                MessageMenuRow(Icons.Outlined.Check, ChatSelection.MENU, onSelect)
             }
             if (ChatActions.canPin(m)) {
                 MessageMenuRow(
