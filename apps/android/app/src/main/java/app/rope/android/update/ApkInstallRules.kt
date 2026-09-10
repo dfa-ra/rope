@@ -74,6 +74,8 @@ object ApkInstallRules {
         if ('/' in name || '\\' in name) return null
         return File(updatesDir, name)
     }
+
+    private fun canonical(file: File): String? = try {
         file.canonicalPath
     } catch (_: Exception) {
         null
