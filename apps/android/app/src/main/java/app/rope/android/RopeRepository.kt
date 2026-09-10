@@ -34,6 +34,7 @@ import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
+import app.rope.android.data.MentionTapRules
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
@@ -539,6 +540,18 @@ class RopeRepository(private val app: Application) {
     fun openChat(device: DirectoryDevice) {
         persistOpenDraft()
         enterChat(device.deviceId, device, null)
+    }
+
+    fun openMention(deviceId: String) {
+        val s = _state.value
+        if (!MentionTapRules.canOpen(s.group != null, deviceId, s.profile?.deviceId)) return
+        val peer = PeerIds.findDevice(s.devices, deviceId)
+        if (peer == null) {
+            notice(MentionTapRules.NOTICE_MISSING)
+            return
+        }
+        persistOpenDraft()
+        enterChat(peer.deviceId, peer, null)
     }
 
     fun openGroup(group: RopeGroup) {

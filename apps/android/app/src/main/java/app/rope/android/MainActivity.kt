@@ -254,6 +254,7 @@ class MainActivity : AppCompatActivity() {
                     onCopy = repo::copyMessage,
                     onPinMessage = repo::togglePinMessage,
                     onJump = repo::jumpToMessage,
+                    onOpenMention = repo::openMention,
                     onOpenImage = repo::openImage,
                     onCloseImage = repo::closeImage,
                     onConsumedScroll = repo::consumeScrollTo,

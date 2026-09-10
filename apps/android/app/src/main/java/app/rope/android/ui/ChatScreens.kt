@@ -171,6 +171,7 @@ import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.MentionTapRules
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
@@ -755,6 +756,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onOpenMention: (String) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1006,6 +1008,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onOpenMention = onOpenMention,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1373,6 +1376,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onOpenMention: (String) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1563,6 +1567,12 @@ private fun MessageBubble(
                                     mentionNames,
                                     mentionColor = if (mine) outFg else senderColor,
                                     styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
+                                    isGroup = inGroup,
+                                    selecting = selecting,
+                                    devices = state.devices,
+                                    selfName = state.profile?.displayName,
+                                    selfId = state.profile?.deviceId,
+                                    onOpenMention = onOpenMention,
                                     onPlainTap = onTap,
                                 )
                                 val preview = m.linkPreview
@@ -1661,6 +1671,12 @@ private fun MentionText(
     names: List<String>,
     mentionColor: Color,
     styleLarge: Boolean,
+    isGroup: Boolean = false,
+    selecting: Boolean = false,
+    devices: List<app.rope.android.data.DirectoryDevice> = emptyList(),
+    selfName: String? = null,
+    selfId: String? = null,
+    onOpenMention: (String) -> Unit = {},
     onPlainTap: () -> Unit = {},
 ) {
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
@@ -1695,7 +1711,14 @@ private fun MentionText(
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
-            if (url != null) openHttps(context, url) else onPlainTap()
+            when {
+                url != null -> openHttps(context, url)
+                !selecting && isGroup -> {
+                    val mentionId = MentionTapRules.deviceIdAt(text, offset, devices, selfName, selfId)
+                    if (mentionId != null) onOpenMention(mentionId) else onPlainTap()
+                }
+                else -> onPlainTap()
+            }
         },
     )
 }
