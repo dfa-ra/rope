@@ -3162,7 +3162,7 @@ fun ImageViewer(
                 onClick = { onDelete(current) },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(8.dp),
+                    .padding(end = 8.dp, bottom = if (album.size > 1) 88.dp else 8.dp),
             ) {
                 Icon(
                     Icons.Outlined.Delete,
