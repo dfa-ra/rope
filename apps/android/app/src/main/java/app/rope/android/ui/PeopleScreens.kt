@@ -1,6 +1,7 @@
 package app.rope.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,7 @@ import app.rope.android.NavRules
 import app.rope.android.UiState
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
+import app.rope.android.data.PeopleProfileRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 
@@ -34,6 +36,7 @@ fun PeoplePane(
     onOpen: (Conversation) -> Unit,
     onInvite: () -> Unit,
     onRevokeMember: (String) -> Unit = {},
+    onOpenProfile: (DirectoryDevice) -> Unit = {},
 ) {
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val canRevoke = RevokeRules.canRevoke(state.profile?.role)
@@ -76,6 +79,13 @@ fun PeoplePane(
                             onOpen = {
                                 if (pendingMemberId != d.memberId) onOpen(conversationOf(d))
                             },
+                            onOpenProfile = {
+                                if (pendingMemberId != d.memberId &&
+                                    PeopleProfileRules.canOpen(d.deviceId, state.profile?.deviceId)
+                                ) {
+                                    onOpenProfile(d)
+                                }
+                            },
                             onAskRevoke = { pendingMemberId = d.memberId },
                             onConfirmRevoke = {
                                 onRevokeMember(d.memberId)
@@ -96,6 +106,7 @@ private fun PersonRow(
     showRevoke: Boolean,
     confirming: Boolean,
     onOpen: () -> Unit,
+    onOpenProfile: () -> Unit,
     onAskRevoke: () -> Unit,
     onConfirmRevoke: () -> Unit,
     onCancelRevoke: () -> Unit,
@@ -107,6 +118,13 @@ private fun PersonRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Box(
+            Modifier
+                .semantics { contentDescription = PeopleProfileRules.AVATAR }
+                .pressScale(onOpenProfile),
+        ) {
+            InitialsAvatar(d.displayName.ifBlank { "?" }, group = false, online = d.online)
+        }
         Row(
             Modifier
                 .weight(1f)
@@ -114,7 +132,6 @@ private fun PersonRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            InitialsAvatar(d.displayName.ifBlank { "?" }, group = false, online = d.online)
             Column(Modifier.weight(1f)) {
                 Text(d.displayName.ifBlank { d.deviceId.take(8) }, style = MaterialTheme.typography.titleMedium)
                 Text(

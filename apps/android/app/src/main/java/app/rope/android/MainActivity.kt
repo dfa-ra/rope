@@ -160,6 +160,7 @@ class MainActivity : AppCompatActivity() {
                     onJoin = repo::join,
                     onJoinDev = repo::joinDevHttp,
                     onOpenConversation = repo::openConversation,
+                    onOpenPeerProfile = repo::openPeerProfile,
                     onDraft = repo::setDraft,
                     onSend = repo::sendDraft,
                     onInvite = repo::createInvite,

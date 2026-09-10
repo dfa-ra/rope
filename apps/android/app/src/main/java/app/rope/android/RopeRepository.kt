@@ -541,6 +541,20 @@ class RopeRepository(private val app: Application) {
         enterChat(device.deviceId, device, null)
     }
 
+    fun openPeerProfile(device: DirectoryDevice) {
+        persistOpenDraft()
+        _state.value = applyNav(Screen.PeerProfile, NavMode.Push).copy(
+            peer = device,
+            group = null,
+            messages = store.messages(device.deviceId),
+            replyTo = null,
+            replySpan = null,
+            editTarget = null,
+            messageQuery = "",
+            pendingAttachments = emptyList(),
+        )
+    }
+
     fun openGroup(group: RopeGroup) {
         persistOpenDraft()
         enterChat(ChatIds.group(group.groupId), null, group)
