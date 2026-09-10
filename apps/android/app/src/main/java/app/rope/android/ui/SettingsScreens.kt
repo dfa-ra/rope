@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.ClockSecRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleClockSec: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -142,6 +144,32 @@ fun SettingsPane(
                         selected = state.theme == ThemeMode.LIGHT,
                         onClick = { onSetTheme(ThemeMode.LIGHT) },
                         label = { Text("Светлая") },
+                    )
+                }
+            }
+        }
+        FadeIn(165) {
+            SectionCard {
+                Text(ClockSecRules.SECTION, style = MaterialTheme.typography.titleMedium)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(ClockSecRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            ClockSecRules.hint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.clockSec,
+                        onCheckedChange = { checked ->
+                            if (checked != state.clockSec) onToggleClockSec()
+                        },
+                        modifier = Modifier.semantics { contentDescription = ClockSecRules.TITLE },
                     )
                 }
             }

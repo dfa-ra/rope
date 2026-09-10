@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveClockSec(enabled: Boolean) {
+        put("clock_sec", if (enabled) "1" else "0")
+    }
+
+    fun clockSec(): Boolean = get("clock_sec") == "1"
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
