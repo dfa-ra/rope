@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SpoilerRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -700,7 +701,7 @@ class RopeRepository(private val app: Application) {
             editTarget = msg,
             replyTo = null,
             replySpan = null,
-            draftText = msg.text,
+            draftText = SpoilerRules.wrap(msg.text, msg.spoilers),
             pendingAttachments = emptyList(),
         )
     }
@@ -1690,11 +1691,15 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = replyPack(reply),
         forwardedFrom: String? = null,
         linkPreview: PackedLinkPreview? = null,
+        spoilers: List<IntRange> = emptyList(),
     ) {
+        val parsed = SpoilerRules.parse(text)
+        val ranges = parsed.second.ifEmpty { spoilers }
+        val plain = if (parsed.second.isNotEmpty()) parsed.first else text
         val attributed = JsonIds.optional(forwardedFrom)
         val body = GroupTextPayload(
             group.groupId,
-            text,
+            plain,
             group.epoch,
             if (attributed == null) pack.id else null,
             if (attributed == null) pack.preview else "",
@@ -1704,12 +1709,13 @@ class RopeRepository(private val app: Application) {
             quoteStart = if (attributed == null) pack.quoteStart else -1,
             quoteEnd = if (attributed == null) pack.quoteEnd else -1,
             linkPreview = linkPreview,
+            spoilers = ranges,
         ).toJson().toByteArray()
         sendGroupPayload(
             group,
             EnvelopeTypes.GROUP_TEXT,
             body,
-            text,
+            plain,
             MessageKind.GROUP_TEXT,
             "",
             null,
@@ -1717,6 +1723,7 @@ class RopeRepository(private val app: Application) {
             attributed,
             if (attributed == null) pack else ReplyPack(),
             linkPreview,
+            spoilers = ranges,
         )
     }
 
@@ -1732,6 +1739,7 @@ class RopeRepository(private val app: Application) {
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
         linkPreview: PackedLinkPreview? = null,
+        spoilers: List<IntRange> = emptyList(),
     ) {
         scope.launch {
             val id = identity ?: return@launch
@@ -1783,6 +1791,7 @@ class RopeRepository(private val app: Application) {
                     quoteEnd = if (forwardedFrom == null) pack.quoteEnd else -1,
                     forwardedFrom = forwardedFrom,
                     linkPreview = linkPreview,
+                    spoilers = spoilers,
                 )
                 store.insertMessage(local)
                 refreshMessages(chatId)
@@ -1924,8 +1933,9 @@ class RopeRepository(private val app: Application) {
     ) {
         val id = identity ?: return
         try {
+            val spoiler = SpoilerRules.parse(text)
             val packed = TextBody.encode(
-                text,
+                spoiler.first,
                 pack.id,
                 pack.preview,
                 pack.name,
@@ -1933,13 +1943,14 @@ class RopeRepository(private val app: Application) {
                 quoteStart = pack.quoteStart,
                 quoteEnd = pack.quoteEnd,
                 preview = preview,
+                spoilers = spoiler.second,
             )
             val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
             val local = ChatMessage(
                 id = env.messageId,
                 peerDeviceId = peer.deviceId,
                 outgoing = true,
-                text = text,
+                text = spoiler.first,
                 status = MessageStatus.CREATED,
                 timestampMs = env.timestampMs.toLong(),
                 envelope = env.bytes,
@@ -1953,6 +1964,7 @@ class RopeRepository(private val app: Application) {
                 quoteStart = pack.quoteStart,
                 quoteEnd = pack.quoteEnd,
                 linkPreview = preview,
+                spoilers = spoiler.second,
             )
             store.insertMessage(local)
             refreshMessages(peer.deviceId)
@@ -2227,6 +2239,7 @@ class RopeRepository(private val app: Application) {
                 src.text, null, "", "",
                 forwardedFrom = from,
                 preview = src.linkPreview,
+                spoilers = src.spoilers,
             )
             val env = id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed)
             store.insertMessage(
@@ -2243,6 +2256,7 @@ class RopeRepository(private val app: Application) {
                     senderName = _state.value.profile?.displayName.orEmpty(),
                     forwardedFrom = from,
                     linkPreview = src.linkPreview,
+                    spoilers = src.spoilers,
                 ),
             )
             refreshMessages(peer.deviceId)
@@ -2284,7 +2298,7 @@ class RopeRepository(private val app: Application) {
     private fun forwardToGroup(group: RopeGroup, src: ChatMessage) {
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            sendGroupText(group, src.text, forwardedFrom = from, linkPreview = src.linkPreview)
+            sendGroupText(group, src.text, forwardedFrom = from, linkPreview = src.linkPreview, spoilers = src.spoilers)
             return
         }
         val payload = attributedMediaPayload(src, from, groupId = group.groupId) ?: return
@@ -2303,7 +2317,7 @@ class RopeRepository(private val app: Application) {
     private fun forwardToSaved(src: ChatMessage) {
         val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
-            saveLocalText(src.text, forwardedFrom = from, linkPreview = src.linkPreview)
+            saveLocalText(src.text, forwardedFrom = from, linkPreview = src.linkPreview, spoilers = src.spoilers)
             return
         }
         val payload = attributedMediaPayload(src, from, groupId = null, upload = false) ?: return
@@ -2323,10 +2337,14 @@ class RopeRepository(private val app: Application) {
         forwardedFrom: String? = null,
         pack: ReplyPack = replyPack(reply),
         linkPreview: PackedLinkPreview? = null,
+        spoilers: List<IntRange> = emptyList(),
     ) {
+        val parsed = SpoilerRules.parse(text)
+        val ranges = parsed.second.ifEmpty { spoilers }
+        val plain = if (parsed.second.isNotEmpty()) parsed.first else text
         val attributed = JsonIds.optional(forwardedFrom)
         insertLocalSaved(
-            text = text,
+            text = plain,
             kind = MessageKind.TEXT,
             extra = "",
             localFile = null,
@@ -2334,6 +2352,7 @@ class RopeRepository(private val app: Application) {
             forwardedFrom = attributed,
             pack = if (attributed == null) pack else ReplyPack(),
             linkPreview = linkPreview,
+            spoilers = ranges,
         )
     }
 
@@ -2346,6 +2365,7 @@ class RopeRepository(private val app: Application) {
         forwardedFrom: String? = null,
         pack: ReplyPack = ReplyPack(),
         linkPreview: PackedLinkPreview? = null,
+        spoilers: List<IntRange> = emptyList(),
     ) {
         val local = ChatMessage(
             id = store.newId(),
@@ -2368,6 +2388,7 @@ class RopeRepository(private val app: Application) {
             quoteEnd = pack.quoteEnd,
             forwardedFrom = forwardedFrom,
             linkPreview = linkPreview,
+            spoilers = spoilers,
         )
         store.insertMessage(local)
         refreshMessages(SavedMessagesRules.ID)
@@ -2684,6 +2705,7 @@ class RopeRepository(private val app: Application) {
                     quoteEnd = packed.quoteEnd,
                     forwardedFrom = packed.forwardedFrom,
                     linkPreview = packed.linkPreview,
+                    spoilers = packed.spoilers,
                 )
                 store.insertMessage(msg)
                 ack(plain.messageId)
@@ -2718,6 +2740,7 @@ class RopeRepository(private val app: Application) {
                     quoteEnd = payload.quoteEnd,
                     forwardedFrom = payload.forwardedFrom,
                     linkPreview = payload.linkPreview,
+                    spoilers = payload.spoilers,
                 )
                 store.insertMessage(msg)
                 ack(typed.messageId)
@@ -3455,7 +3478,20 @@ class RopeRepository(private val app: Application) {
                 val gid = msg.groupId ?: ChatIds.rawGroupId(msg.peerDeviceId)
                 val group = store.group(gid) ?: continue
                 val body = when (msg.kind) {
-                    MessageKind.GROUP_TEXT, MessageKind.TEXT -> GroupTextPayload(gid, msg.text, group.epoch).toJson().toByteArray()
+                    MessageKind.GROUP_TEXT, MessageKind.TEXT -> GroupTextPayload(
+                        gid,
+                        msg.text,
+                        group.epoch,
+                        replyTo = msg.replyToId,
+                        replyPreview = msg.replyPreview,
+                        replyName = msg.replyName,
+                        forwardedFrom = msg.forwardedFrom,
+                        quoteText = msg.quoteText,
+                        quoteStart = msg.quoteStart,
+                        quoteEnd = msg.quoteEnd,
+                        linkPreview = msg.linkPreview,
+                        spoilers = msg.spoilers,
+                    ).toJson().toByteArray()
                     else -> msg.extra.toByteArray()
                 }
                 val type = if (msg.kind == MessageKind.GROUP_TEXT || msg.kind == MessageKind.TEXT) EnvelopeTypes.GROUP_TEXT else EnvelopeTypes.MEDIA
@@ -3486,7 +3522,19 @@ class RopeRepository(private val app: Application) {
         val peer = devices.find { it.deviceId == msg.peerDeviceId } ?: return null
         return try {
             if (msg.kind == MessageKind.TEXT) {
-                id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), msg.text).bytes
+                val packed = TextBody.encode(
+                    msg.text,
+                    msg.replyToId,
+                    msg.replyPreview,
+                    msg.replyName,
+                    forwardedFrom = msg.forwardedFrom,
+                    quoteText = msg.quoteText,
+                    quoteStart = msg.quoteStart,
+                    quoteEnd = msg.quoteEnd,
+                    preview = msg.linkPreview,
+                    spoilers = msg.spoilers,
+                )
+                id.encryptMessage(publicIdentityFromBlob(peer.publicIdentity), packed).bytes
             } else {
                 id.encryptTyped(publicIdentityFromBlob(peer.publicIdentity), EnvelopeTypes.MEDIA, msg.extra.toByteArray()).bytes
             }

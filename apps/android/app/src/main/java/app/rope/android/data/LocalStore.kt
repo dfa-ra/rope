@@ -227,9 +227,21 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val newUrl = LinkPreviewRules.firstHttps(text)
         val keep = !oldUrl.isNullOrBlank() && oldUrl == newUrl
         val nextPreview = if (keep) msg.linkPreview else null
+        val spoiler = SpoilerRules.parse(text)
         writableDatabase.execSQL(
             "UPDATE messages SET body_enc = ?, meta = ? WHERE id = ?",
-            arrayOf(encrypt(text), MessageMeta.of(msg.copy(text = text, edited = true, linkPreview = nextPreview)).toJson(), id),
+            arrayOf(
+                encrypt(spoiler.first),
+                MessageMeta.of(
+                    msg.copy(
+                        text = spoiler.first,
+                        edited = true,
+                        linkPreview = nextPreview,
+                        spoilers = spoiler.second,
+                    ),
+                ).toJson(),
+                id,
+            ),
         )
         return true
     }
@@ -509,6 +521,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             edited = meta.edited,
             deleted = meta.deleted,
             linkPreview = meta.linkPreview,
+            spoilers = meta.spoilers,
         )
     }
 

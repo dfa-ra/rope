@@ -73,6 +73,7 @@ data class ChatMessage(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val linkPreview: PackedLinkPreview? = null,
+    val spoilers: List<IntRange> = emptyList(),
 ) {
     fun preview(): String = when {
         deleted -> "Сообщение удалено"

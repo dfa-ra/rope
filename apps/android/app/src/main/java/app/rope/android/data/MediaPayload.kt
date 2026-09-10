@@ -168,6 +168,7 @@ data class GroupTextPayload(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val linkPreview: PackedLinkPreview? = null,
+    val spoilers: List<IntRange> = emptyList(),
 ) {
     fun toJson(): String = JSONObject()
         .put("g", groupId)
@@ -180,6 +181,7 @@ data class GroupTextPayload(
             JsonIds.optional(forwardedFrom)?.let { put("ff", it) }
             QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
             LinkPreviewRules.put(this, linkPreview)
+            SpoilerRules.put(this, spoilers)
         }
         .toString()
 
@@ -199,6 +201,7 @@ data class GroupTextPayload(
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 linkPreview = LinkPreviewRules.read(o.optJSONObject("lp")),
+                spoilers = SpoilerRules.read(o),
             )
         }
     }
@@ -215,6 +218,7 @@ data class MessageMeta(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val linkPreview: PackedLinkPreview? = null,
+    val spoilers: List<IntRange> = emptyList(),
 ) {
     fun toJson(): String = JSONObject()
         .put("reply_to", replyToId ?: JSONObject.NULL)
@@ -229,6 +233,7 @@ data class MessageMeta(
         .apply {
             LinkPreviewRules.put(this, linkPreview)
             JsonIds.optional(linkPreview?.localPath)?.let { put("lp_path", it) }
+            SpoilerRules.put(this, spoilers)
         }
         .toString()
 
@@ -249,6 +254,7 @@ data class MessageMeta(
                     quoteStart = o.optInt("quote_start", -1),
                     quoteEnd = o.optInt("quote_end", -1),
                     linkPreview = packed?.copy(localPath = JsonIds.optional(o.optString("lp_path"))),
+                    spoilers = SpoilerRules.read(o),
                 )
             } catch (_: Exception) {
                 MessageMeta()
@@ -266,6 +272,7 @@ data class MessageMeta(
             quoteStart = msg.quoteStart,
             quoteEnd = msg.quoteEnd,
             linkPreview = msg.linkPreview,
+            spoilers = msg.spoilers,
         )
     }
 }
@@ -325,6 +332,7 @@ data class PackedText(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val linkPreview: PackedLinkPreview? = null,
+    val spoilers: List<IntRange> = emptyList(),
 )
 
 object TextBody {
@@ -338,13 +346,17 @@ object TextBody {
         quoteStart: Int = -1,
         quoteEnd: Int = -1,
         preview: PackedLinkPreview? = null,
+        spoilers: List<IntRange> = emptyList(),
     ): String {
         val from = JsonIds.optional(forwardedFrom)
         val lp = preview?.takeIf { it.title.isNotBlank() && it.url.isNotBlank() }
         if (from != null) {
-            return JSONObject().put("t", text).put("ff", from).apply { LinkPreviewRules.put(this, lp) }.toString()
+            return JSONObject().put("t", text).put("ff", from).apply {
+                LinkPreviewRules.put(this, lp)
+                SpoilerRules.put(this, spoilers)
+            }.toString()
         }
-        if (replyTo.isNullOrBlank() && lp == null) return text
+        if (replyTo.isNullOrBlank() && lp == null && spoilers.isEmpty()) return text
         return JSONObject()
             .put("t", text)
             .apply {
@@ -355,6 +367,7 @@ object TextBody {
                     QuoteSpanRules.put(this, quoteText, quoteStart, quoteEnd)
                 }
                 LinkPreviewRules.put(this, lp)
+                SpoilerRules.put(this, spoilers)
             }
             .toString()
     }
@@ -376,6 +389,7 @@ object TextBody {
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 linkPreview = LinkPreviewRules.read(o.optJSONObject("lp")),
+                spoilers = SpoilerRules.read(o),
             )
         } catch (_: Exception) {
             PackedText(raw)

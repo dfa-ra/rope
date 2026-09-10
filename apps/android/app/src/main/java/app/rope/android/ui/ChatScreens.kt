@@ -1564,6 +1564,8 @@ private fun MessageBubble(
                                     mentionColor = if (mine) outFg else senderColor,
                                     styleLarge = m.kind == MessageKind.TEXT || m.kind == MessageKind.GROUP_TEXT,
                                     onPlainTap = onTap,
+                                    messageId = m.id,
+                                    spoilers = m.spoilers,
                                 )
                                 val preview = m.linkPreview
                                 if (preview != null) {
@@ -1662,13 +1664,22 @@ private fun MentionText(
     mentionColor: Color,
     styleLarge: Boolean,
     onPlainTap: () -> Unit = {},
+    messageId: String = "",
+    spoilers: List<IntRange> = emptyList(),
 ) {
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
     val links = remember(text) { LinkPreviewRules.spans(text) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
-    if (spans.isEmpty() && links.isEmpty()) {
+    val hideColor = MaterialTheme.colorScheme.onSurface
+    var revealed by remember(messageId) { mutableStateOf(setOf<IntRange>()) }
+    val hidden = remember(spoilers, revealed, text) {
+        spoilers.filter { range ->
+            range !in revealed && range.first < text.length && range.last + 1 > 0
+        }
+    }
+    if (spans.isEmpty() && links.isEmpty() && spoilers.isEmpty()) {
         Text(text, style = style)
         return
     }
@@ -1689,11 +1700,27 @@ private fun MentionText(
             )
             addStringAnnotation("URL", link.url, link.start, link.endExclusive)
         }
+        hidden.forEach { range ->
+            val start = range.first.coerceIn(0, text.length)
+            val end = (range.last + 1).coerceIn(start, text.length)
+            if (end > start) {
+                addStyle(
+                    SpanStyle(color = Color.Transparent, background = hideColor),
+                    start,
+                    end,
+                )
+            }
+        }
     }
     ClickableText(
         text = annotated,
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
+            val hit = hidden.firstOrNull { offset in it }
+            if (hit != null) {
+                revealed = revealed + hit
+                return@ClickableText
+            }
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
             if (url != null) openHttps(context, url) else onPlainTap()
         },
