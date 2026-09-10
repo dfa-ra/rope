@@ -156,6 +156,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.PinSilentRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
@@ -741,6 +742,7 @@ fun ChatPane(
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
+    onPinSilent: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
@@ -1134,6 +1136,7 @@ fun ChatPane(
             onCopy = { onCopy(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
+            onPinSilent = { onPinSilent(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
         )
@@ -1836,6 +1839,7 @@ private fun MessageTapOverlay(
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
+    onPinSilent: () -> Unit = {},
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1876,6 +1880,7 @@ private fun MessageTapOverlay(
                 onCopy = onCopy,
                 onForward = onForward,
                 onPin = onPin,
+                onPinSilent = onPinSilent,
                 onDelete = onDelete,
                 onOpen = onOpen,
             )
@@ -1891,6 +1896,7 @@ private fun MessageActionMenu(
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
+    onPinSilent: () -> Unit = {},
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1917,6 +1923,13 @@ private fun MessageActionMenu(
                     if (pinned) "Открепить" else "Закрепить",
                     onPin,
                 )
+                if (!pinned) {
+                    MessageMenuRow(
+                        Icons.Outlined.NotificationsOff,
+                        PinSilentRules.LABEL,
+                        onPinSilent,
+                    )
+                }
             }
             if (ChatActions.canDelete(m)) {
                 MessageMenuRow(Icons.Outlined.Delete, "Удалить", onDelete)

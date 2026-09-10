@@ -66,6 +66,7 @@ import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
+import app.rope.android.data.PinSilentRules
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
@@ -778,13 +779,14 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(notice = "Скопировано")
     }
 
-    fun togglePinMessage(msg: ChatMessage) {
+    fun togglePinMessage(msg: ChatMessage, silent: Boolean = false) {
         if (msg.deleted) return
         val chatId = openChatId() ?: msg.peerDeviceId
         val cur = store.chatPrefs(chatId)
         val nextId = if (cur.pinnedMessageId == msg.id) null else msg.id
         store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = nextId))
         _state.value = _state.value.copy(pinnedMessageId = nextId)
+        if (!PinSilentRules.notifyOthers(pinning = nextId != null, silent = silent)) return
         sendControl(
             EnvelopeTypes.RECEIPT,
             ChatControl(
