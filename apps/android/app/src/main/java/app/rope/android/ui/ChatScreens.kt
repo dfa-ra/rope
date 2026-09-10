@@ -736,6 +736,7 @@ fun ChatPane(
     onEdit: (ChatMessage) -> Unit = {},
     onDelete: (ChatMessage) -> Unit = {},
     onForward: (ChatMessage) -> Unit = {},
+    onSaveToSaved: (ChatMessage) -> Unit = {},
     onCancelComposer: () -> Unit = {},
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
@@ -849,6 +850,14 @@ fun ChatPane(
                         selectedIds = emptySet()
                     }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Переслать")
+                    }
+                }
+                if (selectedMsgs.any { ChatActions.canSave(it, saved) }) {
+                    IconButton(onClick = {
+                        selectedMsgs.filter { ChatActions.canSave(it, saved) }.forEach(onSaveToSaved)
+                        selectedIds = emptySet()
+                    }) {
+                        Icon(Icons.Outlined.Bookmark, contentDescription = SavedMessagesRules.SAVE_MENU)
                     }
                 }
                 if (selectedMsgs.any { ChatActions.canDelete(it) }) {
@@ -1133,9 +1142,11 @@ fun ChatPane(
             onReply = { onReply(target); menuMessage = null },
             onCopy = { onCopy(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
+            onSave = { onSaveToSaved(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
+            savedThread = saved,
         )
     }
     if (state.recordingVideoNote) {
@@ -1835,9 +1846,11 @@ private fun MessageTapOverlay(
     onReply: () -> Unit,
     onCopy: () -> Unit,
     onForward: () -> Unit,
+    onSave: () -> Unit = {},
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    savedThread: Boolean = false,
 ) {
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -1872,9 +1885,11 @@ private fun MessageTapOverlay(
             MessageActionMenu(
                 m = message,
                 pinned = pinned,
+                savedThread = savedThread,
                 onReply = onReply,
                 onCopy = onCopy,
                 onForward = onForward,
+                onSave = onSave,
                 onPin = onPin,
                 onDelete = onDelete,
                 onOpen = onOpen,
@@ -1887,9 +1902,11 @@ private fun MessageTapOverlay(
 private fun MessageActionMenu(
     m: ChatMessage,
     pinned: Boolean,
+    savedThread: Boolean = false,
     onReply: () -> Unit,
     onCopy: () -> Unit,
     onForward: () -> Unit,
+    onSave: () -> Unit = {},
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
@@ -1910,6 +1927,9 @@ private fun MessageActionMenu(
             }
             if (ChatActions.canForward(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)
+            }
+            if (ChatActions.canSave(m, savedThread)) {
+                MessageMenuRow(Icons.Outlined.Bookmark, SavedMessagesRules.SAVE_MENU, onSave)
             }
             if (ChatActions.canPin(m)) {
                 MessageMenuRow(

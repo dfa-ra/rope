@@ -280,6 +280,12 @@ class Stage2UxTest {
         assertTrue(ChatActions.canOpen(video.copy(outgoing = false)))
         assertFalse(ChatActions.canOpen(deleted.copy(kind = MessageKind.IMAGE)))
         assertFalse(ChatActions.canOpen(deleted.copy(kind = MessageKind.VIDEO)))
+        assertTrue(ChatActions.canSave(incoming, savedThread = false))
+        assertTrue(ChatActions.canSave(mine, savedThread = false))
+        assertFalse(ChatActions.canSave(incoming, savedThread = true))
+        assertFalse(ChatActions.canSave(deleted, savedThread = false))
+        assertFalse(ChatActions.canSave(incoming.copy(kind = MessageKind.CALL), savedThread = false))
+        assertFalse(ChatActions.canSave(incoming.copy(kind = MessageKind.UNKNOWN), savedThread = false))
     }
 
     @Test

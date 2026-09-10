@@ -241,6 +241,7 @@ class MainActivity : AppCompatActivity() {
                     onEdit = repo::startEdit,
                     onDelete = repo::deleteMessage,
                     onForward = repo::startForward,
+                    onSaveToSaved = repo::saveToSaved,
                     onCancelComposer = repo::cancelComposerExtra,
                     onDismissLinkPreview = repo::dismissComposerPreview,
                     onCancelPendingMedia = repo::cancelPendingMedia,

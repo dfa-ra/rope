@@ -41,6 +41,7 @@ import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
+import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
@@ -723,6 +724,19 @@ class RopeRepository(private val app: Application) {
         refreshOpenChat()
         if (SavedMessagesRules.skipNetwork(openChatId() ?: msg.peerDeviceId)) return
         sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.DELETE, msg.id).toJson().toByteArray())
+    }
+
+    fun saveToSaved(msg: ChatMessage) {
+        val inSaved = SavedMessagesRules.isSaved(openChatId() ?: msg.peerDeviceId)
+        if (!ChatActions.canSave(msg, inSaved)) return
+        scope.launch {
+            try {
+                forwardToSaved(msg)
+                notice(SavedMessagesRules.SAVE_NOTICE)
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
     }
 
     fun startForward(msg: ChatMessage) {

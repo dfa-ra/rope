@@ -7,6 +7,7 @@ import app.rope.android.data.ChatListPreviewKind
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.Conversation
@@ -107,6 +108,36 @@ class SavedMessagesRulesTest {
         )
         assertEquals("Анна", from)
         assertEquals("Переслано от Анна", ForwardRules.headerLabel(from))
+        assertEquals("В избранное", SavedMessagesRules.SAVE_MENU)
+        assertEquals("Сохранено в Избранное", SavedMessagesRules.SAVE_NOTICE)
+        assertTrue(
+            ChatActions.canSave(
+                ChatMessage(
+                    id = "s",
+                    peerDeviceId = "peer",
+                    outgoing = false,
+                    text = "hi",
+                    status = MessageStatus.DELIVERED_TO_DEVICE,
+                    timestampMs = 1L,
+                    kind = MessageKind.TEXT,
+                ),
+                savedThread = false,
+            ),
+        )
+        assertFalse(
+            ChatActions.canSave(
+                ChatMessage(
+                    id = "s",
+                    peerDeviceId = SavedMessagesRules.ID,
+                    outgoing = true,
+                    text = "hi",
+                    status = MessageStatus.DELIVERED_TO_DEVICE,
+                    timestampMs = 1L,
+                    kind = MessageKind.TEXT,
+                ),
+                savedThread = true,
+            ),
+        )
     }
 
     @Test

@@ -10,6 +10,8 @@ object SavedMessagesRules {
     const val IDLE_SUBTITLE = "Только на этом устройстве"
     const val IDLE_TITLE = "Избранное пусто"
     const val IDLE_BODY = "Перешлите сюда сообщения или напишите заметку."
+    const val SAVE_MENU = "В избранное"
+    const val SAVE_NOTICE = "Сохранено в Избранное"
     const val LOCAL_OBJECT_PREFIX = "local-"
 
     fun isSaved(id: String?): Boolean = id == ID

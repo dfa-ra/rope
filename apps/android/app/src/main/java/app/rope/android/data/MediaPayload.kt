@@ -388,6 +388,13 @@ object ChatActions {
 
     fun canForward(msg: ChatMessage): Boolean = !msg.deleted
 
+    /** Bookmark a copy into local Saved Messages. Hidden inside Избранное itself. */
+    fun canSave(msg: ChatMessage, savedThread: Boolean): Boolean =
+        !msg.deleted &&
+            !savedThread &&
+            msg.kind != MessageKind.CALL &&
+            msg.kind != MessageKind.UNKNOWN
+
     fun canEdit(msg: ChatMessage): Boolean =
         msg.outgoing &&
             !msg.deleted &&
