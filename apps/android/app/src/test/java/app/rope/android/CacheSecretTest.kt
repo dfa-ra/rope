@@ -1,6 +1,7 @@
 package app.rope.android
 
 import app.rope.android.provision.CacheSecret
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
