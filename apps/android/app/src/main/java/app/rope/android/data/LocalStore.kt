@@ -528,15 +528,11 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     private fun encryptBytes(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, payloadKey)
-        val iv = cipher.iv
-        val ct = cipher.doFinal(plain)
-        return byteArrayOf(iv.size.toByte()) + iv + ct
+        return pack(cipher.iv, cipher.doFinal(plain))
     }
 
     private fun decryptBytes(blob: ByteArray): ByteArray {
-        val ivLen = blob[0].toInt() and 0xff
-        val iv = blob.copyOfRange(1, 1 + ivLen)
-        val ct = blob.copyOfRange(1 + ivLen, blob.size)
+        val (iv, ct) = unpack(blob)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, payloadKey, GCMParameterSpec(128, iv))
         return cipher.doFinal(ct)
@@ -558,5 +554,27 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     companion object {
         const val VERSION = 6
         private const val PAYLOAD_ALIAS = "rope-local-payload"
+
+        /** AES-GCM IV length used by Android Keystore. */
+        const val IV_LEN = 12
+
+        /** GCM tag is 16 bytes; ciphertext cannot be shorter. */
+        const val TAG_LEN = 16
+
+        /** At-rest layout: 1-byte IV length, 12-byte IV, ciphertext+tag. */
+        fun pack(iv: ByteArray, ct: ByteArray): ByteArray {
+            require(iv.size == IV_LEN)
+            require(ct.size >= TAG_LEN)
+            return byteArrayOf(IV_LEN.toByte()) + iv + ct
+        }
+
+        fun unpack(blob: ByteArray): Pair<ByteArray, ByteArray> {
+            if (blob.isEmpty()) error("empty wrap")
+            val ivLen = blob[0].toInt() and 0xff
+            if (ivLen != IV_LEN || blob.size < 1 + IV_LEN + TAG_LEN) error("bad wrap")
+            val iv = blob.copyOfRange(1, 1 + ivLen)
+            val ct = blob.copyOfRange(1 + ivLen, blob.size)
+            return iv to ct
+        }
     }
 }
