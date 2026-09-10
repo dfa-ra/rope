@@ -126,6 +126,32 @@ class ChatListPreviewRulesTest {
     }
 
     @Test
+    fun lastMessageNewlinesAreOneLine() {
+        val last = msg("первая\nвторая\r\nтретья", outgoing = false, senderName = "Аня")
+        val dm = ChatListPreviewRules.copy(last, draft = "", isGroup = false, myDeviceId = "me")
+        assertEquals("первая вторая третья", dm.text)
+        assertFalse(dm.text.contains('\n'))
+        assertFalse(dm.text.contains('\r'))
+        val group = ChatListPreviewRules.copy(
+            last,
+            draft = "",
+            isGroup = true,
+            myDeviceId = "me",
+        )
+        assertEquals("Аня: первая вторая третья", group.text)
+        assertFalse(group.text.contains('\n'))
+        val crlfName = msg("привет", outgoing = false, senderName = "Аня\nAdmin")
+        val named = ChatListPreviewRules.copy(
+            crlfName,
+            draft = "",
+            isGroup = true,
+            myDeviceId = "me",
+        )
+        assertFalse(named.text.contains('\n'))
+        assertEquals("Аня Admin: привет", named.text)
+    }
+
+    @Test
     fun draftWithoutLastIsSearchablePreview() {
         val draft = Conversation("1", "Анна", "Черновик: секрет", false, true, last = null)
         assertEquals(ChatListHit.PREVIEW, ChatListRules.hit(draft, "секрет"))

@@ -40,7 +40,7 @@ object ChatListPreviewRules {
                 isGroup -> GroupChatUx.listPreview(last, myDeviceId) ?: last.preview()
                 else -> dmLast(last, myDeviceId)
             }
-            return ChatListPreviewCopy(body, ChatListPreviewKind.LAST)
+            return ChatListPreviewCopy(clip(body), ChatListPreviewKind.LAST)
         }
         if (saved) {
             return ChatListPreviewCopy(SavedMessagesRules.IDLE_SUBTITLE, ChatListPreviewKind.PRESENCE)
