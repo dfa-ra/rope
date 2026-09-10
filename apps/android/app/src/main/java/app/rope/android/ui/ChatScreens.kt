@@ -152,6 +152,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.DoubleTapReactRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -1471,6 +1472,9 @@ private fun MessageBubble(
                         if (m.deleted) return@combinedClickable
                         if (selecting) onToggleSelect() else onEnterSelect()
                     },
+                    onDoubleClick = {
+                        DoubleTapReactRules.emojiOrNull(m, selecting)?.let { onReact(m, it) }
+                    },
                 )
             val mediaTile = (m.kind == MessageKind.IMAGE || m.kind == MessageKind.VIDEO) && !m.deleted
             if (mediaTile) {
@@ -2069,6 +2073,9 @@ private fun AlbumBubble(
                             onLongPressMember(m)
                         }
                     },
+                    onDoubleClick = {
+                        DoubleTapReactRules.emojiOrNull(m, selecting)?.let { onReact(m, it) }
+                    },
                 )
             }
             if (selectAlpha > 0f || highlighted) {
@@ -2097,6 +2104,7 @@ private fun MosaicTile(
     onEnsure: (ChatMessage) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onDoubleClick: () -> Unit = {},
 ) {
     LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
@@ -2109,7 +2117,7 @@ private fun MosaicTile(
             .offset(x = tile.xDp.dp, y = tile.yDp.dp)
             .width(tile.widthDp.dp)
             .height(tile.heightDp.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onDoubleClick = onDoubleClick)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         if (bmp != null) {
