@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupMemberSearchRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -120,6 +121,9 @@ fun GroupInfoPane(
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
+    var memberQuery by remember { mutableStateOf("") }
+    val searching = GroupMemberSearchRules.searching(memberQuery)
+    val visibleMembers = GroupMemberSearchRules.rows(g.members, me, names, memberQuery)
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -139,8 +143,28 @@ fun GroupInfoPane(
                     }
                 }
             }
+            if (GroupMemberSearchRules.showSearch(g.members.size)) {
+                item {
+                    OutlinedTextField(
+                        memberQuery,
+                        { memberQuery = it },
+                        placeholder = { Text(GroupMemberSearchRules.PLACEHOLDER) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(RopeShapes.field),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
             item { Text("Участники", style = MaterialTheme.typography.titleSmall) }
-            items(g.members, key = { it }) { id ->
+            if (searching && visibleMembers.isEmpty()) {
+                item {
+                    RopeEmptyState(
+                        title = GroupMemberSearchRules.SEARCH_TITLE,
+                        body = GroupMemberSearchRules.searchBody(memberQuery),
+                    )
+                }
+            } else {
+                items(visibleMembers, key = { it }) { id ->
                 val label = GroupChatUx.memberDisplayName(id, me, names)
                 val role = GroupChatUx.memberRoleLabel(id, g)
                 val tint = Color(GroupChatUx.senderColorArgb(id, label))
@@ -172,7 +196,8 @@ fun GroupInfoPane(
                     }
                 }
             }
-            if (canManage) {
+            }
+            if (canManage && !searching) {
                 item { Text("Добавить", style = MaterialTheme.typography.titleSmall) }
                 val extras = state.devices.filter { it.deviceId !in g.members }
                 if (extras.isEmpty()) {
