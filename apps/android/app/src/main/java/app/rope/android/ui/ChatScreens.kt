@@ -28,6 +28,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -123,6 +126,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -180,6 +185,7 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.PhotoZoomRules
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
@@ -3058,7 +3064,30 @@ fun ImageViewer(
     val pagerState = rememberPagerState(initialPage = start) { album.size }
     val albumKey = album.joinToString { it.id }
     val scope = rememberCoroutineScope()
+    val scaleState = remember { mutableFloatStateOf(1f) }
+    val offsetXState = remember { mutableFloatStateOf(0f) }
+    val offsetYState = remember { mutableFloatStateOf(0f) }
+    var scale by scaleState
+    var offsetX by offsetXState
+    var offsetY by offsetYState
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        val next = PhotoZoomRules.clampScale(scaleState.floatValue * zoomChange)
+        scaleState.floatValue = next
+        val (x, y) = PhotoZoomRules.clampOffset(
+            offsetXState.floatValue + panChange.x,
+            offsetYState.floatValue + panChange.y,
+            next,
+            viewport.width.toFloat(),
+            viewport.height.toFloat(),
+        )
+        offsetXState.floatValue = x
+        offsetYState.floatValue = y
+    }
     LaunchedEffect(pagerState.currentPage, albumKey) {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
         album.getOrNull(pagerState.currentPage)?.let { current ->
             onEnsure(current)
             if (current.id != msg.id) onShow(current)
@@ -3072,16 +3101,41 @@ fun ImageViewer(
     ) {
         HorizontalPager(
             state = pagerState,
+            userScrollEnabled = PhotoZoomRules.canPageSwipe(scale),
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val item = album[page]
+            val video = item.kind == MessageKind.VIDEO
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(onClick = onClose),
+                    .onSizeChanged { viewport = it }
+                    .then(
+                        if (video) {
+                            Modifier.clickable(onClick = onClose)
+                        } else {
+                            Modifier
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onTap = {
+                                            if (!PhotoZoomRules.isZoomed(scaleState.floatValue)) onClose()
+                                        },
+                                        onDoubleTap = {
+                                            val next = PhotoZoomRules.doubleTapScale(scaleState.floatValue)
+                                            scaleState.floatValue = next
+                                            if (!PhotoZoomRules.isZoomed(next)) {
+                                                offsetXState.floatValue = 0f
+                                                offsetYState.floatValue = 0f
+                                            }
+                                        },
+                                    )
+                                }
+                                .transformable(state = transformState)
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (item.kind == MessageKind.VIDEO) {
+                if (video) {
                     val path = item.localPath
                     if (!path.isNullOrBlank()) {
                         VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
@@ -3094,13 +3148,25 @@ fun ImageViewer(
                         Image(
                             bitmap = bmp.asImageBitmap(),
                             contentDescription = "Фото",
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(12.dp)
-                                .clip(RoundedCornerShape(RopeShapes.media)),
+                                .clip(RoundedCornerShape(RopeShapes.media))
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    translationX = offsetX
+                                    translationY = offsetY
+                                },
                         )
                     } else {
-                        Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Фото ещё качается",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.clickable(onClick = onClose),
+                        )
                     }
                 }
             }
