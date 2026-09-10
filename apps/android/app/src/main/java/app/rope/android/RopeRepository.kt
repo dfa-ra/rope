@@ -52,6 +52,7 @@ import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
+import app.rope.android.data.UnmuteAllRules
 import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.data.VideoRules
@@ -763,6 +764,17 @@ class RopeRepository(private val app: Application) {
         if (!cur.archived) return
         store.saveChatPrefs(id, ArchiveRules.unarchivePrefs(cur))
         refreshConversations()
+    }
+
+    fun unmuteAllChats() {
+        val all = store.allChatPrefs()
+        val n = UnmuteAllRules.mutedCount(all)
+        if (!UnmuteAllRules.anyMuted(n)) return
+        UnmuteAllRules.unmuted(all).forEach { (id, prefs) ->
+            store.saveChatPrefs(id, prefs)
+        }
+        refreshConversations()
+        _state.value = _state.value.copy(notice = UnmuteAllRules.notice(n))
     }
 
     fun toggleMuteChat(id: String) {

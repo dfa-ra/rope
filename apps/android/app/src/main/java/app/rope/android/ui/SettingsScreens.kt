@@ -16,6 +16,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,7 @@ import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
+import app.rope.android.data.UnmuteAllRules
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +38,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onUnmuteAll: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -98,6 +101,21 @@ fun SettingsPane(
                             if (checked != state.notificationsMuted) onToggleNotifications()
                         },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
+                    )
+                }
+                val mutedN = UnmuteAllRules.mutedCount(state.conversations)
+                if (UnmuteAllRules.anyMuted(mutedN)) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onUnmuteAll,
+                        modifier = Modifier.semantics { contentDescription = UnmuteAllRules.actionLabel() },
+                    ) {
+                        Text(UnmuteAllRules.actionLabel())
+                    }
+                    Text(
+                        UnmuteAllRules.hint(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Spacer(Modifier.height(12.dp))
