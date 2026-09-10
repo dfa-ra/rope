@@ -33,9 +33,9 @@ object FileOpenRules {
     }
 
     fun sanitizeMime(raw: String): String {
+        if (raw.any { it == '\n' || it == '\r' || it == '\u0000' }) return FALLBACK_MIME
         val m = raw.trim().lowercase()
-        if (m.isEmpty()) return FALLBACK_MIME
-        if (m.any { it == '\n' || it == '\r' || it == '\u0000' || it.isWhitespace() }) return FALLBACK_MIME
+        if (m.isEmpty() || m.any { it.isWhitespace() }) return FALLBACK_MIME
         val parts = m.split('/')
         if (parts.size != 2) return FALLBACK_MIME
         val ok = parts.all { p -> p.isNotEmpty() && p.all { ch -> ch.isLetterOrDigit() || ch in "!#$&^_.+-" } }
