@@ -69,6 +69,7 @@ import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
+import app.rope.android.data.VoiceNextRules
 import app.rope.android.data.VoicePlayback
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
@@ -217,6 +218,7 @@ class RopeRepository(private val app: Application) {
     private var unfurlJob: Job? = null
     @Volatile private var unfurlResult: PackedLinkPreview? = null
     private var voiceProgressJob: Job? = null
+    private var voiceOriginChatId: String? = null
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
     private val mediaAttempts = mutableSetOf<String>()
@@ -1103,18 +1105,10 @@ class RopeRepository(private val app: Application) {
             retryMedia(msg)
             return
         }
+        voiceOriginChatId = openChatId() ?: voiceOriginChatId
         voicePlayer.toggle(msg.id, path)
         publishVoiceProgress()
-        voiceProgressJob?.cancel()
-        if (voicePlayer.playingId != null) {
-            voiceProgressJob = scope.launch {
-                while (voicePlayer.playingId != null) {
-                    delay(80)
-                    publishVoiceProgress()
-                }
-                publishVoiceProgress()
-            }
-        }
+        watchVoiceProgress()
     }
 
     fun seekVoice(msg: ChatMessage, positionMs: Long) {
@@ -1123,23 +1117,33 @@ class RopeRepository(private val app: Application) {
             retryMedia(msg)
             return
         }
+        voiceOriginChatId = openChatId() ?: voiceOriginChatId
         voicePlayer.seek(msg.id, path, positionMs)
         publishVoiceProgress()
-        voiceProgressJob?.cancel()
-        if (voicePlayer.playingId != null) {
-            voiceProgressJob = scope.launch {
-                while (voicePlayer.playingId != null) {
-                    delay(80)
-                    publishVoiceProgress()
-                }
-                publishVoiceProgress()
-            }
-        }
+        watchVoiceProgress()
     }
 
     fun cycleVoiceSpeed() {
         voicePlayer.cycleSpeed()
         publishVoiceProgress()
+    }
+
+    private fun watchVoiceProgress() {
+        voiceProgressJob?.cancel()
+        if (voicePlayer.playingId == null) return
+        voiceProgressJob = scope.launch {
+            while (voicePlayer.playingId != null) {
+                delay(80)
+                publishVoiceProgress()
+            }
+            publishVoiceProgress()
+            val ended = voicePlayer.takeEnded() ?: return@launch
+            if (_state.value.call != null) return@launch
+            val chatId = voiceOriginChatId ?: openChatId() ?: return@launch
+            val msgs = if (openChatId() == chatId) _state.value.messages else store.messages(chatId)
+            val next = VoiceNextRules.next(msgs, ended) ?: return@launch
+            toggleVoice(next)
+        }
     }
 
     private fun publishVoiceProgress() {

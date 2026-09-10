@@ -116,6 +116,15 @@ class VoicePlayer {
     /** Playing now, or paused with a kept position. */
     val activeId: String? get() = playingId ?: loadedId.takeIf { player != null }
 
+    private var endedId: String? = null
+
+    /** Clip that reached the end since the last take. Pause/stop do not set this. */
+    fun takeEnded(): String? {
+        val id = endedId
+        endedId = null
+        return id
+    }
+
     fun positionMs(): Long = try {
         player?.currentPosition?.toLong()?.coerceAtLeast(0L) ?: 0L
     } catch (_: Exception) {
@@ -184,7 +193,11 @@ class VoicePlayer {
         stop()
         val p = MediaPlayer()
         p.setDataSource(path)
-        p.setOnCompletionListener { stop() }
+        p.setOnCompletionListener {
+            val id = loadedId
+            stop()
+            endedId = id
+        }
         p.prepare()
         player = p
         loadedId = id
