@@ -88,8 +88,8 @@ object CallLink {
     }
 
     fun canonicalCallId(localId: String, remoteId: String): String {
-        val a = localId.trim()
-        val b = remoteId.trim()
+        val a = cleanCallId(localId)
+        val b = cleanCallId(remoteId)
         if (a.isEmpty()) return b
         if (b.isEmpty()) return a
         return if (a <= b) a else b
@@ -106,6 +106,11 @@ object CallLink {
         altCallId: String,
         peerDeviceId: String,
     ): Boolean {
+        if (hasControl(eventCallId) || hasControl(eventFrom) || hasControl(callId) ||
+            hasControl(altCallId) || hasControl(peerDeviceId)
+        ) {
+            return false
+        }
         val from = PeerIds.normalize(eventFrom)
         val peer = PeerIds.normalize(peerDeviceId)
         if (from.isBlank() || peer.isBlank() || from != peer) return false
@@ -297,4 +302,13 @@ object CallLink {
 
     private fun isOffline(detail: String): Boolean =
         detail == offlineDetail() || detail.contains("не в сети")
+
+    /** CR/LF/NUL in a call id must not bind live offer/answer/ICE after trim. */
+    private fun hasControl(raw: String): Boolean =
+        raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0
+
+    private fun cleanCallId(raw: String): String {
+        if (hasControl(raw)) return ""
+        return raw.trim()
+    }
 }

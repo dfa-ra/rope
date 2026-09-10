@@ -86,6 +86,11 @@ class CallLinkTest {
         assertFalse(CallLink.matchesCall("c1", "eve", "c1", "c1", "bob"))
         assertFalse(CallLink.matchesCall("c1", "", "c1", "", "bob"))
         assertTrue(CallLink.matchesCall("c1", "bob", "c1", "", "BOB"))
+        assertFalse(CallLink.matchesCall("c1\n", "bob", "c1", "", "bob"))
+        assertFalse(CallLink.matchesCall("c1", "bob", "c1\r", "", "bob"))
+        assertFalse(CallLink.matchesCall("c1", "bob\u0000x", "c1", "", "bob"))
+        assertEquals("zzz-2", CallLink.canonicalCallId("aaa\n1", "zzz-2"))
+        assertEquals("", CallLink.canonicalCallId("a\n", "b\r"))
     }
 
     @Test
