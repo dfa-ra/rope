@@ -175,6 +175,7 @@ import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
+import app.rope.android.data.QuoteCopyRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -740,6 +741,7 @@ fun ChatPane(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
+    onCopyQuote: (String) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
@@ -1006,6 +1008,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onCopyQuote = onCopyQuote,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1017,6 +1020,7 @@ fun ChatPane(
                                     state = state,
                                     onEnsureMedia = onEnsureMedia,
                                     onJump = onJump,
+                                    onCopyQuote = onCopyQuote,
                                     onOpenImage = onOpenImage,
                                     onReact = onReact,
                                     highlighted = members.any { it.id == flashId },
@@ -1361,6 +1365,7 @@ private fun MessageBubble(
     onReact: (ChatMessage, String) -> Unit,
     onEnsureMedia: (ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
+    onCopyQuote: (String) -> Unit = {},
     highlighted: Boolean = false,
     clusterFirst: Boolean = true,
     clusterLast: Boolean = true,
@@ -1488,6 +1493,7 @@ private fun MessageBubble(
                             msg = m,
                             accent = senderColor,
                             onJump = onJump,
+                            onCopyQuote = onCopyQuote,
                         )
                         if (m.kind == MessageKind.VIDEO) {
                             VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
@@ -1532,6 +1538,7 @@ private fun MessageBubble(
                         msg = m,
                         accent = if (mine) outFg else senderColor,
                         onJump = onJump,
+                        onCopyQuote = onCopyQuote,
                     )
                     if (m.deleted) {
                         Text(
@@ -1605,18 +1612,27 @@ private fun MessageBubble(
 }
 
 @Composable
-private fun AttributionChrome(msg: ChatMessage, accent: Color, onJump: (String) -> Unit) {
+private fun AttributionChrome(
+    msg: ChatMessage,
+    accent: Color,
+    onJump: (String) -> Unit,
+    onCopyQuote: (String) -> Unit = {},
+) {
     val from = ForwardRules.attributedName(msg)
     if (from != null) {
         ForwardedHeader(from)
     }
     val replyId = msg.replyToId
     if (!msg.deleted && !replyId.isNullOrBlank() && !ForwardRules.hidesReplyQuote(msg)) {
+        val preview = QuoteSpanRules.displayPreview(msg.replyPreview, msg.quoteText).ifBlank { "Сообщение" }
         ReplyQuote(
             name = GroupChatUx.replyQuoteName(msg.replyName, msg.outgoing),
-            preview = QuoteSpanRules.displayPreview(msg.replyPreview, msg.quoteText).ifBlank { "Сообщение" },
+            preview = preview,
             accent = accent,
             onClick = { onJump(replyId) },
+            onCopy = {
+                QuoteCopyRules.clipboard(preview)?.let(onCopyQuote)
+            },
         )
     }
 }
@@ -1633,8 +1649,15 @@ private fun ForwardedHeader(name: String) {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ReplyQuote(name: String, preview: String, accent: Color, onClick: () -> Unit) {
+private fun ReplyQuote(
+    name: String,
+    preview: String,
+    accent: Color,
+    onClick: () -> Unit,
+    onCopy: () -> Unit = {},
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "quote")
@@ -1646,7 +1669,12 @@ private fun ReplyQuote(name: String, preview: String, accent: Color, onClick: ()
             .scale(scale)
             .clip(RoundedCornerShape(RopeShapes.quote))
             .background(accent.copy(alpha = bgAlpha))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onCopy,
+            )
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Text(name, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1997,6 +2025,7 @@ private fun AlbumBubble(
     state: UiState,
     onEnsureMedia: (ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
+    onCopyQuote: (String) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit,
     onReact: (ChatMessage, String) -> Unit,
     highlighted: Boolean,
@@ -2042,6 +2071,7 @@ private fun AlbumBubble(
             msg = first,
             accent = senderColor,
             onJump = onJump,
+            onCopyQuote = onCopyQuote,
         )
         Box(
             Modifier

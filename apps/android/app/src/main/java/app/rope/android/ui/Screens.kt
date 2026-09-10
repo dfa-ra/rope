@@ -320,6 +320,7 @@ fun RopeScaffold(
                             onDismissLinkPreview = onDismissLinkPreview,
                             onCancelPendingMedia = onCancelPendingMedia,
                             onCopy = onCopy,
+                            onCopyQuote = onCopyText,
                             onPinMessage = onPinMessage,
                             onJump = onJump,
                             onOpenImage = onOpenImage,
