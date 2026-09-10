@@ -252,6 +252,7 @@ class MainActivity : AppCompatActivity() {
                     onArchiveChat = repo::archiveChat,
                     onUnarchiveChat = repo::unarchiveChat,
                     onCopy = repo::copyMessage,
+                    onShare = repo::shareMessage,
                     onPinMessage = repo::togglePinMessage,
                     onJump = repo::jumpToMessage,
                     onOpenImage = repo::openImage,

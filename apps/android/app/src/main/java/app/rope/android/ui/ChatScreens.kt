@@ -87,6 +87,7 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -158,6 +159,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ShareMediaRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -740,6 +742,7 @@ fun ChatPane(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
+    onShare: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
@@ -1132,6 +1135,7 @@ fun ChatPane(
             },
             onReply = { onReply(target); menuMessage = null },
             onCopy = { onCopy(target); menuMessage = null },
+            onShare = { onShare(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
@@ -1834,6 +1838,7 @@ private fun MessageTapOverlay(
     onReact: (String) -> Unit,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onShare: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
     onDelete: () -> Unit,
@@ -1874,6 +1879,7 @@ private fun MessageTapOverlay(
                 pinned = pinned,
                 onReply = onReply,
                 onCopy = onCopy,
+                onShare = onShare,
                 onForward = onForward,
                 onPin = onPin,
                 onDelete = onDelete,
@@ -1889,6 +1895,7 @@ private fun MessageActionMenu(
     pinned: Boolean,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onShare: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
     onDelete: () -> Unit,
@@ -1907,6 +1914,9 @@ private fun MessageActionMenu(
             }
             if (ChatActions.canCopy(m)) {
                 MessageMenuRow(Icons.Outlined.ContentCopy, "Копировать", onCopy)
+            }
+            if (ChatActions.canShare(m)) {
+                MessageMenuRow(Icons.Outlined.Share, ShareMediaRules.ACTION, onShare)
             }
             if (ChatActions.canForward(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)

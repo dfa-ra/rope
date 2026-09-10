@@ -397,6 +397,8 @@ object ChatActions {
 
     fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
 
+    fun canShare(msg: ChatMessage): Boolean = ShareMediaRules.canShare(msg)
+
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
 
     fun canOpen(msg: ChatMessage): Boolean =

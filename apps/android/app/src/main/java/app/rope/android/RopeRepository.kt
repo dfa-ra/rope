@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -43,6 +45,7 @@ import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
+import app.rope.android.data.ShareMediaRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
@@ -776,6 +779,23 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun shareMessage(msg: ChatMessage) {
+        val media = File(app.filesDir, ShareMediaRules.MEDIA_DIR)
+        val file = ShareMediaRules.shareFile(msg, media) ?: return
+        val uri = FileProvider.getUriForFile(app, ShareMediaRules.authority(app.packageName), file)
+        val mime = ShareMediaRules.mimeFor(msg, file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(app.contentResolver, file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, ShareMediaRules.CHOOSER).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        app.startActivity(chooser)
     }
 
     fun togglePinMessage(msg: ChatMessage) {
