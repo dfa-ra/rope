@@ -63,9 +63,8 @@ data class DeviceBackup(
         }
 
         /**
-         * Production restore ([RopeRepository.restoreFromFile]) only accepts
-         * `RODB` + Keystore wrap. Clear v1 JSON stays parseable via [parse]
-         * for tests. Not envelope crypto.
+         * Production restore only accepts `RODB` + Keystore wrap. Clear v1
+         * JSON stays parseable via [parse] for tests. Not envelope crypto.
          */
         fun open(raw: ByteArray, decrypt: (ByteArray) -> ByteArray): DeviceBackup {
             if (!isSealed(raw)) {
