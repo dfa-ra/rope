@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -195,6 +198,7 @@ private val InBubbleLight = Color(0xFFF4F4F5)
 private val InBubbleDark = Color(0xFF27272A)
 private val RecRed = Color(0xFFE53935)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsPane(
     state: UiState,
@@ -208,10 +212,12 @@ fun ChatsPane(
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
+    onSetUnreadFilter: (Boolean) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
         val forwarding = state.forwarding
+        val mode = ChatListRules.appliedMode(listMode, state.chatsUnreadOnly)
         when {
             forwarding != null -> {
                 Surface(
@@ -263,23 +269,44 @@ fun ChatsPane(
         ChatListSearchField(
             value = state.chatQuery,
             onValueChange = onQuery,
-            placeholder = when (listMode) {
+            placeholder = when (mode) {
                 ChatListMode.GROUPS -> "Поиск групп"
                 ChatListMode.CALLS -> "Поиск звонков"
                 ChatListMode.ARCHIVE -> ArchiveRules.SEARCH_PLACEHOLDER
-                ChatListMode.ALL -> "Поиск"
+                ChatListMode.ALL, ChatListMode.UNREAD -> "Поиск"
             },
         )
+        if (ChatListRules.showsFilterChips(listMode)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !state.chatsUnreadOnly,
+                    onClick = { onSetUnreadFilter(false) },
+                    label = { Text(ChatListRules.CHIP_ALL) },
+                    modifier = Modifier.semantics { contentDescription = ChatListRules.CHIP_ALL },
+                )
+                FilterChip(
+                    selected = state.chatsUnreadOnly,
+                    onClick = { onSetUnreadFilter(true) },
+                    label = { Text(ChatListRules.CHIP_UNREAD) },
+                    modifier = Modifier.semantics { contentDescription = ChatListRules.CHIP_UNREAD },
+                )
+            }
+        }
         val isForwarding = state.forwarding != null
         val archived = ArchiveRules.archivedOf(state.conversations)
-        val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
-        val rows = ChatListRules.rows(source, state.chatQuery, listMode)
+        val source = ArchiveRules.sourceForList(state.conversations, mode, isForwarding)
+        val rows = ChatListRules.rows(source, state.chatQuery, mode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
-        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
-        val inArchive = listMode == ChatListMode.ARCHIVE
+        val showArchiveRow = ArchiveRules.rowVisible(archived.size, mode, isForwarding)
+        val inArchive = mode == ChatListMode.ARCHIVE
         val empty = ChatListEmptyRules.copy(
-            listMode,
+            mode,
             state.chatQuery,
             isForwarding,
             state.profile?.role,
@@ -350,7 +377,7 @@ fun ChatsPane(
                     }
                 }
             }
-            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, state.forwarding != null)) {
+            if (ChatListEmptyRules.showFab(mode, state.chatQuery, state.forwarding != null)) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier

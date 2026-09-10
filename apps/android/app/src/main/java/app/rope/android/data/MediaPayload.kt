@@ -443,7 +443,7 @@ data class ChatPrefs(
     }
 }
 
-enum class ChatListMode { ALL, GROUPS, CALLS, ARCHIVE }
+enum class ChatListMode { ALL, GROUPS, CALLS, ARCHIVE, UNREAD }
 
 enum class ChatListHit(val rank: Int) {
     NONE(0),
@@ -466,8 +466,19 @@ object QueryHighlight {
 }
 
 object ChatListRules {
+    const val CHIP_ALL = "Все"
+    const val CHIP_UNREAD = "Непрочитанные"
+    const val EMPTY_UNREAD = "Нет непрочитанных"
+    const val EMPTY_UNREAD_BODY = "Все чаты прочитаны."
+
     private val presenceSubtitles = setOf("в сети", "не в сети")
     private val whitespace = Regex("\\s+")
+
+    /** Chats tab chip: Все ↔ Непрочитанные. Groups / Calls / Archive stay as-is. */
+    fun appliedMode(mode: ChatListMode, unreadOnly: Boolean): ChatListMode =
+        if (mode == ChatListMode.ALL && unreadOnly) ChatListMode.UNREAD else mode
+
+    fun showsFilterChips(navMode: ChatListMode): Boolean = navMode == ChatListMode.ALL
 
     fun normalize(query: String): String = query.trim().replace(whitespace, " ").lowercase()
 
@@ -493,6 +504,7 @@ object ChatListRules {
         ChatListMode.ALL, ChatListMode.ARCHIVE -> true
         ChatListMode.GROUPS -> c.isGroup
         ChatListMode.CALLS -> c.last?.kind == MessageKind.CALL
+        ChatListMode.UNREAD -> c.unread > 0 && !SavedMessagesRules.isSaved(c.id)
     }
 
     fun hit(c: Conversation, query: String): ChatListHit {

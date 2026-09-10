@@ -55,7 +55,7 @@ object ArchiveRules {
         cur.copy(archived = false)
 
     /**
-     * List pipeline: hide archived on All/Groups/Calls; Archive screen sees
+     * List pipeline: hide archived on All/Unread/Groups/Calls; Archive screen sees
      * only archived; forward picker keeps them. Folders (sibling #65) can
      * later run `FolderRules.apply` on the All result without seeing archived.
      */

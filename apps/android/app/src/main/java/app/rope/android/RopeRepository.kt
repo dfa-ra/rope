@@ -185,6 +185,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val chatsUnreadOnly: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    chatsUnreadOnly = store.chatsUnreadOnly(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -597,6 +599,12 @@ class RopeRepository(private val app: Application) {
         } else {
             scheduleUnfurl(_state.value.draftText)
         }
+    }
+
+    fun setChatsUnreadOnly(unreadOnly: Boolean) {
+        if (_state.value.chatsUnreadOnly == unreadOnly) return
+        store.saveChatsUnreadOnly(unreadOnly)
+        _state.value = _state.value.copy(chatsUnreadOnly = unreadOnly)
     }
 
     fun dismissComposerPreview() {
