@@ -20,7 +20,25 @@ class InstallStatusRulesTest {
         )
         assertTrue(
             InstallStatusRules.allowConfirm(
-                "android.content.pm.action.CONFIRM_PERMISSIONS",
+                InstallStatusRules.CONFIRM_PERMISSIONS,
+                "com.android.packageinstaller",
+            ),
+        )
+        assertFalse(
+            InstallStatusRules.allowConfirm(
+                InstallStatusRules.CONFIRM_INSTALL,
+                "com.android.chrome",
+            ),
+        )
+        assertFalse(
+            InstallStatusRules.allowConfirm(
+                "android.content.pm.action.CONFIRM_INSTALL",
+                "com.evil.packageinstaller.pwn",
+            ),
+        )
+        assertFalse(
+            InstallStatusRules.allowConfirm(
+                "android.content.pm.action.FOO",
                 "com.android.packageinstaller",
             ),
         )
