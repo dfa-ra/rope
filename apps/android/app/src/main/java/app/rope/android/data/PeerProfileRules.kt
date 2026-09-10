@@ -29,4 +29,16 @@ object PeerProfileRules {
         count <= 0 -> SECTION
         else -> "$SECTION · $count"
     }
+
+    const val MUTE = "Без звука"
+    const val UNMUTE = "Включить звук"
+    const val SEARCH = "Поиск"
+
+    fun canAct(peerId: String?): Boolean =
+        !peerId.isNullOrBlank() && !SavedMessagesRules.isSaved(peerId)
+
+    fun muteLabel(muted: Boolean): String = if (muted) UNMUTE else MUTE
+
+    fun mutedOf(conversations: List<Conversation>, peerId: String?): Boolean =
+        !peerId.isNullOrBlank() && conversations.any { it.id == peerId && it.muted }
 }

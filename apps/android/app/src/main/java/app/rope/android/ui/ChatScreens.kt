@@ -745,6 +745,7 @@ fun ChatPane(
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
     onConsumedScroll: () -> Unit = {},
+    onConsumedThreadSearch: () -> Unit = {},
     onAttachGallery: () -> Unit = onAttach,
     onAttachFile: () -> Unit = onAttach,
     onAttachUri: (Uri) -> Unit = {},
@@ -787,7 +788,7 @@ fun ChatPane(
     }
     val list = rememberLazyListState()
     val jumpScope = rememberCoroutineScope()
-    var showSearch by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(state.openThreadSearch) }
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
@@ -817,6 +818,11 @@ fun ChatPane(
         onConsumedScroll()
         delay(700)
         if (flashId == id) flashId = null
+    }
+    LaunchedEffect(state.openThreadSearch) {
+        if (!state.openThreadSearch) return@LaunchedEffect
+        showSearch = true
+        onConsumedThreadSearch()
     }
     val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
     Box(Modifier.fillMaxSize()) {

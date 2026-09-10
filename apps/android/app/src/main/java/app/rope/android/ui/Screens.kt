@@ -171,12 +171,14 @@ fun RopeScaffold(
     onMuteChat: (String) -> Unit,
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
+    onSearchFromProfile: () -> Unit = {},
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
     onOpenImage: (app.rope.android.data.ChatMessage) -> Unit,
     onCloseImage: () -> Unit,
     onConsumedScroll: () -> Unit,
+    onConsumedThreadSearch: () -> Unit = {},
     onDismissNotice: () -> Unit,
     onBack: () -> Boolean = { false },
     onTab: (Screen) -> Unit = onGo,
@@ -325,6 +327,7 @@ fun RopeScaffold(
                             onOpenImage = onOpenImage,
                             onMessageQuery = onMessageQuery,
                             onConsumedScroll = onConsumedScroll,
+                            onConsumedThreadSearch = onConsumedThreadSearch,
                             onAttachGallery = onAttachGallery,
                             onAttachFile = onAttachFile,
                             onAttachUri = onAttachUri,
@@ -356,6 +359,8 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onMute = { id -> onMuteChat(id) },
+                            onSearch = onSearchFromProfile,
                         )
                     }
                 }

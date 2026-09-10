@@ -19,15 +19,20 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,12 +50,17 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onMute: (String) -> Unit = {},
+    onSearch: () -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val canAct = PeerProfileRules.canAct(peer?.deviceId)
+    val muted = PeerProfileRules.mutedOf(state.conversations, peer?.deviceId)
+    val muteLabel = PeerProfileRules.muteLabel(muted)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +102,23 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (canAct) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            ProfileAction(
+                                icon = if (muted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+                                label = muteLabel,
+                                onClick = { peer?.deviceId?.let(onMute) },
+                            )
+                            ProfileAction(
+                                icon = Icons.Outlined.Search,
+                                label = PeerProfileRules.SEARCH,
+                                onClick = onSearch,
+                            )
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
@@ -123,6 +150,26 @@ fun PeerProfilePane(
                     SharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.semantics { contentDescription = label },
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(icon, contentDescription = null)
+            Text(label, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -177,6 +178,7 @@ data class UiState(
     val forwarding: ChatMessage? = null,
     val chatQuery: String = "",
     val messageQuery: String = "",
+    val openThreadSearch: Boolean = false,
     val typingName: String? = null,
     val viewingImage: ChatMessage? = null,
     val scrollToMessageId: String? = null,
@@ -769,6 +771,17 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun searchFromProfile() {
+        if (!PeerProfileRules.canAct(openChatId() ?: _state.value.peer?.deviceId)) return
+        if (_state.value.screen == Screen.PeerProfile) goBack()
+        _state.value = _state.value.copy(openThreadSearch = true)
+    }
+
+    fun consumeThreadSearch() {
+        if (!_state.value.openThreadSearch) return
+        _state.value = _state.value.copy(openThreadSearch = false)
     }
 
     fun copyMessage(msg: ChatMessage) {

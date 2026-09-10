@@ -1,9 +1,11 @@
 package app.rope.android
 
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.Conversation
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.SavedMessagesRules
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,6 +46,32 @@ class PeerProfileRulesTest {
         assertEquals("Профиль", PeerProfileRules.title("  "))
         assertEquals("Профиль", PeerProfileRules.title(null))
         assertEquals(3, PeerProfileRules.GRID_COLUMNS)
+    }
+
+    @Test
+    fun muteAndSearchActionsSkipSaved() {
+        assertTrue(PeerProfileRules.canAct("peer-1"))
+        assertFalse(PeerProfileRules.canAct(null))
+        assertFalse(PeerProfileRules.canAct(""))
+        assertFalse(PeerProfileRules.canAct("  "))
+        assertFalse(PeerProfileRules.canAct(SavedMessagesRules.ID))
+        assertEquals("Без звука", PeerProfileRules.muteLabel(false))
+        assertEquals("Включить звук", PeerProfileRules.muteLabel(true))
+        assertEquals("Поиск", PeerProfileRules.SEARCH)
+        val muted = Conversation(
+            id = "peer-1",
+            title = "Анна",
+            subtitle = "",
+            isGroup = false,
+            online = false,
+            last = null,
+            muted = true,
+        )
+        val live = muted.copy(id = "peer-2", muted = false)
+        assertTrue(PeerProfileRules.mutedOf(listOf(muted, live), "peer-1"))
+        assertFalse(PeerProfileRules.mutedOf(listOf(muted, live), "peer-2"))
+        assertFalse(PeerProfileRules.mutedOf(listOf(muted), "missing"))
+        assertFalse(PeerProfileRules.mutedOf(emptyList(), "peer-1"))
     }
 
     private fun img(
