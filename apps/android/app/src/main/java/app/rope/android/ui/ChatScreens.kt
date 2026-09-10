@@ -126,6 +126,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -152,6 +154,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.ScrollDateRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -1042,6 +1045,27 @@ fun ChatPane(
                             }
                         }
                     }
+                }
+            }
+            if (visible.isNotEmpty()) {
+                val sticky by remember(threadItems) {
+                    derivedStateOf {
+                        ScrollDateRules.stickyLabel(threadItems, list.firstVisibleItemIndex)
+                    }
+                }
+                sticky?.let { label ->
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 6.dp)
+                            .clip(RoundedCornerShape(RopeShapes.chip))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .semantics { contentDescription = ScrollDateRules.CHIP },
+                    )
                 }
             }
             if (selecting) {
