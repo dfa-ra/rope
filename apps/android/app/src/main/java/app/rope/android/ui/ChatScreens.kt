@@ -158,6 +158,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.GroupPhotoRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -591,7 +592,13 @@ internal fun ConversationRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            InitialsAvatar(c.title, c.isGroup, c.online, saved = SavedMessagesRules.isSaved(c))
+            InitialsAvatar(
+                c.title,
+                c.isGroup,
+                c.online,
+                saved = SavedMessagesRules.isSaved(c),
+                photoPath = if (c.isGroup) GroupPhotoRules.lookup(state.groupPhotos, c.id) else null,
+            )
             Column(Modifier.weight(1f)) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -887,7 +894,14 @@ fun ChatPane(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                InitialsAvatar(title, state.group != null, online, saved = saved, showPresence = !saved)
+                InitialsAvatar(
+                    title,
+                    state.group != null,
+                    online,
+                    saved = saved,
+                    showPresence = !saved,
+                    photoPath = state.group?.groupId?.let { GroupPhotoRules.lookup(state.groupPhotos, it) },
+                )
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -3001,10 +3015,12 @@ fun InitialsAvatar(
     tint: Color? = null,
     showPresence: Boolean = true,
     saved: Boolean = false,
+    photoPath: String? = null,
 ) {
     val letter = title.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     val iconSize = if (size < 40.dp) 16.dp else 22.dp
     val dot = if (size < 40.dp) 8.dp else 12.dp
+    val photo = photoPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
     val bg = tint ?: when {
         saved -> MaterialTheme.colorScheme.primary
         group -> MaterialTheme.colorScheme.secondary
@@ -3019,6 +3035,12 @@ fun InitialsAvatar(
             contentAlignment = Alignment.Center,
         ) {
             when {
+                photo != null -> Image(
+                    bitmap = photo.asImageBitmap(),
+                    contentDescription = GroupPhotoRules.TITLE,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 saved -> Icon(
                     Icons.Outlined.Bookmark,
                     contentDescription = null,

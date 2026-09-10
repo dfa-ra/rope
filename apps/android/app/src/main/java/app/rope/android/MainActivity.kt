@@ -47,6 +47,10 @@ class MainActivity : AppCompatActivity() {
         if (uris.isNotEmpty()) (application as RopeApp).repo.stageAttachments(uris)
     }
 
+    private val groupPhotoPicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { (application as RopeApp).repo.setGroupPhoto(it) }
+    }
+
     private val restorePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val bytes = uri?.let { contentResolver.openInputStream(it)?.use { s -> s.readBytes() } } ?: return@registerForActivityResult
         (application as RopeApp).repo.restoreFromFile(bytes)
@@ -206,6 +210,11 @@ class MainActivity : AppCompatActivity() {
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,
                     onRenameGroup = repo::renameOpenGroup,
+                    onPickGroupPhoto = {
+                        groupPhotoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
                     onRevokeMember = repo::revokeMember,
                     onAcceptCall = {
                         val video = (application as RopeApp).repo.state.value.call?.video == true

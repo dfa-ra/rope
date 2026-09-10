@@ -1,6 +1,8 @@
 package app.rope.android.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,11 +27,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupNameRules
+import app.rope.android.data.GroupPhotoRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -105,6 +110,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onRename: (String) -> Unit = {},
+    onPickPhoto: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -121,6 +127,8 @@ fun GroupInfoPane(
     val isMember = me != null && me in g.members
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canRename = RoleRules.canRenameGroup(isMember, me, organizer, state.profile?.role)
+    val canPhoto = GroupPhotoRules.canSet(isMember, me, organizer, state.profile?.role)
+    val photoPath = GroupPhotoRules.lookup(state.groupPhotos, g.groupId)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
     var renameDraft by remember(g.groupId, g.name) { mutableStateOf(g.name) }
@@ -134,12 +142,46 @@ fun GroupInfoPane(
             item {
                 FadeIn(40) {
                     SectionCard {
-                        Text(g.name, style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "${g.members.size} участников",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .then(
+                                        if (canPhoto) Modifier.clickable(onClick = onPickPhoto) else Modifier,
+                                    )
+                                    .semantics { contentDescription = GroupPhotoRules.TITLE },
+                            ) {
+                                InitialsAvatar(
+                                    title = g.name,
+                                    group = true,
+                                    online = g.members.any { it in state.onlineIds && it != me },
+                                    size = 72.dp,
+                                    photoPath = photoPath,
+                                    showPresence = false,
+                                )
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(g.name, style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "${g.members.size} участников",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (canPhoto) {
+                            TextButton(
+                                onClick = onPickPhoto,
+                                modifier = Modifier.semantics { contentDescription = GroupPhotoRules.TITLE },
+                            ) { Text(GroupPhotoRules.TITLE) }
+                            Text(
+                                GroupPhotoRules.HINT,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         if (canRename) {
                             OutlinedTextField(
                                 renameDraft,

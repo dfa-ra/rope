@@ -394,6 +394,16 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun groupPhotos(): Map<String, String> = GroupPhotoRules.parseMap(get("group_photos"))
+
+    fun saveGroupPhoto(groupId: String, path: String) {
+        val k = GroupPhotoRules.key(groupId) ?: return
+        val clean = GroupPhotoRules.parsePath(path) ?: return
+        val next = groupPhotos().toMutableMap()
+        next[k] = clean
+        put("group_photos", GroupPhotoRules.encode(next))
+    }
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

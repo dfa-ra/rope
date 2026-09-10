@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
+import app.rope.android.data.GroupPhotoRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -168,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val groupPhotos: Map<String, String> = emptyMap(),
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -257,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    groupPhotos = store.groupPhotos(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -1221,6 +1224,38 @@ class RopeRepository(private val app: Application) {
                 store.upsertGroup(updated)
                 _state.value = _state.value.copy(group = updated)
                 refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun setGroupPhoto(uri: Uri) {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!GroupPhotoRules.canSet(me in g.members, me, organizer, _state.value.profile?.role)) return
+        val groupKey = GroupPhotoRules.key(g.groupId) ?: return
+        scope.launch {
+            try {
+                val mime = app.contentResolver.getType(uri) ?: "image/jpeg"
+                if (!GroupPhotoRules.acceptsMime(mime)) {
+                    notice(GroupPhotoRules.NEED_PHOTO)
+                    return@launch
+                }
+                val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                val (norm, outMime) = ImageCodec.normalizeForSend(bytes, mime)
+                val dest = ImageCodec.persist(
+                    File(app.filesDir, "group-avatar"),
+                    groupKey,
+                    outMime,
+                    "group.jpg",
+                    norm,
+                )
+                val path = GroupPhotoRules.parsePath(dest.absolutePath) ?: return@launch
+                store.saveGroupPhoto(groupKey, path)
+                val photos = store.groupPhotos()
+                _state.value = _state.value.copy(groupPhotos = photos)
             } catch (e: Exception) {
                 error(e)
             }
