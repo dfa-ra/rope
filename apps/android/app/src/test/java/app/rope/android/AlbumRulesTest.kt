@@ -7,6 +7,7 @@ import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -115,6 +116,30 @@ class AlbumRulesTest {
         assertEquals(AlbumRules.notifyId("Фото", "alb-9"), AlbumRules.notifyId("Альбом · 3 фото", "alb-9"))
         assertNotEquals(AlbumRules.notifyId("Фото", null), AlbumRules.notifyId("hi", null))
         assertEquals("Фото".hashCode(), AlbumRules.notifyId("Фото", null))
+    }
+
+    @Test
+    fun albumIdRejectsControlBeforeTrim() {
+        assertEquals("alb", AlbumRules.albumKey(" alb "))
+        assertNull(AlbumRules.albumKey("\nalb"))
+        assertNull(AlbumRules.albumKey("alb\n"))
+        assertNull(AlbumRules.albumKey("alb\r"))
+        assertNull(AlbumRules.albumKey("alb\u0000x"))
+        assertNull(AlbumRules.albumKey(""))
+        assertNull(AlbumRules.albumKey("   "))
+        val poisoned = photo("p", extra = JSONObject(albumJson("alb", 0, 2)).put("album_id", "\nalb").toString())
+        assertNull(AlbumRules.albumId(poisoned))
+        val padded = photo("q", extra = JSONObject(albumJson("alb", 0, 2)).put("album_id", " alb ").toString())
+        assertEquals("alb", AlbumRules.albumId(padded))
+        assertTrue(AlbumRules.members(listOf(poisoned, padded), "\nalb").isEmpty())
+        assertEquals(listOf("q"), AlbumRules.members(listOf(poisoned, padded), " alb ").map { it.id })
+        val crlfSlots = AlbumRules.slots(2, "\nalb")
+        assertNotEquals("\nalb", crlfSlots[0].albumId)
+        assertEquals(crlfSlots[0].albumId, crlfSlots[1].albumId)
+        val spaced = AlbumRules.slots(2, " alb-1 ")
+        assertTrue(spaced.all { it.albumId == "alb-1" })
+        assertEquals("Фото".hashCode(), AlbumRules.notifyId("Фото", "alb\n9"))
+        assertEquals(AlbumRules.notifyId("x", " alb "), AlbumRules.notifyId("x", "alb"))
     }
 
     @Test

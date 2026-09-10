@@ -1,5 +1,6 @@
 package app.rope.android.data
 
+import org.json.JSONObject
 import java.util.UUID
 
 /**
@@ -27,7 +28,7 @@ object AlbumRules {
         val n = cap(count)
         if (n <= 0) return emptyList()
         if (n == 1) return listOf(Slot(albumId = null, index = 0, count = 1))
-        val id = albumId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
+        val id = albumKey(albumId) ?: UUID.randomUUID().toString()
         return (0 until n).map { Slot(id, it, n) }
     }
 
@@ -36,14 +37,16 @@ object AlbumRules {
 
     fun albumId(msg: ChatMessage): String? {
         if (msg.deleted || !isMemberKind(msg.kind) || msg.extra.isBlank()) return null
-        return runCatching { JsonIds.optional(MediaPayload.parse(msg.extra).albumId) }.getOrNull()
+        return runCatching {
+            albumKey(JSONObject(msg.extra).optString("album_id"))
+        }.getOrNull()
     }
 
     fun albumIndex(msg: ChatMessage): Int =
         runCatching { MediaPayload.parse(msg.extra).albumIndex }.getOrDefault(0)
 
     fun members(messages: List<ChatMessage>, albumId: String): List<ChatMessage> {
-        val id = JsonIds.optional(albumId) ?: return emptyList()
+        val id = albumKey(albumId) ?: return emptyList()
         return messages.filter { albumId(it) == id }
             .sortedWith(compareBy<ChatMessage> { albumIndex(it) }.thenBy { it.timestampMs }.thenBy { it.id })
     }
@@ -100,7 +103,7 @@ object AlbumRules {
         }
 
     fun notifyId(body: String, albumId: String?): Int {
-        val key = JsonIds.optional(albumId) ?: body
+        val key = albumKey(albumId) ?: body
         return key.hashCode()
     }
 
@@ -110,5 +113,17 @@ object AlbumRules {
         videoCount <= 0 -> "Альбом · $count фото"
         videoCount >= count -> "Альбом · $count видео"
         else -> "Альбом · $count"
+    }
+
+    /**
+     * Fail closed on CR/LF/NUL before trim so a newline prefix cannot join a
+     * live mosaic. Spaces still trim. Caption/text keep newlines.
+     */
+    internal fun albumKey(raw: String?): String? {
+        if (raw.isNullOrEmpty()) return null
+        if (raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0) {
+            return null
+        }
+        return JsonIds.optional(raw)
     }
 }
