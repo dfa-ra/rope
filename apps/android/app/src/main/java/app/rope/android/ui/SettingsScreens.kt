@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.NotifyPrioRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onSetNotifyPrio: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -99,6 +101,23 @@ fun SettingsPane(
                         },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
                     )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(NotifyPrioRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    NotifyPrioRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NotifyPrioRules.OPTIONS.forEach { opt ->
+                        FilterChip(
+                            selected = NotifyPrioRules.normalize(state.notifyPrio) == opt.id,
+                            onClick = { onSetNotifyPrio(opt.id) },
+                            label = { Text(opt.label) },
+                            modifier = Modifier.semantics { contentDescription = opt.label },
+                        )
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(
