@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.VolumeOff
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,12 +42,13 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.VideoMuteRules
 import app.rope.android.media.VideoCodec
 
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
  * Tap/long-press on the bubble still opens the 0.3.2 menu; the play control
- * starts the in-thread player.
+ * starts the in-thread player. Mute chip is independent of call video.
  */
 @Composable
 fun VideoMessageBubble(
@@ -60,12 +64,17 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var muted by remember(m.id) { mutableStateOf(false) }
+    val player = remember(m.id) { arrayOfNulls<MediaPlayer>(1) }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
         PhotoLayout.Box(PhotoLayout.MAX_WIDTH_DP, PhotoLayout.MAX_WIDTH_DP * 9f / 16f)
     }
     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
+    LaunchedEffect(muted, playing) {
+        player[0]?.let { applyVideoMute(it, muted) }
+    }
     Box(
         modifier = Modifier
             .width(box.widthDp.dp)
@@ -81,7 +90,14 @@ fun VideoMessageBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        setOnCompletionListener { playing = false }
+                        setOnPreparedListener { mp ->
+                            player[0] = mp
+                            applyVideoMute(mp, muted)
+                        }
+                        setOnCompletionListener {
+                            playing = false
+                            player[0] = null
+                        }
                     }
                 },
                 update = { view ->
@@ -96,7 +112,10 @@ fun VideoMessageBubble(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    player[0] = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -134,6 +153,25 @@ fun VideoMessageBubble(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
+            }
+        }
+        if (!path.isNullOrBlank()) {
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable { muted = VideoMuteRules.toggle(muted) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (muted) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                    contentDescription = VideoMuteRules.contentDescription(muted),
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
         Text(
@@ -175,16 +213,50 @@ fun VideoMessageBubble(
 
 @Composable
 fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
-    AndroidView(
-        factory = { ctx ->
-            VideoView(ctx).apply {
-                setVideoPath(path)
-                setOnPreparedListener { mp ->
-                    mp.isLooping = false
-                    start()
+    var muted by remember(path) { mutableStateOf(false) }
+    val player = remember(path) { arrayOfNulls<MediaPlayer>(1) }
+    LaunchedEffect(muted) {
+        player[0]?.let { applyVideoMute(it, muted) }
+    }
+    Box(modifier) {
+        AndroidView(
+            factory = { ctx ->
+                VideoView(ctx).apply {
+                    setVideoPath(path)
+                    setOnPreparedListener { mp ->
+                        player[0] = mp
+                        mp.isLooping = false
+                        applyVideoMute(mp, muted)
+                        start()
+                    }
                 }
-            }
-        },
-        modifier = modifier,
-    )
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable { muted = VideoMuteRules.toggle(muted) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (muted) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                contentDescription = VideoMuteRules.contentDescription(muted),
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+private fun applyVideoMute(player: MediaPlayer, muted: Boolean) {
+    try {
+        val v = VideoMuteRules.volume(muted)
+        player.setVolume(v, v)
+    } catch (_: Exception) {
+    }
 }
