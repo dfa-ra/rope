@@ -11,6 +11,7 @@ import app.rope.android.data.CallSignal
 import app.rope.android.data.IceRtcPlan
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.IceServers
+import app.rope.android.data.IceMidRules
 import app.rope.android.data.IceUnstick
 import app.rope.android.data.VideoCallRules
 import app.rope.android.net.PinnedClient
@@ -104,7 +105,7 @@ class WebRtcSession(
         override fun onIceCandidate(candidate: IceCandidate) {
             if (closed) return
             if (CallMedia.isRelayCandidate(candidate.sdp)) viaRelay = true
-            val mid = candidate.sdpMid?.trim().orEmpty().ifEmpty { "0" }
+            val mid = IceMidRules.localMid(candidate.sdpMid) ?: return
             onLocalSignal(
                 CallSignal(
                     CallSignal.ICE,
@@ -448,7 +449,7 @@ class WebRtcSession(
                 }
                 iceTaken++
                 if (CallMedia.isRelayCandidate(signal.candidate)) viaRelay = true
-                val mid = signal.sdpMid.trim().ifEmpty { "0" }
+                val mid = IceMidRules.localMid(signal.sdpMid) ?: return
                 val ice = IceCandidate(mid, signal.sdpMLineIndex.coerceAtLeast(0), signal.candidate)
                 if (!remoteSet) pendingIce += ice else pc?.addIceCandidate(ice)
             }
