@@ -49,4 +49,25 @@ class GitHubAuthTest {
         assertNull(GitHubAuth.hostOf("http://github.com/dfa-ra/rope"))
         assertNull(GitHubAuth.hostOf("not a url"))
     }
+
+    @Test
+    fun hostOfUsesOkHttpNotJavaUri() {
+        assertNull(GitHubAuth.hostOf("https://github.com/dfa-ra/rope\nhttps://evil.example/x"))
+        assertNull(GitHubAuth.hostOf("https://github.com/dfa-ra/rope http://evil.example"))
+        assertNull(GitHubAuth.bearerFor("https://github.com.evil.example/x", token))
+        assertNull(GitHubAuth.bearerFor("https://github.com:443@evil.example/x", token))
+        assertEquals("github.com", GitHubAuth.hostOf("HTTPS://GitHub.com/dfa-ra/rope"))
+    }
+
+    @Test
+    fun pathTokenRejectsTraversal() {
+        assertTrue(GitHubAuth.pathToken("dfa-ra"))
+        assertTrue(GitHubAuth.pathToken("rope"))
+        assertFalse(GitHubAuth.pathToken("."))
+        assertFalse(GitHubAuth.pathToken(".."))
+        assertFalse(GitHubAuth.pathToken("../evil"))
+        assertFalse(GitHubAuth.pathToken("dfa/ra"))
+        assertFalse(GitHubAuth.pathToken(""))
+        assertFalse(GitHubAuth.pathToken("x".repeat(129)))
+    }
 }

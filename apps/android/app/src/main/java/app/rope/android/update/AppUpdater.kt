@@ -1,6 +1,7 @@
 package app.rope.android.update
 
 import app.rope.android.BuildConfig
+import app.rope.android.provision.GitHubAuth
 import app.rope.android.provision.GitHubRelease
 import app.rope.android.provision.ReleaseFetcher
 import okhttp3.OkHttpClient
@@ -24,6 +25,9 @@ class AppUpdater(
         .callTimeout(60, TimeUnit.SECONDS)
         .build(),
 ) {
+    init {
+        require(GitHubAuth.pathToken(owner) && GitHubAuth.pathToken(repo)) { "bad github path" }
+    }
     fun latestApk(githubToken: String?, preferDebug: Boolean = BuildConfig.DEBUG): LatestApk {
         val token = githubToken?.trim().orEmpty().ifBlank { null }
         val req = Request.Builder()

@@ -1,11 +1,12 @@
 package app.rope.android.provision
 
-import java.net.URI
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * GitHub PAT may only go to github.com / api.github.com over HTTPS.
- * [ReleaseFetcher.tryDirect] used to attach Bearer to any custom binary URL.
- * Not envelope crypto.
+ * Host checks use OkHttp [HttpUrl] — the same parser [ReleaseFetcher] uses
+ * to connect — so Java URI / OkHttp disagreements cannot attach Bearer
+ * to the wrong host. Not envelope crypto.
  */
 object GitHubAuth {
     fun bearerFor(url: String, token: String?): String? {
@@ -20,13 +21,18 @@ object GitHubAuth {
         return h == "github.com" || h == "api.github.com"
     }
 
+    /** Owner / repo interpolated into PAT-bearing api.github.com paths. */
+    fun pathToken(s: String): Boolean {
+        if (s.isEmpty() || s == "." || s == ".." || s.length > 128) return false
+        return s.all { ch -> ch.isLetterOrDigit() || ch == '.' || ch == '_' || ch == '-' }
+    }
+
     fun hostOf(url: String): String? {
-        return try {
-            val uri = URI(url.trim())
-            if (!uri.scheme.equals("https", ignoreCase = true)) return null
-            uri.host
-        } catch (_: Exception) {
-            null
-        }
+        val t = url.trim()
+        if (t.isEmpty()) return null
+        if (t.any { it.isWhitespace() || it.isISOControl() }) return null
+        val http = t.toHttpUrlOrNull() ?: return null
+        if (!http.isHttps) return null
+        return http.host
     }
 }
