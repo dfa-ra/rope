@@ -6,6 +6,7 @@ import app.rope.android.data.CallSignal
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.IceServers
 import app.rope.android.data.ChatActions
+import app.rope.android.data.CopyCaptionRules
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatListHit
@@ -274,6 +275,15 @@ class Stage2UxTest {
         assertTrue(ChatActions.canPin(incoming))
         assertFalse(ChatActions.canCopy(deleted))
         assertFalse(ChatActions.canPin(deleted))
+        val captioned = photo.copy(
+            text = "",
+            extra = MediaPayload(
+                "image", "o", "ab", "KEY", "image/jpeg", "p.jpg", 1, caption = "подпись",
+            ).toJson(),
+        )
+        assertTrue(ChatActions.canCopy(captioned))
+        assertFalse(ChatActions.canCopy(photo.copy(text = "")))
+        assertEquals("подпись", CopyCaptionRules.clip(captioned))
         assertFalse(ChatActions.canOpen(incoming))
         assertTrue(ChatActions.canOpen(photo.copy(outgoing = false)))
         val video = mine.copy(kind = MessageKind.VIDEO)

@@ -36,6 +36,7 @@ import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
+import app.rope.android.data.CopyCaptionRules
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
@@ -772,10 +773,8 @@ class RopeRepository(private val app: Application) {
     }
 
     fun copyMessage(msg: ChatMessage) {
-        if (!msg.text.isNotBlank() || msg.deleted) return
-        val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
-        _state.value = _state.value.copy(notice = "Скопировано")
+        val text = CopyCaptionRules.clip(msg) ?: return
+        copyText(text)
     }
 
     fun togglePinMessage(msg: ChatMessage) {
