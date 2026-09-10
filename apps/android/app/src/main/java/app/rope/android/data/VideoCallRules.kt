@@ -115,8 +115,19 @@ object VideoCallRules {
         !mediaWasUp && iceName.trim().equals("FAILED", ignoreCase = true)
 
     fun wireEventIsHangup(event: String): Boolean {
+        if (!CallSignal.singleLine(event)) return false
         val v = event.trim().lowercase()
         return v == CallSignal.HANGUP || v == BYE
+    }
+
+    /**
+     * TURN username / credential / TLS SNI hostname. CR/LF/NUL must not
+     * collapse onto a live field after trim.
+     */
+    fun iceField(raw: String?): String? {
+        if (raw.isNullOrEmpty()) return null
+        if (!CallSignal.singleLine(raw)) return null
+        return raw.trim().takeIf { it.isNotEmpty() }
     }
 
     fun utf8Bytes(payload: String): Int = payload.toByteArray(Charsets.UTF_8).size

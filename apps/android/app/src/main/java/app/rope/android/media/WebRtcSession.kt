@@ -673,15 +673,15 @@ class WebRtcSession(
         fun rtcConfig(plan: IceRtcPlan): PeerConnection.RTCConfiguration {
             val ice = plan.servers.map { spec ->
                 val builder = PeerConnection.IceServer.builder(spec.urls)
-                val user = spec.username
-                val cred = spec.credential
+                val user = VideoCallRules.iceField(spec.username)
+                val cred = VideoCallRules.iceField(spec.credential)
                 if (!user.isNullOrBlank() && !cred.isNullOrBlank()) {
                     builder.setUsername(user).setPassword(cred)
                 }
                 if (spec.insecureTls) {
                     builder.setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_INSECURE_NO_CHECK)
                 }
-                val host = spec.hostname?.trim().orEmpty()
+                val host = VideoCallRules.iceField(spec.hostname).orEmpty()
                 if (host.isNotEmpty()) builder.setHostname(host)
                 builder.createIceServer()
             }
