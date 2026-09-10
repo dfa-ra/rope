@@ -103,7 +103,7 @@ class CallMachine {
         myId: String,
         video: Boolean = false,
     ): List<CallEffect> = synchronized(lock) {
-        val id = callId.trim()
+        val id = wireCallId(callId)
         val peer = PeerIds.normalize(peerId)
         if (id.isBlank() || peer.isBlank() || ChatIds.isGroup(peerId)) return emptyList()
         if (state.live && PeerIds.same(state.peerDeviceId, peer) && state.phase == CallPhase.RINGING_IN) {
@@ -140,7 +140,7 @@ class CallMachine {
         synchronized(lock) {
             val ev = CallSignal.parseEvent(event) ?: return emptyList()
             val fromId = PeerIds.normalize(from)
-            val id = callId.trim()
+            val id = wireCallId(callId)
             if (fromId.isBlank() || id.isBlank()) return emptyList()
             val mine = PeerIds.normalize(myId)
             when (ev) {
@@ -595,6 +595,12 @@ class CallMachine {
 
     private fun matchesLocked(from: String, callId: String): Boolean =
         CallLink.matchesCall(callId, from, state.callId, state.altCallId, state.peerDeviceId)
+
+    /** CR/LF/NUL must not collapse to a live call id after trim. */
+    private fun wireCallId(raw: String): String {
+        if (!CallSignal.singleLine(raw)) return ""
+        return raw.trim()
+    }
 
     private fun noteIncomingRing(from: String, nowMs: Long = System.currentTimeMillis()) {
         val peer = PeerIds.normalize(from)
