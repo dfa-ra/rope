@@ -750,38 +750,43 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
 		return
 	}
+	event, ok := validCallEvent(in.Event)
+	if !ok {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
+		return
+	}
 	payload := decodeCallPayload(in.Payload)
 	if len(payload) > maxCallPayloadBytes {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "too_large", Message: "call payload too large"})
 		return
 	}
-	if strings.EqualFold(in.Event, "audio") && !s.CallAudio.Allow("ws-call-audio:"+from.id) {
+	if strings.EqualFold(event, "audio") && !s.CallAudio.Allow("ws-call-audio:"+from.id) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}
-	if strings.EqualFold(in.Event, "ring") && s.CallRing != nil && !s.CallRing.Allow("ws-call-ring:"+from.id) {
+	if strings.EqualFold(event, "ring") && s.CallRing != nil && !s.CallRing.Allow("ws-call-ring:"+from.id) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}
-	if strings.EqualFold(in.Event, "relay") && s.CallRelay != nil && !s.CallRelay.Allow("ws-call-relay:"+from.id) {
+	if strings.EqualFold(event, "relay") && s.CallRelay != nil && !s.CallRelay.Allow("ws-call-relay:"+from.id) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "slow down"})
 		return
 	}
 	target := s.resolveCallTarget(in.To)
 	if dest, ok := s.Hub.Get(target); ok {
-		if isCallTerminal(in.Event) {
+		if isCallTerminal(event) {
 			s.dropPendingCall(in.CallID)
 		}
 		_ = dest.write(ctx, wsOut{
 			Type:    "call",
 			CallID:  in.CallID,
 			From:    from.id,
-			Event:   in.Event,
+			Event:   event,
 			Payload: payload,
 		})
 		return
 	}
-	if strings.EqualFold(in.Event, "audio") {
+	if strings.EqualFold(event, "audio") {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "peer offline"})
 		return
 	}
@@ -789,7 +794,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		callID:  in.CallID,
 		from:    from.id,
 		to:      target,
-		event:   in.Event,
+		event:   event,
 		payload: []byte(payload),
 		expires: time.Now().Add(pendingCallTTL),
 	}) {
