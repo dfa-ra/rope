@@ -356,8 +356,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     }
 
     fun saveSshTarget(t: SshTarget) {
-        put(
-            "ssh_target",
+        putSshJson(
             JSONObject()
                 .put("host", t.host)
                 .put("sshPort", t.sshPort)
@@ -368,14 +367,18 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     }
 
     fun sshTarget(): SshTarget? {
-        val raw = get("ssh_target") ?: return null
-        val o = JSONObject(raw)
-        return SshTarget(
-            host = o.getString("host"),
-            sshPort = o.optInt("sshPort", 22),
-            user = o.optString("user", "root"),
-            listenPort = o.optInt("listenPort", 8443),
-        )
+        val raw = sshJson() ?: return null
+        return try {
+            val o = JSONObject(raw)
+            SshTarget(
+                host = o.getString("host"),
+                sshPort = o.optInt("sshPort", 22),
+                user = o.optString("user", "root"),
+                listenPort = o.optInt("listenPort", 8443),
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun saveTheme(mode: ThemeMode) {
@@ -466,12 +469,26 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
     fun applyBackup(backup: DeviceBackup) {
         if (backup.profileJson.isNotBlank()) put("profile", backup.profileJson)
         if (backup.githubToken.isNotBlank()) saveGithubToken(backup.githubToken)
-        if (backup.sshJson.isNotBlank()) put("ssh_target", backup.sshJson)
+        if (backup.sshJson.isNotBlank()) putSshJson(backup.sshJson)
     }
 
     fun profileJson(): String? = get("profile")
 
-    fun sshJson(): String? = get("ssh_target")
+    fun sshJson(): String? {
+        val stored = get("ssh_target") ?: return null
+        val plain = SshTargetAtRest.open(stored) { decryptBytes(it) }
+        if (plain.isBlank()) return null
+        if (!SecretKv.isWrapped(stored)) {
+            putSshJson(plain)
+        }
+        return plain
+    }
+
+    private fun putSshJson(plain: String) {
+        val sealed = SshTargetAtRest.seal(plain) { encryptBytes(it) }
+        if (sealed.isEmpty()) return
+        put("ssh_target", sealed)
+    }
 
     fun newId(): String = UUID.randomUUID().toString()
 
