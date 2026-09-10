@@ -40,6 +40,8 @@ class SavedMessagesRulesTest {
         assertTrue(SavedMessagesRules.visible(ChatListMode.ALL))
         assertFalse(SavedMessagesRules.visible(ChatListMode.GROUPS))
         assertFalse(SavedMessagesRules.visible(ChatListMode.CALLS))
+        assertFalse(SavedMessagesRules.visible(ChatListMode.MUTED))
+        assertFalse(SavedMessagesRules.visible(ChatListMode.ARCHIVE))
         assertTrue(SavedMessagesRules.defaultPrefs(null).pinned)
         assertFalse(SavedMessagesRules.defaultPrefs(ChatPrefs(pinned = false)).pinned)
         val conv = SavedMessagesRules.conversation(last = null, prefs = ChatPrefs(pinned = true), myDeviceId = "me")

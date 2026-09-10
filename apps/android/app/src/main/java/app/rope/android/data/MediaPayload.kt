@@ -443,7 +443,7 @@ data class ChatPrefs(
     }
 }
 
-enum class ChatListMode { ALL, GROUPS, CALLS, ARCHIVE }
+enum class ChatListMode { ALL, GROUPS, CALLS, ARCHIVE, MUTED }
 
 enum class ChatListHit(val rank: Int) {
     NONE(0),
@@ -466,8 +466,19 @@ object QueryHighlight {
 }
 
 object ChatListRules {
+    const val CHIP_ALL = "Все"
+    const val CHIP_MUTED = "Без звука"
+    const val EMPTY_MUTED = "Нет чатов без звука"
+    const val EMPTY_MUTED_BODY = "Нет заглушенных диалогов."
+
     private val presenceSubtitles = setOf("в сети", "не в сети")
     private val whitespace = Regex("\\s+")
+
+    /** Chats tab chip: Все ↔ Без звука. Distinct from unread #138. Groups / Calls / Archive stay as-is. */
+    fun appliedMutedMode(mode: ChatListMode, mutedOnly: Boolean): ChatListMode =
+        if (mode == ChatListMode.ALL && mutedOnly) ChatListMode.MUTED else mode
+
+    fun showsFilterChips(navMode: ChatListMode): Boolean = navMode == ChatListMode.ALL
 
     fun normalize(query: String): String = query.trim().replace(whitespace, " ").lowercase()
 
@@ -493,6 +504,7 @@ object ChatListRules {
         ChatListMode.ALL, ChatListMode.ARCHIVE -> true
         ChatListMode.GROUPS -> c.isGroup
         ChatListMode.CALLS -> c.last?.kind == MessageKind.CALL
+        ChatListMode.MUTED -> c.muted && !SavedMessagesRules.isSaved(c.id)
     }
 
     fun hit(c: Conversation, query: String): ChatListHit {

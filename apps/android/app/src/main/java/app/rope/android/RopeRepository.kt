@@ -185,6 +185,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val chatsMutedOnly: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    chatsMutedOnly = store.chatsMutedOnly(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -769,6 +771,12 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun setChatsMutedOnly(mutedOnly: Boolean) {
+        if (_state.value.chatsMutedOnly == mutedOnly) return
+        store.saveChatsMutedOnly(mutedOnly)
+        _state.value = _state.value.copy(chatsMutedOnly = mutedOnly)
     }
 
     fun copyMessage(msg: ChatMessage) {
