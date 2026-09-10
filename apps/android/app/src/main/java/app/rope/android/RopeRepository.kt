@@ -65,6 +65,7 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.NotifReadRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -769,6 +770,14 @@ class RopeRepository(private val app: Application) {
     fun toggleMuteChat(id: String) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
+        refreshConversations()
+    }
+
+    fun markChatReadFromNotification(chatId: String) {
+        val id = NotifReadRules.chatId(chatId) ?: return
+        if (!NotifReadRules.allows(id)) return
+        val cur = store.chatPrefs(id)
+        store.saveChatPrefs(id, NotifReadRules.apply(cur, System.currentTimeMillis()))
         refreshConversations()
     }
 
@@ -3429,7 +3438,7 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            notifier.message(title, body, AlbumRules.notifyId(body, albumId), chatId)
         }
     }
 

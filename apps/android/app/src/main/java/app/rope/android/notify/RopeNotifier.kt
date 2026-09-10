@@ -9,7 +9,9 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.PendingIntentCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.NotifReadRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -29,21 +31,48 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        chatId: String? = null,
+    ) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, MSG)
+        val builder = NotificationCompat.Builder(context, MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
-            .build()
-        runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+        val id = NotifReadRules.chatId(chatId)
+        if (id != null && NotifReadRules.allows(id)) {
+            val readIntent = Intent(context, NotifReadReceiver::class.java).apply {
+                action = NotifReadRules.ACTION
+                putExtra(NotifReadRules.EXTRA_CHAT_ID, id)
+                putExtra(NotifReadRules.EXTRA_NOTIFY_ID, notifyId)
+            }
+            val readPi = PendingIntentCompat.getBroadcast(
+                context,
+                NotifReadRules.requestCode(id),
+                readIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT,
+                false,
+            )
+            if (readPi != null) {
+                builder.addAction(
+                    android.R.drawable.ic_menu_view,
+                    NotifReadRules.LABEL,
+                    readPi,
+                )
+            }
+        }
+        runCatching { NotificationManagerCompat.from(context).notify(notifyId, builder.build()) }
     }
 
     fun incomingCall(name: String) {
