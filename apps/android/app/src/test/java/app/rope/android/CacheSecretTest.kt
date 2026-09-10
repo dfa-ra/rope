@@ -46,4 +46,25 @@ class CacheSecretTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun overwriteZerosThenSyncsBeforeUnlink() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "rope-pem-sync-${System.nanoTime()}")
+        assertTrue(dir.mkdirs())
+        try {
+            val pem = File(dir, "key.pem")
+            pem.writeText("-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n")
+            val n = pem.length()
+            assertTrue(n > 0L)
+            assertTrue(CacheSecret.overwrite(pem))
+            assertTrue(pem.exists())
+            val zeros = pem.readBytes()
+            assertEquals(n.toInt(), zeros.size)
+            assertTrue(zeros.all { it == 0.toByte() })
+            assertTrue(CacheSecret.wipe(pem))
+            assertFalse(pem.exists())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }
