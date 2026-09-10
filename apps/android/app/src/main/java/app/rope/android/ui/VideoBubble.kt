@@ -5,8 +5,11 @@ import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,7 +44,9 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.VideoSeekRules
 import app.rope.android.media.VideoCodec
+import kotlinx.coroutines.delay
 
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
@@ -60,6 +67,20 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var player by remember { mutableStateOf<VideoView?>(null) }
+    var positionMs by remember(m.id) { mutableLongStateOf(0L) }
+    var durationMs by remember(m.id) { mutableLongStateOf(duration) }
+    var scrubbing by remember { mutableStateOf(false) }
+    LaunchedEffect(playing, player) {
+        while (playing) {
+            val view = player
+            if (view != null && !scrubbing) {
+                positionMs = view.currentPosition.toLong()
+                if (view.duration > 0) durationMs = view.duration.toLong()
+            }
+            delay(200)
+        }
+    }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
@@ -85,11 +106,10 @@ fun VideoMessageBubble(
                     }
                 },
                 update = { view ->
+                    player = view
                     if (view.tag != path) {
                         view.tag = path
                         view.setVideoPath(path)
-                        view.start()
-                    } else if (!view.isPlaying) {
                         view.start()
                     }
                 },
@@ -135,7 +155,23 @@ fun VideoMessageBubble(
             ) {
                 Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
             }
+            if (VideoSeekRules.canScrub(true, durationMs)) {
+                VideoScrubBar(
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    onSeek = { ms ->
+                        positionMs = ms
+                        player?.seekTo(ms.toInt())
+                    },
+                    onScrubbing = { scrubbing = it },
+                )
+            }
         }
+        if (!playing) {
         Text(
             if (duration > 0L) MediaPayload.formatDuration(duration) else "видео",
             style = MaterialTheme.typography.labelSmall,
@@ -147,6 +183,7 @@ fun VideoMessageBubble(
                 .background(Color.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
+        }
         if (overlayMeta && meta.isNotBlank()) {
             Text(
                 meta,
@@ -170,6 +207,60 @@ fun VideoMessageBubble(
                     .padding(6.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun VideoScrubBar(
+    positionMs: Long,
+    durationMs: Long,
+    modifier: Modifier = Modifier,
+    onSeek: (Long) -> Unit,
+    onScrubbing: (Boolean) -> Unit,
+) {
+    val fraction = VideoSeekRules.progress(positionMs, durationMs)
+    Box(
+        modifier
+            .height(18.dp)
+            .pointerInput(durationMs) {
+                fun seek(x: Float) {
+                    onSeek(VideoSeekRules.fromPointerX(x, size.width.toFloat(), durationMs))
+                }
+                detectTapGestures { offset -> seek(offset.x) }
+            }
+            .pointerInput(durationMs) {
+                fun seek(x: Float) {
+                    onSeek(VideoSeekRules.fromPointerX(x, size.width.toFloat(), durationMs))
+                }
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        onScrubbing(true)
+                        seek(it.x)
+                    },
+                    onDragEnd = { onScrubbing(false) },
+                    onDragCancel = { onScrubbing(false) },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        seek(change.position.x)
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color.White.copy(alpha = 0.35f)),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color.White),
+        )
     }
 }
 
