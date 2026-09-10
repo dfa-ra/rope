@@ -158,6 +158,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ShareContactRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -211,8 +212,35 @@ fun ChatsPane(
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
+        val share = state.sharingContact
         val forwarding = state.forwarding
+        val picking = forwarding != null || share != null
         when {
+            share != null -> {
+                Surface(
+                    tonalElevation = 3.dp,
+                    shape = RoundedCornerShape(bottomStart = RopeShapes.card, bottomEnd = RopeShapes.card),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(ShareContactRules.BANNER, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                ShareContactRules.preview(share.displayName),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = onCancelForward) { Text("Отмена") }
+                    }
+                }
+            }
             forwarding != null -> {
                 Surface(
                     tonalElevation = 3.dp,
@@ -270,18 +298,17 @@ fun ChatsPane(
                 ChatListMode.ALL -> "Поиск"
             },
         )
-        val isForwarding = state.forwarding != null
         val archived = ArchiveRules.archivedOf(state.conversations)
-        val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
+        val source = ArchiveRules.sourceForList(state.conversations, listMode, picking)
         val rows = ChatListRules.rows(source, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
-        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
+        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, picking)
         val inArchive = listMode == ChatListMode.ARCHIVE
         val empty = ChatListEmptyRules.copy(
             listMode,
             state.chatQuery,
-            isForwarding,
+            picking,
             state.profile?.role,
         )
         Box(Modifier.weight(1f).fillMaxSize()) {
@@ -311,7 +338,7 @@ fun ChatsPane(
                                     onPin = { onPinChat(c.id) },
                                     onMute = { onMuteChat(c.id) },
                                     query = state.chatQuery,
-                                    onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
+                                    onArchive = if (inArchive || picking) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
                                 )
                             }
@@ -333,7 +360,7 @@ fun ChatsPane(
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
                                 query = state.chatQuery,
-                                onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
+                                onArchive = if (inArchive || picking) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
                             )
                         }
@@ -350,7 +377,7 @@ fun ChatsPane(
                     }
                 }
             }
-            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, state.forwarding != null)) {
+            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, picking)) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier

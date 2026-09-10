@@ -165,6 +165,7 @@ fun RopeScaffold(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCancelForward: () -> Unit,
+    onShareContact: () -> Unit = {},
     onChatQuery: (String) -> Unit,
     onMessageQuery: (String) -> Unit,
     onPinChat: (String) -> Unit,
@@ -356,6 +357,7 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onShareContact = onShareContact,
                         )
                     }
                 }

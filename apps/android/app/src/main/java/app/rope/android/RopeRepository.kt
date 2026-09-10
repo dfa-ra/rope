@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ShareContactRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -175,6 +176,7 @@ data class UiState(
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
+    val sharingContact: DirectoryDevice? = null,
     val chatQuery: String = "",
     val messageQuery: String = "",
     val typingName: String? = null,
@@ -552,6 +554,10 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openConversation(c: Conversation) {
+        if (_state.value.sharingContact != null) {
+            completeShareContact(c)
+            return
+        }
         if (_state.value.forwarding != null) {
             completeForward(c)
             return
@@ -730,6 +736,24 @@ class RopeRepository(private val app: Application) {
         val stack = BackStack.listForForward(BackStack.currentStack(_state.value.backStack, _state.value.screen))
         _state.value = _state.value.copy(
             forwarding = msg,
+            sharingContact = null,
+            screen = stack.last(),
+            backStack = stack,
+            replyTo = null,
+            replySpan = null,
+            editTarget = null,
+            viewingImage = null,
+        )
+    }
+
+    fun startShareContact() {
+        val s = _state.value
+        val peer = s.peer ?: return
+        if (!ShareContactRules.canShare(peer.deviceId, s.profile?.deviceId)) return
+        val stack = BackStack.listForForward(BackStack.currentStack(s.backStack, s.screen))
+        _state.value = s.copy(
+            sharingContact = peer,
+            forwarding = null,
             screen = stack.last(),
             backStack = stack,
             replyTo = null,
@@ -740,7 +764,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelForward() {
-        _state.value = _state.value.copy(forwarding = null)
+        _state.value = _state.value.copy(forwarding = null, sharingContact = null)
     }
 
     fun togglePinChat(id: String) {
@@ -815,6 +839,37 @@ class RopeRepository(private val app: Application) {
 
     fun dismissNotice() {
         _state.value = _state.value.copy(notice = null)
+    }
+
+    private fun completeShareContact(c: Conversation) {
+        val share = _state.value.sharingContact ?: return
+        if (!ShareContactRules.canSendTo(c.id, share.deviceId)) {
+            notice(ShareContactRules.REJECT)
+            return
+        }
+        val body = ShareContactRules.body(share.displayName, share.deviceId)
+        _state.value = _state.value.copy(sharingContact = null)
+        scope.launch {
+            try {
+                when {
+                    SavedMessagesRules.isSaved(c.id) -> {
+                        saveLocalText(body)
+                        openSaved()
+                    }
+                    c.group != null -> {
+                        sendGroupText(group = c.group, text = body)
+                        openGroup(c.group)
+                    }
+                    c.peer != null -> {
+                        sendPeerText(peer = c.peer, text = body, pack = replyPack(null), preview = null)
+                        openChat(c.peer)
+                    }
+                    else -> notice("некуда отправить")
+                }
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
     }
 
     fun completeForward(c: Conversation) {

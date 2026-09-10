@@ -188,6 +188,22 @@ class BackStackTest {
             BackLayer.CancelForward,
             BackStack.decide(base.copy(screen = Screen.Chats, backStack = listOf(Screen.Chats), forwarding = photo)),
         )
+        assertEquals(
+            BackLayer.CancelForward,
+            BackStack.decide(
+                base.copy(
+                    screen = Screen.Chats,
+                    backStack = listOf(Screen.Chats),
+                    sharingContact = app.rope.android.data.DirectoryDevice(
+                        "peer-1",
+                        "",
+                        "Анна",
+                        ByteArray(0),
+                        "",
+                    ),
+                ),
+            ),
+        )
         assertEquals(BackLayer.CancelComposer, BackStack.decide(base.copy(replyTo = photo)))
         assertEquals(BackLayer.CancelComposer, BackStack.composerBack(hasReply = true, hasEdit = false, pendingCount = 2))
         assertEquals(BackLayer.CancelPendingMedia, BackStack.composerBack(hasReply = false, hasEdit = false, pendingCount = 1))
