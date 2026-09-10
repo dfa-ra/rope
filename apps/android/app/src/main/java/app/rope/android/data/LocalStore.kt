@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveNotifyVibrate(enabled: Boolean) {
+        put("notify_vibrate", if (enabled) "1" else "0")
+    }
+
+    fun notifyVibrate(): Boolean = InAppVibRules.enabledFromKv(get("notify_vibrate"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

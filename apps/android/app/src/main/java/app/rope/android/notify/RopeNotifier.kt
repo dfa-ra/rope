@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.InAppVibRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -19,6 +20,8 @@ class RopeNotifier(private val context: Context) {
             mgr.createNotificationChannel(
                 NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                    enableVibration(true)
+                    vibrationPattern = InAppVibRules.pattern(true)
                 },
             )
             mgr.createNotificationChannel(
@@ -29,19 +32,30 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(title: String, body: String, notifyId: Int = body.hashCode(), vibrate: Boolean = true) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        if (Build.VERSION.SDK_INT >= 26) {
+            val mgr = context.getSystemService(NotificationManager::class.java)
+            mgr.createNotificationChannel(
+                NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                    enableVibration(vibrate)
+                    vibrationPattern = InAppVibRules.pattern(vibrate)
+                },
+            )
+        }
         val n = NotificationCompat.Builder(context, MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
+            .setVibrate(InAppVibRules.pattern(vibrate))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
     }
