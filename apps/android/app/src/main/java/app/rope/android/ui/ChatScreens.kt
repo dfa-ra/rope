@@ -1134,6 +1134,7 @@ fun ChatPane(
             onCopy = { onCopy(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
+            onEdit = { onEdit(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
         )
@@ -1836,6 +1837,7 @@ private fun MessageTapOverlay(
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1876,6 +1878,7 @@ private fun MessageTapOverlay(
                 onCopy = onCopy,
                 onForward = onForward,
                 onPin = onPin,
+                onEdit = onEdit,
                 onDelete = onDelete,
                 onOpen = onOpen,
             )
@@ -1891,6 +1894,7 @@ private fun MessageActionMenu(
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1917,6 +1921,9 @@ private fun MessageActionMenu(
                     if (pinned) "Открепить" else "Закрепить",
                     onPin,
                 )
+            }
+            if (ChatActions.canEdit(m)) {
+                MessageMenuRow(Icons.Outlined.Edit, ChatActions.EDIT, onEdit)
             }
             if (ChatActions.canDelete(m)) {
                 MessageMenuRow(Icons.Outlined.Delete, "Удалить", onDelete)

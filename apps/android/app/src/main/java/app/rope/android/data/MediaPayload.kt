@@ -384,6 +384,8 @@ object TextBody {
 }
 
 object ChatActions {
+    const val EDIT = "Изменить"
+
     fun canReply(msg: ChatMessage): Boolean = !msg.deleted
 
     fun canForward(msg: ChatMessage): Boolean = !msg.deleted
