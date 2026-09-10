@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,6 +26,7 @@ import app.rope.android.NavRules
 import app.rope.android.UiState
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
+import app.rope.android.data.PeopleOnlineRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 
@@ -38,6 +40,8 @@ fun PeoplePane(
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
     val canRevoke = RevokeRules.canRevoke(state.profile?.role)
     var pendingMemberId by remember { mutableStateOf<String?>(null) }
+    var onlineOnly by remember { mutableStateOf(false) }
+    val shown = remember(people, onlineOnly) { PeopleOnlineRules.visible(people, onlineOnly) }
     Column(Modifier.fillMaxSize()) {
         if (people.isEmpty()) {
             val role = state.profile?.role
@@ -48,6 +52,20 @@ fun PeoplePane(
                 onAction = if (RoleRules.canInvite(role)) onInvite else null,
             )
         } else {
+            FilterChip(
+                selected = onlineOnly,
+                onClick = { onlineOnly = !onlineOnly },
+                label = { Text(PeopleOnlineRules.CHIP) },
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .semantics { contentDescription = PeopleOnlineRules.CHIP },
+            )
+            if (shown.isEmpty()) {
+                RopeEmptyState(
+                    title = PeopleOnlineRules.EMPTY_TITLE,
+                    body = PeopleOnlineRules.EMPTY_BODY,
+                )
+            } else {
             LazyColumn(
                 Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -62,7 +80,7 @@ fun PeoplePane(
                         )
                     }
                 }
-                itemsIndexed(people, key = { _, d -> d.deviceId }) { _, d ->
+                itemsIndexed(shown, key = { _, d -> d.deviceId }) { _, d ->
                     FadeIn(0) {
                         PersonRow(
                             d = d,
@@ -85,6 +103,7 @@ fun PeoplePane(
                         )
                     }
                 }
+            }
             }
         }
     }
