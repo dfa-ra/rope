@@ -7,6 +7,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
@@ -20,8 +23,6 @@ class RopeNotifier(private val context: Context) {
             mgr.createNotificationChannel(
                 NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                    enableVibration(true)
-                    vibrationPattern = InAppVibRules.pattern(true)
                 },
             )
             mgr.createNotificationChannel(
@@ -32,32 +33,22 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode(), vibrate: Boolean = true) {
+    fun message(title: String, body: String, notifyId: Int = body.hashCode(), vibrate: Boolean = false) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        if (Build.VERSION.SDK_INT >= 26) {
-            val mgr = context.getSystemService(NotificationManager::class.java)
-            mgr.createNotificationChannel(
-                NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                    enableVibration(vibrate)
-                    vibrationPattern = InAppVibRules.pattern(vibrate)
-                },
-            )
-        }
         val n = NotificationCompat.Builder(context, MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
-            .setVibrate(InAppVibRules.pattern(vibrate))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
+        if (vibrate) pulse()
     }
 
     fun incomingCall(name: String) {
@@ -96,6 +87,26 @@ class RopeNotifier(private val context: Context) {
     fun clearCall() {
         NotificationManagerCompat.from(context).cancel(CALL_ID)
     }
+
+    /**
+     * Settings toggle must work after the channel already exists.
+     * Recreating `rope-messages` does not change vibration on API 26+.
+     */
+    private fun pulse() {
+        val pattern = InAppVibRules.pattern(true)
+        runCatching {
+            val vibrator = vibrator() ?: return
+            if (!vibrator.hasVibrator()) return
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, InAppVibRules.WAVEFORM_NO_REPEAT))
+        }
+    }
+
+    private fun vibrator(): Vibrator? =
+        if (Build.VERSION.SDK_INT >= 31) {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            context.getSystemService(Vibrator::class.java)
+        }
 
     companion object {
         private const val MSG = "rope-messages"

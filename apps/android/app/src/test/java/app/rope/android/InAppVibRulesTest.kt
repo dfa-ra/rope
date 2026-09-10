@@ -41,6 +41,7 @@ class InAppVibRulesTest {
     fun patternIsShortPulseOrSilent() {
         assertArrayEquals(longArrayOf(0, 40, 80, 40), InAppVibRules.pattern(true))
         assertArrayEquals(longArrayOf(0), InAppVibRules.pattern(false))
+        assertEquals(-1, InAppVibRules.WAVEFORM_NO_REPEAT)
         assertTrue(InAppVibRules.hint().contains("баннер"))
         assertFalse(InAppVibRules.hint().contains("FCM"))
     }

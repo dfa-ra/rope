@@ -5,6 +5,8 @@ package app.rope.android.data
  * not envelope crypto, not FCM.
  */
 object InAppVibRules {
+    const val WAVEFORM_NO_REPEAT = -1
+
     fun enabledFromKv(raw: String?): Boolean = raw != "0"
 
     fun shouldVibrate(alert: Boolean, vibrateEnabled: Boolean): Boolean =
