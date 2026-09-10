@@ -1,8 +1,8 @@
 package app.rope.android.data
 
 /**
- * Telegram-like 1:1 peer profile. Shared photos are the IMAGE rows already
- * in LocalStore for this chat — no FCM, no cloud gallery.
+ * Telegram-like 1:1 peer profile. Shared photos are IMAGE rows; shared
+ * voice notes are VOICE rows already in LocalStore — no FCM.
  */
 object PeerProfileRules {
     const val GRID_COLUMNS = 3
