@@ -90,6 +90,31 @@ class ForwardRulesTest {
         assertNull(plain.forwardedFrom)
     }
 
+    @Test
+    fun originFieldRejectsControlBeforeTrim() {
+        assertEquals("Анна", ForwardRules.originField("Анна"))
+        assertEquals("Анна", ForwardRules.originField("  Анна  "))
+        assertNull(ForwardRules.originField("\nАнна"))
+        assertNull(ForwardRules.originField("Анна\n"))
+        assertNull(ForwardRules.originField("Анна\r"))
+        assertNull(ForwardRules.originField("Анна\u0000"))
+        assertNull(ForwardRules.originField(""))
+        assertNull(ForwardRules.originField("   "))
+        assertTrue(ForwardRules.isMasqueradingReply("  Переслано · Боб  "))
+        assertFalse(ForwardRules.isMasqueradingReply("\nПереслано · Боб"))
+        assertFalse(ForwardRules.isMasqueradingReply("Переслано · Боб\n"))
+        val crlfFf = msg(forwardedFrom = "\nАнна")
+        assertNull(ForwardRules.attributedName(crlfFf))
+        assertFalse(ForwardRules.hidesReplyQuote(crlfFf))
+        val crlfLegacy = msg(replyToId = "mid", replyName = "\nПереслано · Боб", replyPreview = "hi")
+        assertNull(ForwardRules.attributedName(crlfLegacy))
+        assertFalse(ForwardRules.hidesReplyQuote(crlfLegacy))
+        val spaced = msg(forwardedFrom = "  Анна  ")
+        assertEquals("Анна", ForwardRules.attributedName(spaced))
+        assertEquals("Переслано от Анна", ForwardRules.headerLabel("  Анна  "))
+        assertEquals(ForwardRules.HEADER, ForwardRules.headerLabel("\nАнна"))
+    }
+
     private fun msg(
         forwardedFrom: String? = null,
         replyToId: String? = null,
