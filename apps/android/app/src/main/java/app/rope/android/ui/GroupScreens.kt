@@ -25,9 +25,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.GroupAboutRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.RoleRules
@@ -105,6 +108,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onRename: (String) -> Unit = {},
+    onSetAbout: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -121,6 +125,8 @@ fun GroupInfoPane(
     val isMember = me != null && me in g.members
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canRename = RoleRules.canRenameGroup(isMember, me, organizer, state.profile?.role)
+    val canAbout = GroupAboutRules.canSet(isMember, me, organizer, state.profile?.role)
+    val about = GroupAboutRules.lookup(state.groupAbouts, g.groupId)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
     var renameDraft by remember(g.groupId, g.name) { mutableStateOf(g.name) }
@@ -140,6 +146,35 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (canAbout) {
+                            OutlinedTextField(
+                                about,
+                                onSetAbout,
+                                label = { Text(GroupAboutRules.TITLE) },
+                                supportingText = {
+                                    Text("${about.length}/${GroupAboutRules.MAX}")
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(RopeShapes.field),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                                    .semantics { contentDescription = GroupAboutRules.TITLE },
+                            )
+                            Text(
+                                GroupAboutRules.HINT,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else if (about.isNotEmpty()) {
+                            Text(
+                                about,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier
+                                    .padding(top = 8.dp)
+                                    .semantics { contentDescription = GroupAboutRules.TITLE },
+                            )
+                        }
                         if (canRename) {
                             OutlinedTextField(
                                 renameDraft,

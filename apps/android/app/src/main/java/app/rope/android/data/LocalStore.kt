@@ -394,6 +394,16 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun groupAbouts(): Map<String, String> = GroupAboutRules.parseMap(get(GroupAboutRules.KV))
+
+    fun saveGroupAbout(groupId: String, text: String) {
+        val k = GroupAboutRules.key(groupId) ?: return
+        val clean = GroupAboutRules.sanitize(text)
+        val next = groupAbouts().toMutableMap()
+        if (clean.isEmpty()) next.remove(k) else next[k] = clean
+        put(GroupAboutRules.KV, GroupAboutRules.encode(next))
+    }
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

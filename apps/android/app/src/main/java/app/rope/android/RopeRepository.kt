@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
+import app.rope.android.data.GroupAboutRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -168,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val groupAbouts: Map<String, String> = emptyMap(),
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -257,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    groupAbouts = store.groupAbouts(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -1225,6 +1228,18 @@ class RopeRepository(private val app: Application) {
                 error(e)
             }
         }
+    }
+
+    fun setGroupAbout(text: String) {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!GroupAboutRules.canSet(me in g.members, me, organizer, _state.value.profile?.role)) return
+        val key = GroupAboutRules.key(g.groupId) ?: return
+        val next = GroupAboutRules.sanitize(text)
+        if (next == GroupAboutRules.lookup(_state.value.groupAbouts, g.groupId)) return
+        store.saveGroupAbout(key, next)
+        _state.value = _state.value.copy(groupAbouts = store.groupAbouts())
     }
 
     fun renameOpenGroup(raw: String) {
