@@ -31,7 +31,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
-import app.rope.android.data.ForwardRules
+import app.rope.android.data.ForwardCopyRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
@@ -175,6 +175,7 @@ data class UiState(
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
+    val forwardHideSender: Boolean = false,
     val chatQuery: String = "",
     val messageQuery: String = "",
     val typingName: String? = null,
@@ -730,6 +731,7 @@ class RopeRepository(private val app: Application) {
         val stack = BackStack.listForForward(BackStack.currentStack(_state.value.backStack, _state.value.screen))
         _state.value = _state.value.copy(
             forwarding = msg,
+            forwardHideSender = false,
             screen = stack.last(),
             backStack = stack,
             replyTo = null,
@@ -739,8 +741,13 @@ class RopeRepository(private val app: Application) {
         )
     }
 
+    fun toggleForwardHideSender() {
+        if (_state.value.forwarding == null) return
+        _state.value = _state.value.copy(forwardHideSender = !_state.value.forwardHideSender)
+    }
+
     fun cancelForward() {
-        _state.value = _state.value.copy(forwarding = null)
+        _state.value = _state.value.copy(forwarding = null, forwardHideSender = false)
     }
 
     fun togglePinChat(id: String) {
@@ -819,20 +826,21 @@ class RopeRepository(private val app: Application) {
 
     fun completeForward(c: Conversation) {
         val src = _state.value.forwarding ?: return
-        _state.value = _state.value.copy(forwarding = null)
+        val hide = _state.value.forwardHideSender
+        _state.value = _state.value.copy(forwarding = null, forwardHideSender = false)
         scope.launch {
             try {
                 when {
                     SavedMessagesRules.isSaved(c.id) -> {
-                        forwardToSaved(src)
+                        forwardToSaved(src, hide)
                         openSaved()
                     }
                     c.group != null -> {
-                        forwardToGroup(c.group, src)
+                        forwardToGroup(c.group, src, hide)
                         openGroup(c.group)
                     }
                     c.peer != null -> {
-                        forwardToPeer(c.peer, src)
+                        forwardToPeer(c.peer, src, hide)
                         openChat(c.peer)
                     }
                     else -> notice("некуда переслать")
@@ -2215,13 +2223,13 @@ class RopeRepository(private val app: Application) {
         )
     }
 
-    private fun forwardToPeer(peer: DirectoryDevice, src: ChatMessage) {
+    private fun forwardToPeer(peer: DirectoryDevice, src: ChatMessage, hideSender: Boolean) {
         if (SavedMessagesRules.isSaved(peer.deviceId)) {
-            forwardToSaved(src)
+            forwardToSaved(src, hideSender)
             return
         }
         val id = identity ?: return
-        val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
+        val from = ForwardCopyRules.stampName(src, _state.value.profile?.displayName.orEmpty(), hideSender)
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
             val packed = TextBody.encode(
                 src.text, null, "", "",
@@ -2281,8 +2289,8 @@ class RopeRepository(private val app: Application) {
         pushEnvelope(env.bytes)
     }
 
-    private fun forwardToGroup(group: RopeGroup, src: ChatMessage) {
-        val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
+    private fun forwardToGroup(group: RopeGroup, src: ChatMessage, hideSender: Boolean) {
+        val from = ForwardCopyRules.stampName(src, _state.value.profile?.displayName.orEmpty(), hideSender)
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
             sendGroupText(group, src.text, forwardedFrom = from, linkPreview = src.linkPreview)
             return
@@ -2300,8 +2308,8 @@ class RopeRepository(private val app: Application) {
         )
     }
 
-    private fun forwardToSaved(src: ChatMessage) {
-        val from = ForwardRules.originName(src, _state.value.profile?.displayName.orEmpty())
+    private fun forwardToSaved(src: ChatMessage, hideSender: Boolean) {
+        val from = ForwardCopyRules.stampName(src, _state.value.profile?.displayName.orEmpty(), hideSender)
         if (src.kind == MessageKind.TEXT || src.kind == MessageKind.GROUP_TEXT) {
             saveLocalText(src.text, forwardedFrom = from, linkPreview = src.linkPreview)
             return
@@ -2375,7 +2383,7 @@ class RopeRepository(private val app: Application) {
 
     private fun attributedMediaPayload(
         src: ChatMessage,
-        forwardedFrom: String,
+        forwardedFrom: String?,
         groupId: String?,
         upload: Boolean = true,
     ): MediaPayload? {

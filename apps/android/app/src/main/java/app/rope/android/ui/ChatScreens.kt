@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -115,6 +116,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -152,6 +155,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.ForwardCopyRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -195,6 +199,7 @@ private val InBubbleLight = Color(0xFFF4F4F5)
 private val InBubbleDark = Color(0xFF27272A)
 private val RecRed = Color(0xFFE53935)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsPane(
     state: UiState,
@@ -202,6 +207,7 @@ fun ChatsPane(
     onNewGroup: () -> Unit,
     onUpdateApp: () -> Unit = {},
     onCancelForward: () -> Unit = {},
+    onToggleForwardHide: () -> Unit = {},
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
@@ -219,6 +225,7 @@ fun ChatsPane(
                     shape = RoundedCornerShape(bottomStart = RopeShapes.card, bottomEnd = RopeShapes.card),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
+                    Column(Modifier.fillMaxWidth()) {
                     Row(
                         Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -235,6 +242,15 @@ fun ChatsPane(
                             )
                         }
                         TextButton(onClick = onCancelForward) { Text("Отмена") }
+                    }
+                    FilterChip(
+                        selected = state.forwardHideSender,
+                        onClick = onToggleForwardHide,
+                        label = { Text(ForwardCopyRules.CHIP) },
+                        modifier = Modifier
+                            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                            .semantics { contentDescription = ForwardCopyRules.CHIP },
+                    )
                     }
                 }
             }
