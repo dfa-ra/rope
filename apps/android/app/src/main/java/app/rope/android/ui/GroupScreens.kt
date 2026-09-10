@@ -25,10 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupMemberRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -104,6 +107,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onBack: () -> Unit,
+    onOpenMember: (String) -> Unit = {},
 ) {
     val g = state.group
     if (g == null) {
@@ -145,26 +149,43 @@ fun GroupInfoPane(
                 val role = GroupChatUx.memberRoleLabel(id, g)
                 val tint = Color(GroupChatUx.senderColorArgb(id, label))
                 val online = id in state.onlineIds || (id == me && !state.offline)
+                val canOpen = GroupMemberRules.canOpen(id, me)
                 SectionCard {
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        InitialsAvatar(
-                            title = label,
-                            group = false,
-                            online = online,
-                            size = 40.dp,
-                            tint = tint,
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Text(label, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                role,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .then(
+                                    if (canOpen) {
+                                        Modifier
+                                            .pressScale { onOpenMember(id) }
+                                            .semantics { contentDescription = GroupMemberRules.ACTION }
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            InitialsAvatar(
+                                title = label,
+                                group = false,
+                                online = online,
+                                size = 40.dp,
+                                tint = tint,
                             )
+                            Column(Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    role,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         if (canManage && id != me) {
                             TextButton(onClick = { onRemove(id) }) { Text("Убрать") }

@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.GroupMemberRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -549,6 +550,17 @@ class RopeRepository(private val app: Application) {
     fun openSaved() {
         persistOpenDraft()
         enterChat(SavedMessagesRules.ID, SavedMessagesRules.stubPeer(), null)
+    }
+
+    fun openMemberChat(deviceId: String) {
+        val s = _state.value
+        if (!GroupMemberRules.canOpen(deviceId, s.profile?.deviceId)) return
+        val d = PeerIds.findDevice(s.devices, deviceId)
+        if (d == null) {
+            notice(GroupMemberRules.NOTICE_MISSING)
+            return
+        }
+        openChat(d)
     }
 
     fun openConversation(c: Conversation) {
