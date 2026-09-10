@@ -375,6 +375,7 @@ fun RopeScaffold(
             onClose = onCloseImage,
             onShow = onOpenImage,
             onEnsure = onEnsureMedia,
+            onForward = onForward,
         )
     }
     state.call?.let { call ->
