@@ -9,7 +9,8 @@ import java.io.File
 
 class ApkInstaller(private val context: Context) {
     fun install(file: File) {
-        if (!file.isFile || file.length() < 1024) error("APK не скачан")
+        val updates = File(context.cacheDir, ApkInstallRules.UPDATES_DIR)
+        if (!ApkInstallRules.allow(file, updates)) error("APK не скачан")
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(context.packageName)
