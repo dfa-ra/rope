@@ -4,6 +4,10 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -70,6 +74,8 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceProximityAction
+import app.rope.android.data.VoiceProximityRules
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -205,6 +211,15 @@ class RopeRepository(private val app: Application) {
     private val notifier = RopeNotifier(app)
     private val voiceRecorder = VoiceRecorder(app)
     private val voicePlayer = VoicePlayer()
+    @Volatile private var voicePausedByProximity = false
+    private var proximityBound = false
+    private val proximityListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            val distance = event.values.firstOrNull() ?: return
+            applyVoiceProximity(distance, event.sensor.maximumRange)
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
     private val videoNoteRecorder = VideoNoteRecorder(app)
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
@@ -1104,14 +1119,17 @@ class RopeRepository(private val app: Application) {
             return
         }
         voicePlayer.toggle(msg.id, path)
+        voicePausedByProximity = VoiceProximityRules.afterUserToggle()
         publishVoiceProgress()
         voiceProgressJob?.cancel()
-        if (voicePlayer.playingId != null) {
+        syncVoiceProximity()
+        if (voicePlayer.playingId != null || voicePausedByProximity) {
             voiceProgressJob = scope.launch {
-                while (voicePlayer.playingId != null) {
+                while (voicePlayer.playingId != null || voicePausedByProximity) {
                     delay(80)
                     publishVoiceProgress()
                 }
+                syncVoiceProximity()
                 publishVoiceProgress()
             }
         }
@@ -1126,12 +1144,14 @@ class RopeRepository(private val app: Application) {
         voicePlayer.seek(msg.id, path, positionMs)
         publishVoiceProgress()
         voiceProgressJob?.cancel()
-        if (voicePlayer.playingId != null) {
+        syncVoiceProximity()
+        if (voicePlayer.playingId != null || voicePausedByProximity) {
             voiceProgressJob = scope.launch {
-                while (voicePlayer.playingId != null) {
+                while (voicePlayer.playingId != null || voicePausedByProximity) {
                     delay(80)
                     publishVoiceProgress()
                 }
+                syncVoiceProximity()
                 publishVoiceProgress()
             }
         }
@@ -1140,6 +1160,46 @@ class RopeRepository(private val app: Application) {
     fun cycleVoiceSpeed() {
         voicePlayer.cycleSpeed()
         publishVoiceProgress()
+    }
+
+    private fun syncVoiceProximity() {
+        bindVoiceProximity(voicePlayer.playingId != null || voicePausedByProximity)
+    }
+
+    private fun bindVoiceProximity(on: Boolean) {
+        val sm = app.getSystemService(SensorManager::class.java) ?: return
+        if (on) {
+            if (proximityBound) return
+            val sensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY) ?: return
+            sm.registerListener(proximityListener, sensor, SensorManager.SENSOR_DELAY_NORMAL, mainHandler)
+            proximityBound = true
+        } else if (proximityBound) {
+            sm.unregisterListener(proximityListener)
+            proximityBound = false
+        }
+    }
+
+    private fun applyVoiceProximity(distance: Float, maxRange: Float) {
+        val near = VoiceProximityRules.isNear(distance, maxRange)
+        when (
+            VoiceProximityRules.action(
+                playing = voicePlayer.playingId != null,
+                pausedByProximity = voicePausedByProximity,
+                near = near,
+            )
+        ) {
+            VoiceProximityAction.PAUSE -> {
+                voicePlayer.pause()
+                voicePausedByProximity = true
+                publishVoiceProgress()
+            }
+            VoiceProximityAction.RESUME -> {
+                voicePlayer.resume()
+                voicePausedByProximity = false
+                publishVoiceProgress()
+            }
+            VoiceProximityAction.NONE -> Unit
+        }
     }
 
     private fun publishVoiceProgress() {

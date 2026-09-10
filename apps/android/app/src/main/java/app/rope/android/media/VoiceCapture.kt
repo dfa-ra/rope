@@ -180,6 +180,27 @@ class VoicePlayer {
         return speed
     }
 
+    fun pause() {
+        if (!isPlayingNow()) return
+        try {
+            player?.pause()
+        } catch (_: Exception) {
+        }
+        playingId = null
+    }
+
+    fun resume() {
+        val id = loadedId ?: return
+        if (player == null || isPlayingNow()) return
+        try {
+            applySpeed()
+            player?.start()
+            playingId = id
+        } catch (_: Exception) {
+            stop()
+        }
+    }
+
     private fun prepare(id: String, path: String, start: Boolean) {
         stop()
         val p = MediaPlayer()
