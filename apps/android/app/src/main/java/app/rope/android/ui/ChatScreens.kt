@@ -135,6 +135,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -160,6 +162,7 @@ import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
+import app.rope.android.data.UnpinAllRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
@@ -208,6 +211,7 @@ fun ChatsPane(
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
+    onUnpinAll: () -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -278,6 +282,11 @@ fun ChatsPane(
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
         val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
         val inArchive = listMode == ChatListMode.ARCHIVE
+        val showUnpinAll = UnpinAllRules.visible(
+            pinnedRows.size,
+            isForwarding,
+            ChatListRules.searching(state.chatQuery),
+        )
         val empty = ChatListEmptyRules.copy(
             listMode,
             state.chatQuery,
@@ -313,14 +322,20 @@ fun ChatsPane(
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                    onUnpinAll = if (showUnpinAll && UnpinAllRules.showInRowMenu(c.pinned, pinnedRows.size)) {
+                                        onUnpinAll
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         }
-                        if (ChatListRules.showPinDivider(rows, state.chatQuery)) {
+                        if (showUnpinAll || ChatListRules.showPinDivider(rows, state.chatQuery)) {
                             item(key = "pinned-divider") {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 72.dp, end = 16.dp),
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                UnpinAllRow(
+                                    showAction = showUnpinAll,
+                                    showDivider = ChatListRules.showPinDivider(rows, state.chatQuery),
+                                    onUnpinAll = onUnpinAll,
                                 )
                             }
                         }
@@ -538,6 +553,43 @@ private fun ArchiveHeaderRow(
     }
 }
 
+@Composable
+private fun UnpinAllRow(
+    showAction: Boolean,
+    showDivider: Boolean,
+    onUnpinAll: () -> Unit,
+) {
+    var confirm by remember { mutableStateOf(false) }
+    Column {
+        if (showAction) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(
+                    onClick = {
+                        if (confirm) {
+                            onUnpinAll()
+                            confirm = false
+                        } else {
+                            confirm = true
+                        }
+                    },
+                    modifier = Modifier.semantics { contentDescription = UnpinAllRules.ACTION },
+                ) {
+                    Text(if (confirm) UnpinAllRules.CONFIRM else UnpinAllRules.ACTION)
+                }
+            }
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 72.dp, end = 16.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ConversationRow(
@@ -548,6 +600,7 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    onUnpinAll: (() -> Unit)? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -698,6 +751,11 @@ internal fun ConversationRow(
                 } else if (ArchiveRules.canPin(c)) {
                     TextButton(onClick = { onPin(); menu = false }) {
                         Text(if (c.pinned) "Открепить" else "Закрепить")
+                    }
+                }
+                if (onUnpinAll != null) {
+                    TextButton(onClick = { onUnpinAll(); menu = false }) {
+                        Text(UnpinAllRules.ACTION)
                     }
                 }
                 TextButton(onClick = { onMute(); menu = false }) {

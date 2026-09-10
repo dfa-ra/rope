@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.UnpinAllRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -747,6 +748,17 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         if (!ArchiveRules.canPin(cur)) return
         store.saveChatPrefs(id, cur.copy(pinned = !cur.pinned))
+        refreshConversations()
+    }
+
+    fun unpinAllChats() {
+        val ids = UnpinAllRules.ids(_state.value.conversations)
+        if (ids.isEmpty()) return
+        for (id in ids) {
+            val cur = store.chatPrefs(id)
+            if (!cur.pinned) continue
+            store.saveChatPrefs(id, UnpinAllRules.prefsAfter(cur))
+        }
         refreshConversations()
     }
 

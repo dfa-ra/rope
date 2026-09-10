@@ -171,6 +171,7 @@ fun RopeScaffold(
     onMuteChat: (String) -> Unit,
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
+    onUnpinAll: () -> Unit = {},
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
@@ -301,6 +302,7 @@ fun RopeScaffold(
                             onArchiveChat,
                             onUnarchiveChat,
                             { onGo(Screen.Archive) },
+                            onUnpinAll = onUnpinAll,
                             listMode = NavRules.listMode(screen),
                         )
                         Screen.Calls -> CallsPane(state, onOpenConversation, onInvite)
