@@ -22,8 +22,9 @@ object LpChatRules {
         if (text.isBlank()) return true
         val spans = LinkPreviewRules.spans(text)
         if (spans.size != 1) return false
+        if (spans[0].url != lp.url && !text.contains(lp.host)) return false
         val rest = (text.substring(0, spans[0].start) + text.substring(spans[0].endExclusive)).trim()
-        return rest.isEmpty()
+        return rest.isEmpty() || rest.all { it in ".,;:!?…" }
     }
 
     fun body(msg: ChatMessage): String {
