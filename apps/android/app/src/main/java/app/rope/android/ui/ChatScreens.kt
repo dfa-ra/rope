@@ -90,6 +90,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -129,6 +130,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -161,6 +164,8 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SavedVoiceChip
+import app.rope.android.data.SavedVoiceRules
 import app.rope.android.data.SavedVoiceChip
 import app.rope.android.data.SavedVoiceRules
 import app.rope.android.data.SwipeToReplyRules
@@ -916,6 +921,25 @@ fun ChatPane(
                     IconButton(onClick = onVideoCall) {
                         Icon(Icons.Outlined.Videocam, contentDescription = "Видеозвонок")
                     }
+                }
+            }
+        }
+        if (showSavedVoice && !selecting) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SavedVoiceRules.chips().forEach { chip ->
+                    FilterChip(
+                        selected = voiceChip == chip,
+                        onClick = { onSetSavedVoice(chip) },
+                        label = { Text(SavedVoiceRules.label(chip)) },
+                        modifier = Modifier.semantics {
+                            contentDescription = SavedVoiceRules.label(chip)
+                        },
+                    )
                 }
             }
         }
