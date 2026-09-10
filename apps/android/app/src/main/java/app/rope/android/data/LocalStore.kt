@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveSavedRound(chip: SavedRoundChip) {
+        put("saved_round", SavedRoundRules.kv(chip))
+    }
+
+    fun savedRound(): SavedRoundChip = SavedRoundRules.parse(get("saved_round"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

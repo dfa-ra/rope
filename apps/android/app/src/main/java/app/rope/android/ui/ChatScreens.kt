@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -158,6 +161,8 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SavedRoundChip
+import app.rope.android.data.SavedRoundRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -755,6 +760,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onSetSavedRound: (SavedRoundChip) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -774,8 +780,11 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = remember(state.messages, state.messageQuery) {
-        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val showSavedRound = SavedRoundRules.shows(state.peer?.deviceId, state.group != null)
+    val roundChip = if (showSavedRound) state.savedRound else SavedRoundChip.ALL
+    val visible = remember(state.messages, state.messageQuery, roundChip, showSavedRound) {
+        val scoped = if (showSavedRound) SavedRoundRules.apply(state.messages, roundChip) else state.messages
+        scoped.filter { MessageSearch.matches(it, state.messageQuery) }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
     val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
@@ -909,6 +918,25 @@ fun ChatPane(
                 }
             }
         }
+        if (showSavedRound && !selecting) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SavedRoundRules.chips().forEach { chip ->
+                    FilterChip(
+                        selected = roundChip == chip,
+                        onClick = { onSetSavedRound(chip) },
+                        label = { Text(SavedRoundRules.label(chip)) },
+                        modifier = Modifier.semantics {
+                            contentDescription = SavedRoundRules.label(chip)
+                        },
+                    )
+                }
+            }
+        }
         if (showSearch && !selecting) {
             TextField(
                 value = state.messageQuery,
@@ -948,7 +976,11 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
-                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                val empty = if (showSavedRound) {
+                    SavedRoundRules.emptyCopy(roundChip, state.messageQuery)
+                } else {
+                    ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                }
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
