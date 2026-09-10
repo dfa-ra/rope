@@ -49,6 +49,7 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SavedVideoChip
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -168,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val savedVideo: SavedVideoChip = SavedVideoChip.ALL,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -257,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    savedVideo = store.savedVideo(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -389,6 +392,12 @@ class RopeRepository(private val app: Application) {
 
     fun setMessageQuery(query: String) {
         _state.value = _state.value.copy(messageQuery = query)
+    }
+
+    fun setSavedVideo(chip: SavedVideoChip) {
+        if (_state.value.savedVideo == chip) return
+        store.saveSavedVideo(chip)
+        _state.value = _state.value.copy(savedVideo = chip)
     }
 
     fun setGroupName(name: String) {

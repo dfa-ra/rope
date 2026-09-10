@@ -156,6 +156,7 @@ fun RopeScaffold(
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
     onToggleLinkPreviews: () -> Unit = {},
+    onSetSavedVideo: (app.rope.android.data.SavedVideoChip) -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onReply: (app.rope.android.data.ChatMessage) -> Unit,
     onReplySpan: (app.rope.android.data.QuoteSpan?) -> Unit = {},
@@ -336,6 +337,7 @@ fun RopeScaffold(
                             onVideoNoteFinish = onVideoNoteFinish,
                             onVideoNotePreview = onVideoNotePreview,
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
+                            onSetSavedVideo = onSetSavedVideo,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
