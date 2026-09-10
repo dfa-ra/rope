@@ -687,7 +687,7 @@ dependencies = [
 
 [[package]]
 name = "rope_core"
-version = "0.3.52"
+version = "0.3.53"
 dependencies = [
  "base64",
  "chacha20poly1305",
