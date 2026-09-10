@@ -120,6 +120,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -210,6 +211,7 @@ fun ChatsPane(
     onOpenArchive: () -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
+    val imeHide = rememberImeHideConnection()
     Column(Modifier.fillMaxSize()) {
         val forwarding = state.forwarding
         when {
@@ -293,7 +295,7 @@ fun ChatsPane(
                     onAction = if (empty.actionLabel != null) onNewGroup else null,
                 )
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize().nestedScroll(imeHide)) {
                     if (showArchiveRow) {
                         item(key = "archive-row") {
                             ArchiveHeaderRow(
@@ -756,6 +758,7 @@ fun ChatPane(
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
 ) {
+    val imeHide = rememberImeHideConnection()
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
@@ -957,7 +960,7 @@ fun ChatPane(
             } else {
                 LazyColumn(
                     state = list,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().nestedScroll(imeHide),
                     contentPadding = PaddingValues(
                         horizontal = 10.dp,
                         vertical = 8.dp,
