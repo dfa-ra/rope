@@ -28,6 +28,7 @@ import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.CopyLinkRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
@@ -776,6 +777,11 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun copyLink(msg: ChatMessage) {
+        val url = CopyLinkRules.url(msg) ?: return
+        copyText(url)
     }
 
     fun togglePinMessage(msg: ChatMessage) {
