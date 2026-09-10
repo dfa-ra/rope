@@ -69,6 +69,7 @@ import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
+import app.rope.android.data.VideoPipRules
 import app.rope.android.data.VoicePlayback
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
@@ -155,6 +156,11 @@ data class UiState(
     val voicePositionMs: Long = 0,
     val voiceDurationMs: Long = 0,
     val voiceSpeed: Float = VoicePlayback.SPEED_1X,
+    val playingVideoId: String? = null,
+    val videoProgressId: String? = null,
+    val playingVideoChatId: String? = null,
+    val playingVideoTitle: String? = null,
+    val playingVideoMsg: ChatMessage? = null,
     val call: CallInfo? = null,
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
@@ -806,7 +812,10 @@ class RopeRepository(private val app: Application) {
 
     fun openImage(msg: ChatMessage) {
         if ((msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VIDEO) || msg.deleted) return
-        _state.value = _state.value.copy(viewingImage = msg)
+        _state.value = _state.value.copy(
+            viewingImage = msg,
+            playingVideoId = if (msg.kind == MessageKind.VIDEO) null else _state.value.playingVideoId,
+        )
     }
 
     fun closeImage() {
@@ -1097,7 +1106,12 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun togglePlay(msg: ChatMessage) {
+        if (msg.kind == MessageKind.VIDEO) toggleVideo(msg) else toggleVoice(msg)
+    }
+
     fun toggleVoice(msg: ChatMessage) {
+        if (_state.value.videoProgressId != null) stopVideo()
         val path = msg.localPath
         if (path.isNullOrBlank()) {
             retryMedia(msg)
@@ -1140,6 +1154,89 @@ class RopeRepository(private val app: Application) {
     fun cycleVoiceSpeed() {
         voicePlayer.cycleSpeed()
         publishVoiceProgress()
+    }
+
+    fun toggleVideo(msg: ChatMessage) {
+        if (msg.kind != MessageKind.VIDEO || msg.deleted) return
+        val path = msg.localPath
+        if (path.isNullOrBlank()) {
+            retryMedia(msg)
+            return
+        }
+        if (voicePlayer.activeId != null) {
+            voicePlayer.stop()
+            publishVoiceProgress()
+        }
+        val cur = _state.value
+        if (cur.videoProgressId == msg.id) {
+            _state.value = cur.copy(playingVideoId = if (cur.playingVideoId == msg.id) null else msg.id)
+            rememberVideoPip(msg)
+            return
+        }
+        _state.value = cur.copy(playingVideoId = msg.id, videoProgressId = msg.id)
+        rememberVideoPip(msg)
+    }
+
+    fun stopVideo() {
+        _state.value = _state.value.copy(
+            playingVideoId = null,
+            videoProgressId = null,
+            playingVideoChatId = null,
+            playingVideoTitle = null,
+            playingVideoMsg = null,
+        )
+    }
+
+    fun openVideoPip() {
+        val clip = _state.value.playingVideoMsg ?: return
+        val chatId = _state.value.playingVideoChatId ?: return
+        val conv = _state.value.conversations.find { it.id == chatId }
+        if (conv != null) {
+            openConversation(conv)
+        } else {
+            when {
+                SavedMessagesRules.isSaved(chatId) -> openSaved()
+                ChatIds.isGroup(chatId) -> store.group(ChatIds.rawGroupId(chatId))?.let { openGroup(it) }
+                else -> openChat(
+                    DirectoryDevice(
+                        chatId,
+                        "",
+                        _state.value.playingVideoTitle.orEmpty(),
+                        ByteArray(0),
+                        "",
+                        false,
+                    ),
+                )
+            }
+        }
+        _state.value = _state.value.copy(scrollToMessageId = clip.id)
+    }
+
+    private fun rememberVideoPip(msg: ChatMessage) {
+        if (_state.value.videoProgressId == null) {
+            _state.value = _state.value.copy(
+                playingVideoChatId = null,
+                playingVideoTitle = null,
+                playingVideoMsg = null,
+            )
+            return
+        }
+        val chatId = _state.value.playingVideoChatId ?: openChatId() ?: return
+        val existingTitle = _state.value.playingVideoTitle
+        val title = if (!existingTitle.isNullOrBlank() && _state.value.playingVideoChatId != null) {
+            existingTitle
+        } else {
+            VideoPipRules.title(
+                groupName = _state.value.group?.name,
+                peerName = _state.value.peer?.displayName,
+                saved = SavedMessagesRules.isSaved(chatId),
+            )
+        }
+        _state.value = _state.value.copy(
+            playingVideoChatId = chatId,
+            playingVideoTitle = title,
+            playingVideoMsg = msg,
+        )
     }
 
     private fun publishVoiceProgress() {

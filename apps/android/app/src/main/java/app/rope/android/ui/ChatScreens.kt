@@ -141,6 +141,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
+import app.rope.android.Screen
 import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
@@ -161,6 +162,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.VideoPipRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -751,6 +753,7 @@ fun ChatPane(
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onStopVideo: () -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
@@ -1006,6 +1009,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onStopVideo = onStopVideo,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1373,6 +1377,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onStopVideo: () -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1490,7 +1495,20 @@ private fun MessageBubble(
                             onJump = onJump,
                         )
                         if (m.kind == MessageKind.VIDEO) {
-                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
+                            VideoMessageBubble(
+                                m,
+                                onEnsureMedia,
+                                overlayMeta = true,
+                                playing = VideoPipRules.showInline(
+                                    state.playingVideoId,
+                                    m.id,
+                                    screenIsChat = state.screen == Screen.Chat,
+                                    viewing = state.viewingImage != null,
+                                    liveCall = state.call != null,
+                                ),
+                                onToggle = onPlay,
+                                onCompleted = onStopVideo,
+                            )
                         } else {
                             ImageBubble(m, onEnsureMedia, overlayMeta = true)
                         }

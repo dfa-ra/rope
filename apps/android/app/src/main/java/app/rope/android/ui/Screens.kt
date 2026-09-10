@@ -123,6 +123,8 @@ fun RopeScaffold(
     onVoiceFinish: (Boolean) -> Unit,
     onSeekVoice: (app.rope.android.data.ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onStopVideo: () -> Unit = {},
+    onOpenVideoPip: () -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
@@ -331,6 +333,7 @@ fun RopeScaffold(
                             onAttachUris = onAttachUris,
                             onSeekVoice = onSeekVoice,
                             onCycleVoiceSpeed = onCycleVoiceSpeed,
+                            onStopVideo = onStopVideo,
                             onVideoNoteStart = onVideoNoteStart,
                             onVideoNoteFinish = onVideoNoteFinish,
                             onVideoNotePreview = onVideoNotePreview,
@@ -358,6 +361,34 @@ fun RopeScaffold(
                             onEnsureMedia = onEnsureMedia,
                         )
                     }
+                }
+                val openId = state.group?.let { app.rope.android.data.ChatIds.group(it.groupId) }
+                    ?: state.peer?.deviceId
+                val inThread = app.rope.android.data.VideoPipRules.inPlayingThread(
+                    screenIsChat = state.screen == Screen.Chat,
+                    openChatId = openId,
+                    clipChatId = state.playingVideoChatId,
+                )
+                if (
+                    app.rope.android.data.VideoPipRules.visible(
+                        activeId = state.videoProgressId,
+                        inPlayingThread = inThread,
+                        liveCall = state.call != null,
+                        signedIn = signedIn,
+                        viewing = state.viewingImage != null,
+                    )
+                ) {
+                    app.rope.android.ui.VideoPipCard(
+                        title = state.playingVideoTitle.orEmpty().ifBlank { app.rope.android.data.VideoPipRules.FALLBACK_TITLE },
+                        path = state.playingVideoMsg?.localPath,
+                        playing = state.playingVideoId != null,
+                        onOpen = onOpenVideoPip,
+                        onToggle = { state.playingVideoMsg?.let(onPlay) },
+                        onStop = onStopVideo,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(12.dp),
+                    )
                 }
             }
         }
