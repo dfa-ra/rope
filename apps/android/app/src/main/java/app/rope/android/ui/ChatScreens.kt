@@ -158,6 +158,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SetPhotoRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -3001,10 +3002,12 @@ fun InitialsAvatar(
     tint: Color? = null,
     showPresence: Boolean = true,
     saved: Boolean = false,
+    photoPath: String? = null,
 ) {
     val letter = title.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     val iconSize = if (size < 40.dp) 16.dp else 22.dp
     val dot = if (size < 40.dp) 8.dp else 12.dp
+    val photo = photoPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
     val bg = tint ?: when {
         saved -> MaterialTheme.colorScheme.primary
         group -> MaterialTheme.colorScheme.secondary
@@ -3019,6 +3022,12 @@ fun InitialsAvatar(
             contentAlignment = Alignment.Center,
         ) {
             when {
+                photo != null -> Image(
+                    bitmap = photo.asImageBitmap(),
+                    contentDescription = SetPhotoRules.TITLE,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 saved -> Icon(
                     Icons.Outlined.Bookmark,
                     contentDescription = null,

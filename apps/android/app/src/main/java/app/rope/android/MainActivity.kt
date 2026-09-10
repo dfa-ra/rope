@@ -47,6 +47,10 @@ class MainActivity : AppCompatActivity() {
         if (uris.isNotEmpty()) (application as RopeApp).repo.stageAttachments(uris)
     }
 
+    private val avatarPicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { (application as RopeApp).repo.setAvatar(it) }
+    }
+
     private val restorePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val bytes = uri?.let { contentResolver.openInputStream(it)?.use { s -> s.readBytes() } } ?: return@registerForActivityResult
         (application as RopeApp).repo.restoreFromFile(bytes)
@@ -236,6 +240,11 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onPickPhoto = {
+                        avatarPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,

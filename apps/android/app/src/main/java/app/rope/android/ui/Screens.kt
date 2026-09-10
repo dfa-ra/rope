@@ -156,6 +156,7 @@ fun RopeScaffold(
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
     onToggleLinkPreviews: () -> Unit = {},
+    onPickPhoto: () -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onReply: (app.rope.android.data.ChatMessage) -> Unit,
     onReplySpan: (app.rope.android.data.QuoteSpan?) -> Unit = {},
@@ -349,6 +350,7 @@ fun RopeScaffold(
                             onToggleNotifications,
                             onCopyText,
                             onToggleLinkPreviews,
+                            onPickPhoto,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup, onRenameGroup) { onBack() }

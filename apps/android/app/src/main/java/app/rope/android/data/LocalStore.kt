@@ -394,6 +394,13 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveAvatarPath(path: String) {
+        val clean = SetPhotoRules.parse(path) ?: return
+        put("avatar_path", clean)
+    }
+
+    fun avatarPath(): String? = SetPhotoRules.parse(get("avatar_path"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

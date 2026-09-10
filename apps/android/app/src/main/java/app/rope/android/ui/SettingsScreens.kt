@@ -2,6 +2,7 @@ package app.rope.android.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
+import app.rope.android.data.SetPhotoRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 
@@ -36,6 +39,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onPickPhoto: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -48,31 +52,51 @@ fun SettingsPane(
     ) {
         FadeIn(80) {
             SectionCard {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    InitialsAvatar(
-                        title = me.ifBlank { "?" },
-                        group = false,
-                        online = !state.offline,
-                        size = 52.dp,
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            me.ifBlank { "Rope" },
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            if (profile != null) {
-                                "${SettingsRules.roleLabel(profile.role)} · ${BuildConfig.VERSION_NAME}"
-                            } else {
-                                "Rope ${BuildConfig.VERSION_NAME}"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .clickable(onClick = onPickPhoto)
+                                .semantics { contentDescription = SetPhotoRules.TITLE },
+                        ) {
+                            InitialsAvatar(
+                                title = me.ifBlank { "?" },
+                                group = false,
+                                online = !state.offline,
+                                size = 52.dp,
+                                photoPath = state.avatarPath,
+                            )
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                me.ifBlank { "Rope" },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                if (profile != null) {
+                                    "${SettingsRules.roleLabel(profile.role)} · ${BuildConfig.VERSION_NAME}"
+                                } else {
+                                    "Rope ${BuildConfig.VERSION_NAME}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
+                    TextButton(
+                        onClick = onPickPhoto,
+                        modifier = Modifier.semantics { contentDescription = SetPhotoRules.TITLE },
+                    ) {
+                        Text(SetPhotoRules.TITLE)
+                    }
+                    Text(
+                        SetPhotoRules.HINT,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

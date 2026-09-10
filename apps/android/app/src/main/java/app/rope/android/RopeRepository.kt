@@ -49,6 +49,7 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SetPhotoRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -168,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val avatarPath: String? = null,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -257,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    avatarPath = store.avatarPath(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -597,6 +600,26 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(composerPreview = null)
         } else {
             scheduleUnfurl(_state.value.draftText)
+        }
+    }
+
+    fun setAvatar(uri: Uri) {
+        scope.launch {
+            try {
+                val mime = app.contentResolver.getType(uri) ?: "image/jpeg"
+                if (!SetPhotoRules.acceptsMime(mime)) {
+                    notice(SetPhotoRules.NEED_PHOTO)
+                    return@launch
+                }
+                val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                val (norm, outMime) = ImageCodec.normalizeForSend(bytes, mime)
+                val dest = ImageCodec.persist(File(app.filesDir, "avatar"), "me", outMime, "avatar.jpg", norm)
+                val path = SetPhotoRules.parse(dest.absolutePath) ?: return@launch
+                store.saveAvatarPath(path)
+                _state.value = _state.value.copy(avatarPath = path)
+            } catch (e: Exception) {
+                error(e)
+            }
         }
     }
 
