@@ -8,6 +8,7 @@ import app.rope.android.data.RopeGroup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,6 +75,23 @@ class GroupChatUxTest {
         assertTrue(GroupChatUx.firstInCluster(list, 3))
         assertFalse(GroupChatUx.sameCluster(a1, b1))
         assertTrue(GroupChatUx.sameCluster(a1, a2))
+    }
+
+    @Test
+    fun displayNameRejectsControlBeforeTrim() {
+        assertEquals("Аня", GroupChatUx.displayName("Аня"))
+        assertEquals("Аня", GroupChatUx.displayName("  Аня  "))
+        assertNull(GroupChatUx.displayName("\nАня"))
+        assertNull(GroupChatUx.displayName("Аня\n"))
+        assertNull(GroupChatUx.displayName("Аня\r"))
+        assertNull(GroupChatUx.displayName("Аня\u0000"))
+        assertNull(GroupChatUx.displayName(""))
+        assertNull(GroupChatUx.displayName("   "))
+        assertEquals("Аня печатает…", GroupChatUx.typingLine(listOf("  Аня  ")))
+        assertEquals("", GroupChatUx.typingLine(listOf("\nАня")))
+        assertEquals("Аня печатает…", GroupChatUx.typingLine(listOf("Аня", "Боря\n")))
+        assertTrue(GroupChatUx.mentionSpans("Эй, @Аня", listOf("  Аня  ")).isNotEmpty())
+        assertTrue(GroupChatUx.mentionSpans("Эй, @Аня", listOf("\nАня")).isEmpty())
     }
 
     @Test

@@ -36,7 +36,7 @@ object GroupChatUx {
         isGroup && !outgoing && firstInCluster
 
     fun typingLine(names: List<String>, isGroup: Boolean = true): String {
-        val clean = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val clean = names.mapNotNull { displayName(it) }.distinct()
         if (clean.isEmpty()) return ""
         if (!isGroup) return "печатает…"
         return when (clean.size) {
@@ -77,7 +77,7 @@ object GroupChatUx {
 
     fun mentionSpans(text: String, names: List<String>): List<IntRange> {
         if (text.isEmpty()) return emptyList()
-        val sorted = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val sorted = names.mapNotNull { displayName(it) }.distinct()
             .sortedByDescending { it.length }
         if (sorted.isEmpty()) return emptyList()
         val found = mutableListOf<IntRange>()
@@ -110,5 +110,18 @@ object GroupChatUx {
         replyName.isNotBlank() -> replyName
         outgoing -> YOU
         else -> "Ответ"
+    }
+
+    /**
+     * Fail closed on CR/LF/NUL before trim so a newline prefix cannot become
+     * a live typing name or @mention needle. Spaces still trim. Empty after
+     * trim still drops. Not composer reply titles or forward attribution.
+     */
+    fun displayName(raw: String?): String? {
+        if (raw.isNullOrEmpty()) return null
+        if (raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0) {
+            return null
+        }
+        return raw.trim().takeIf { it.isNotEmpty() }
     }
 }
