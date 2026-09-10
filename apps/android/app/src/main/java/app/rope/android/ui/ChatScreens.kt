@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -152,6 +153,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.EditHistoryRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -793,6 +795,7 @@ fun ChatPane(
     var showAttach by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
+    var priorSheet by remember { mutableStateOf<String?>(null) }
     val selecting = selectedIds.isNotEmpty()
     val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
     val singleSelected = selectedMsgs.singleOrNull()
@@ -804,6 +807,7 @@ fun ChatPane(
         onMessageQuery("")
     }
     BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
+    BackHandler(enabled = priorSheet != null && menuMessage == null) { priorSheet = null }
     LaunchedEffect(threadItems.size, state.messageQuery) {
         if (threadItems.isNotEmpty() && state.scrollToMessageId == null) {
             list.animateScrollToItem(threadItems.lastIndex)
@@ -1006,6 +1010,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onShowPrior = { priorSheet = it },
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1038,6 +1043,7 @@ fun ChatPane(
                                         reactionExpanded = false
                                     },
                                     onSwipeReply = { target -> onReply(target) },
+                                    onShowPrior = { priorSheet = it },
                                 )
                             }
                         }
@@ -1147,6 +1153,12 @@ fun ChatPane(
             onCancel = { onVideoNoteFinish(false) },
         )
     }
+    }
+    priorSheet?.let { prior ->
+        PriorTextSheet(
+            text = prior,
+            onDismiss = { priorSheet = null },
+        )
     }
     if (showAttach) {
         AttachSheet(
@@ -1373,6 +1385,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onShowPrior: (String) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1490,9 +1503,9 @@ private fun MessageBubble(
                             onJump = onJump,
                         )
                         if (m.kind == MessageKind.VIDEO) {
-                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
+                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true, onShowPrior = onShowPrior)
                         } else {
-                            ImageBubble(m, onEnsureMedia, overlayMeta = true)
+                            ImageBubble(m, onEnsureMedia, overlayMeta = true, onShowPrior = onShowPrior)
                         }
                         MediaCaptionLine(MediaSendRules.captionOf(m))
                     }
@@ -1578,14 +1591,12 @@ private fun MessageBubble(
                             }
                         }
                     }
-                    val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
-                    if (meta.isNotBlank()) {
-                        Text(
-                            meta,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    MessageMetaLine(
+                        m = m,
+                        edited = m.edited && !m.deleted,
+                        color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        onShowPrior = onShowPrior,
+                    )
                 }
                 Box(
                     Modifier
@@ -2008,6 +2019,7 @@ private fun AlbumBubble(
     onEnterSelect: () -> Unit,
     onLongPressMember: (ChatMessage) -> Unit,
     onSwipeReply: (ChatMessage) -> Unit = {},
+    onShowPrior: (String) -> Unit = {},
 ) {
     val first = members.firstOrNull() ?: return
     val last = members.last()
@@ -2018,7 +2030,6 @@ private fun AlbumBubble(
     val showName = GroupChatUx.showSenderName(inGroup, mine, clusterFirst) && !first.deleted
     val selectAlpha by animateFloatAsState(if (selected) 0.28f else 0f, label = "albumSelect")
     val tiles = PhotoLayout.mosaic(members.size)
-    val meta = MessageTime.meta(last.status, last.outgoing, last.timestampMs, edited = last.edited)
     val replyTarget = SwipeToReplyRules.replyTarget(members)
     SwipeReplyRow(
         enabled = SwipeToReplyRules.canSwipeAlbum(members, selecting),
@@ -2054,8 +2065,7 @@ private fun AlbumBubble(
                 MosaicTile(
                     m = m,
                     tile = tile,
-                    overlayMeta = i == members.lastIndex && meta.isNotBlank(),
-                    meta = meta,
+                    overlayMeta = i == members.lastIndex,
                     onEnsure = onEnsureMedia,
                     onClick = {
                         when {
@@ -2069,6 +2079,7 @@ private fun AlbumBubble(
                             onLongPressMember(m)
                         }
                     },
+                    onShowPrior = onShowPrior,
                 )
             }
             if (selectAlpha > 0f || highlighted) {
@@ -2093,10 +2104,10 @@ private fun MosaicTile(
     m: ChatMessage,
     tile: PhotoLayout.Tile,
     overlayMeta: Boolean,
-    meta: String,
     onEnsure: (ChatMessage) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onShowPrior: (String) -> Unit = {},
 ) {
     LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
@@ -2141,16 +2152,14 @@ private fun MosaicTile(
             )
         }
         if (overlayMeta) {
-            Text(
-                meta,
-                style = MaterialTheme.typography.labelSmall,
+            MessageMetaLine(
+                m = m,
                 color = Color.White,
+                overlay = true,
+                onShowPrior = onShowPrior,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(6.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .padding(6.dp),
             )
         }
     }
@@ -2161,6 +2170,7 @@ private fun ImageBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
+    onShowPrior: (String) -> Unit = {},
 ) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
@@ -2168,7 +2178,6 @@ private fun ImageBubble(
     val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
     if (bmp != null) {
         val box = PhotoLayout.box(bmp.width, bmp.height)
-        val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
         Box(
             modifier = Modifier
                 .width(box.widthDp.dp)
@@ -2181,17 +2190,15 @@ private fun ImageBubble(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
-            if (overlayMeta && meta.isNotBlank()) {
-                Text(
-                    meta,
-                    style = MaterialTheme.typography.labelSmall,
+            if (overlayMeta) {
+                MessageMetaLine(
+                    m = m,
                     color = Color.White,
+                    overlay = true,
+                    onShowPrior = onShowPrior,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .padding(6.dp),
                 )
             }
         }
@@ -2758,6 +2765,103 @@ private fun GlassActionButton(
             Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
             Text(label, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
+private fun MessageMetaLine(
+    m: ChatMessage,
+    edited: Boolean = m.edited && !m.deleted,
+    color: Color,
+    overlay: Boolean = false,
+    onShowPrior: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    val time = MessageTime.label(m.timestampMs)
+    val mark = ComposerRules.statusLabel(m.status, m.outgoing)
+    val showEdit = EditHistoryRules.showLabel(edited)
+    if (time.isBlank() && !showEdit && mark.isBlank()) return
+    val tap = EditHistoryRules.clickable(edited, m.priorText)
+    Row(
+        modifier = modifier.then(
+            if (overlay) {
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            } else {
+                Modifier
+            },
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        var first = true
+        if (time.isNotBlank()) {
+            Text(time, style = MaterialTheme.typography.labelSmall, color = color)
+            first = false
+        }
+        if (showEdit) {
+            if (!first) {
+                Text(" · ", style = MaterialTheme.typography.labelSmall, color = color)
+            }
+            first = false
+            Text(
+                EditHistoryRules.LABEL,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                textDecoration = if (tap) TextDecoration.Underline else TextDecoration.None,
+                modifier = if (tap) {
+                    Modifier.clickable {
+                        EditHistoryRules.persist(true, m.priorText)?.let(onShowPrior)
+                    }
+                } else {
+                    Modifier
+                },
+            )
+        }
+        if (mark.isNotBlank()) {
+            if (!first) {
+                Text(" · ", style = MaterialTheme.typography.labelSmall, color = color)
+            }
+            Text(mark, style = MaterialTheme.typography.labelSmall, color = color)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PriorTextSheet(
+    text: String,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text(EditHistoryRules.TITLE, style = MaterialTheme.typography.titleMedium)
+            Text(
+                EditHistoryRules.dialogBody(text),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(EditHistoryRules.CLOSE)
+            }
         }
     }
 }

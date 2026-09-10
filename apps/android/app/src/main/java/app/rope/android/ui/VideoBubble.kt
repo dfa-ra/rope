@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.RopeShapes
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.EditHistoryRules
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
@@ -51,6 +52,7 @@ fun VideoMessageBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
+    onShowPrior: (String) -> Unit = {},
 ) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
@@ -148,6 +150,7 @@ fun VideoMessageBubble(
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
         if (overlayMeta && meta.isNotBlank()) {
+            val tap = EditHistoryRules.clickable(m.edited, m.priorText)
             Text(
                 meta,
                 style = MaterialTheme.typography.labelSmall,
@@ -157,7 +160,16 @@ fun VideoMessageBubble(
                     .padding(6.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .then(
+                        if (tap) {
+                            Modifier.clickable {
+                                EditHistoryRules.persist(true, m.priorText)?.let(onShowPrior)
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         }
         if (path.isNullOrBlank()) {

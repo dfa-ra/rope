@@ -215,6 +215,7 @@ data class MessageMeta(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val linkPreview: PackedLinkPreview? = null,
+    val priorText: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("reply_to", replyToId ?: JSONObject.NULL)
@@ -229,6 +230,7 @@ data class MessageMeta(
         .apply {
             LinkPreviewRules.put(this, linkPreview)
             JsonIds.optional(linkPreview?.localPath)?.let { put("lp_path", it) }
+            JsonIds.optional(priorText)?.let { put("prior_text", it) }
         }
         .toString()
 
@@ -249,6 +251,7 @@ data class MessageMeta(
                     quoteStart = o.optInt("quote_start", -1),
                     quoteEnd = o.optInt("quote_end", -1),
                     linkPreview = packed?.copy(localPath = JsonIds.optional(o.optString("lp_path"))),
+                    priorText = JsonIds.optional(o.optString("prior_text")),
                 )
             } catch (_: Exception) {
                 MessageMeta()
@@ -266,6 +269,7 @@ data class MessageMeta(
             quoteStart = msg.quoteStart,
             quoteEnd = msg.quoteEnd,
             linkPreview = msg.linkPreview,
+            priorText = EditHistoryRules.persist(msg.edited, msg.priorText),
         )
     }
 }
@@ -702,7 +706,7 @@ object MessageTime {
     ): String {
         val time = label(timestampMs, now)
         val mark = ComposerRules.statusLabel(status, outgoing)
-        val edit = if (edited) "изм." else ""
+        val edit = if (edited) EditHistoryRules.LABEL else ""
         return listOf(time, edit, mark).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
