@@ -16,7 +16,8 @@ object SavedMessagesRules {
 
     fun isSaved(c: Conversation): Boolean = c.id == ID
 
-    fun visible(mode: ChatListMode): Boolean = mode == ChatListMode.ALL
+    fun visible(mode: ChatListMode): Boolean =
+        mode == ChatListMode.ALL || mode == ChatListMode.DM
 
     fun canCall(id: String?): Boolean = !isSaved(id)
 

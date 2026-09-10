@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -135,6 +136,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -208,10 +211,12 @@ fun ChatsPane(
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
+    onSetDmFilter: (Boolean) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
         val forwarding = state.forwarding
+        val mode = ChatListRules.appliedDmMode(listMode, state.chatsDmOnly)
         when {
             forwarding != null -> {
                 Surface(
@@ -263,23 +268,44 @@ fun ChatsPane(
         ChatListSearchField(
             value = state.chatQuery,
             onValueChange = onQuery,
-            placeholder = when (listMode) {
+            placeholder = when (mode) {
                 ChatListMode.GROUPS -> "Поиск групп"
                 ChatListMode.CALLS -> "Поиск звонков"
                 ChatListMode.ARCHIVE -> ArchiveRules.SEARCH_PLACEHOLDER
-                ChatListMode.ALL -> "Поиск"
+                ChatListMode.ALL, ChatListMode.DM -> "Поиск"
             },
         )
+        if (ChatListRules.showsFilterChips(listMode)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !state.chatsDmOnly,
+                    onClick = { onSetDmFilter(false) },
+                    label = { Text(ChatListRules.CHIP_ALL) },
+                    modifier = Modifier.semantics { contentDescription = ChatListRules.CHIP_ALL },
+                )
+                FilterChip(
+                    selected = state.chatsDmOnly,
+                    onClick = { onSetDmFilter(true) },
+                    label = { Text(ChatListRules.CHIP_DM) },
+                    modifier = Modifier.semantics { contentDescription = ChatListRules.CHIP_DM },
+                )
+            }
+        }
         val isForwarding = state.forwarding != null
         val archived = ArchiveRules.archivedOf(state.conversations)
-        val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
-        val rows = ChatListRules.rows(source, state.chatQuery, listMode)
+        val source = ArchiveRules.sourceForList(state.conversations, mode, isForwarding)
+        val rows = ChatListRules.rows(source, state.chatQuery, mode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
-        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
-        val inArchive = listMode == ChatListMode.ARCHIVE
+        val showArchiveRow = ArchiveRules.rowVisible(archived.size, mode, isForwarding)
+        val inArchive = mode == ChatListMode.ARCHIVE
         val empty = ChatListEmptyRules.copy(
-            listMode,
+            mode,
             state.chatQuery,
             isForwarding,
             state.profile?.role,

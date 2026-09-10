@@ -38,6 +38,7 @@ class SavedMessagesRulesTest {
     @Test
     fun alwaysOnChatsTabNeverGroupsOrCallsAndDefaultsPinned() {
         assertTrue(SavedMessagesRules.visible(ChatListMode.ALL))
+        assertTrue(SavedMessagesRules.visible(ChatListMode.DM))
         assertFalse(SavedMessagesRules.visible(ChatListMode.GROUPS))
         assertFalse(SavedMessagesRules.visible(ChatListMode.CALLS))
         assertTrue(SavedMessagesRules.defaultPrefs(null).pinned)
@@ -52,6 +53,7 @@ class SavedMessagesRulesTest {
         assertEquals(SavedMessagesRules.ID, conv.peer?.deviceId)
         assertTrue(conv.peer?.publicIdentity?.isEmpty() == true)
         assertTrue(ChatListRules.matches(conv, "", ChatListMode.ALL))
+        assertTrue(ChatListRules.matches(conv, "", ChatListMode.DM))
         assertFalse(ChatListRules.matches(conv, "", ChatListMode.GROUPS))
         assertEquals(ChatListHit.TITLE_PREFIX, ChatListRules.hit(conv, "избр"))
         assertFalse(SavedMessagesRules.canCall(conv.id))
