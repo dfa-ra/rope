@@ -40,6 +40,7 @@ class RopeNotifier(private val context: Context) {
         val launch = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (id != null) {
+                action = NotifyChatRules.ACTION
                 putExtra(NotifyChatRules.EXTRA_CHAT_ID, id)
             }
         }

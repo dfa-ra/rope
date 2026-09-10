@@ -597,7 +597,7 @@ class RopeRepository(private val app: Application) {
                     onArchive = s == Screen.Archive,
                 )
             ) {
-                go(Screen.Chats)
+                go(Screen.Chats, tab = true)
             }
             openChatById(id)
         }
@@ -2121,6 +2121,7 @@ class RopeRepository(private val app: Application) {
         connectSocket(withIce)
         RopeConnectionService.start(app)
         checkAppUpdate(openStatus = false)
+        tryConsumeNotifyChat()
     }
 
     private fun refreshIceServers(profile: ServerProfile): ServerProfile {

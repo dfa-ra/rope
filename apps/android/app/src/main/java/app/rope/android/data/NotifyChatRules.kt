@@ -7,6 +7,7 @@ package app.rope.android.data
  */
 object NotifyChatRules {
     const val EXTRA_CHAT_ID = "app.rope.android.extra.CHAT_ID"
+    const val ACTION = "app.rope.android.NOTIFY_CHAT"
     const val URI_SCHEME = "rope-notify"
     const val URI_HOST = "chat"
     const val MAX_ID = 128

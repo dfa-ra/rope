@@ -18,6 +18,7 @@ class NotifyChatRulesTest {
         assertEquals("0.3.51", BuildConfig.VERSION_NAME.substringBefore("-"))
         assertEquals(75, BuildConfig.VERSION_CODE)
         assertEquals("app.rope.android.extra.CHAT_ID", NotifyChatRules.EXTRA_CHAT_ID)
+        assertEquals("app.rope.android.NOTIFY_CHAT", NotifyChatRules.ACTION)
     }
 
     @Test
