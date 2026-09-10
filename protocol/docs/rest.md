@@ -236,6 +236,10 @@ Organizer or server owner (and already a member). 1–40 Unicode runes. CR/LF/NU
 
 Soft-removes the member and bumps epoch. Removed devices no longer see the group.
 
+### `DELETE /v1/groups/{id}`
+
+Authenticated member. Organizer (`created_by`) or server owner deletes the group for everyone. Caller must still be a live member. CR/LF/NUL in `{id}` rejected before trim; `{id}` must be a UUID. Distinct from leaving (`POST .../remove` of self). `403` if not a member or not organizer/owner. `200` `{ "ok": true, "group_id": "uuid" }`.
+
 ### `POST /v1/admin/revoke-member` (owner)
 
 ```json

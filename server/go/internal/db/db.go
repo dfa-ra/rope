@@ -718,6 +718,51 @@ func (s *Store) IsGroupMember(groupID, deviceID string) (bool, error) {
 	return n > 0, err
 }
 
+func (s *Store) DeleteGroup(id string) error {
+	ctx := context.Background()
+	conn, err := s.SQL.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+	var gid string
+	err = conn.QueryRowContext(ctx, `SELECT group_id FROM chat_groups WHERE group_id = ?`, id).Scan(&gid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, `DELETE FROM group_members WHERE group_id = ?`, id); err != nil {
+		return err
+	}
+	res, err := conn.ExecContext(ctx, `DELETE FROM chat_groups WHERE group_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
 func (s *Store) GroupCount() (int, error) {
 	var n int
 	err := s.SQL.QueryRow(`SELECT COUNT(*) FROM chat_groups`).Scan(&n)

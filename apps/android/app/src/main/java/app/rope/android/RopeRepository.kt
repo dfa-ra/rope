@@ -33,6 +33,7 @@ import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupDeleteRules
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
@@ -1281,6 +1282,34 @@ class RopeRepository(private val app: Application) {
                     replySpan = null,
                     editTarget = null,
                     notice = "Вы вышли из «${g.name}»",
+                )
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun deleteOpenGroup() {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!GroupDeleteRules.canDelete(me in g.members, me, organizer, _state.value.profile?.role)) return
+        val gid = GroupDeleteRules.parseId(g.groupId) ?: run {
+            notice("Группа: неверный id")
+            return
+        }
+        scope.launch {
+            try {
+                api?.deleteGroup(gid)
+                store.deleteGroup(gid)
+                refreshDirectory()
+                _state.value = applyNav(Screen.Groups, NavMode.SwitchTab).copy(
+                    group = null,
+                    messages = emptyList(),
+                    replyTo = null,
+                    replySpan = null,
+                    editTarget = null,
+                    notice = "Группа «${g.name}» удалена",
                 )
             } catch (e: Exception) {
                 error(e)

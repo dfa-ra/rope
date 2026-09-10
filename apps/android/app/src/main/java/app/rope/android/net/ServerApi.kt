@@ -150,6 +150,10 @@ class ServerApi(
         return parseGroup(authed("POST", "/v1/groups/$groupId/remove", body))
     }
 
+    fun deleteGroup(groupId: String) {
+        authed("DELETE", "/v1/groups/$groupId", ByteArray(0))
+    }
+
     fun bootstrap(host: String, port: Int, useTls: Boolean, fingerprint: String, token: String, displayName: String): JSONObject {
         val body = JSONObject()
             .put("token", token)
