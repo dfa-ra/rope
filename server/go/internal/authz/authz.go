@@ -44,10 +44,15 @@ func ParseHeader(header string) (Parts, error) {
 }
 
 // ParseWsParts reads <device_id>.<unix>.<base64url-sig> (no Rope scheme).
+// Interior whitespace/CRLF is rejected so a query or header field cannot
+// smuggle a second token. Not Phase B — query sig= still authenticates.
 func ParseWsParts(raw string) (Parts, error) {
 	rest := strings.TrimSpace(raw)
 	parts := strings.Split(rest, ".")
 	if len(parts) != 3 {
+		return Parts{}, fmt.Errorf("bad auth format")
+	}
+	if !wirePart(parts[0]) || !wirePart(parts[1]) || !wirePart(parts[2]) {
 		return Parts{}, fmt.Errorf("bad auth format")
 	}
 	ts, err := strconv.ParseInt(parts[1], 10, 64)
@@ -59,10 +64,20 @@ func ParseWsParts(raw string) (Parts, error) {
 		return Parts{}, err
 	}
 	id := strings.ToLower(parts[0])
-	if id == "" {
-		return Parts{}, fmt.Errorf("missing device")
-	}
 	return Parts{DeviceID: id, Timestamp: ts, Signature: sig}, nil
+}
+
+func wirePart(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c <= ' ' || c == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // WsCreds prefers X-Rope-Ws-Auth when set; otherwise query device_id/ts/sig.

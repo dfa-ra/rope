@@ -54,3 +54,23 @@ func TestWsCredsPrefersHeader(t *testing.T) {
 		t.Fatal("garbage header must not fall back to query")
 	}
 }
+
+func TestParseWsPartsRejectsCRLF(t *testing.T) {
+	sig := base64.RawURLEncoding.EncodeToString([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	if _, err := ParseWsParts("abc\nhttp://evil.1700000000." + sig); err == nil {
+		t.Fatal("newline in device id")
+	}
+	if _, err := ParseWsParts("abc.1700000000.\r" + sig); err == nil {
+		t.Fatal("CR in signature")
+	}
+	if _, err := ParseWsParts("abc def.1700000000." + sig); err == nil {
+		t.Fatal("space in device id")
+	}
+	if _, err := WsCreds("", "abc\r\ndef", "99", sig); err == nil {
+		t.Fatal("CRLF query device must fail")
+	}
+	ok := "deadbeef.1700000000." + sig
+	if _, err := ParseWsParts(ok); err != nil {
+		t.Fatal(err)
+	}
+}
