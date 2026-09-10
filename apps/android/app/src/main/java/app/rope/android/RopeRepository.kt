@@ -38,6 +38,7 @@ import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.MeNameRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
@@ -1182,6 +1183,26 @@ class RopeRepository(private val app: Application) {
         mediaAttempts.add(msg.id)
         scope.launch {
             downloadMedia(msg.id, MediaPayload.parse(msg.extra))
+        }
+    }
+
+    fun renameMe(raw: String) {
+        val name = MeNameRules.parse(raw) ?: run {
+            notice("Имя: 2–24 буквы, цифры, _ . -")
+            return
+        }
+        val profile = store.profile() ?: return
+        if (name == profile.displayName) return
+        scope.launch {
+            try {
+                val updated = api?.renameMe(name) ?: return@launch
+                val next = profile.copy(displayName = updated)
+                store.saveProfile(next)
+                _state.value = _state.value.copy(profile = next)
+                refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
         }
     }
 

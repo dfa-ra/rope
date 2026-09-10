@@ -118,6 +118,18 @@ Response:
 }
 ```
 
+### `PATCH /v1/me`
+
+Authenticated member. Changes this member's `display_name`. Same charset as bootstrap (2–24 letters/digits/`_` `.` `-`). CR/LF/NUL rejected before trim. Unique among live (non-revoked) members; `409` if taken. Same name is idempotent `200`.
+
+```json
+{ "display_name": "deck" }
+```
+
+```json
+{ "member_id": "uuid", "display_name": "deck", "role": "owner" }
+```
+
 ### `POST /v1/invites` (owner)
 
 ```json

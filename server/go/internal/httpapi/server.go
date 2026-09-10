@@ -75,6 +75,7 @@ func (s *Server) Router() http.Handler {
 	r.Get("/v1/info", s.info)
 	r.Post("/v1/bootstrap", s.bootstrap)
 	r.Get("/v1/directory", s.withAuth(s.directory))
+	r.Patch("/v1/me", s.withAuth(s.renameMe))
 	r.Post("/v1/invites", s.withAuth(s.createInvite))
 	r.Get("/v1/admin/status", s.withAuth(s.adminStatus))
 	r.Post("/v1/admin/revoke-member", s.withAuth(s.revokeMember))

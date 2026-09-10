@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	ErrNotFound  = errors.New("not found")
-	ErrLastOwner = errors.New("last owner")
+	ErrNotFound   = errors.New("not found")
+	ErrLastOwner  = errors.New("last owner")
+	ErrLoginTaken = errors.New("login taken")
 )
 
 const liveOwnerDevicesSQL = `
@@ -160,6 +161,66 @@ func (s *Store) LoginTaken(name string) (bool, error) {
 		name,
 	).Scan(&n)
 	return n > 0, err
+}
+
+func (s *Store) UpdateMemberDisplayName(memberID, name string) error {
+	ctx := context.Background()
+	conn, err := s.SQL.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+	var revoked sql.NullString
+	err = conn.QueryRowContext(ctx,
+		`SELECT revoked_at FROM members WHERE member_id = ?`, memberID,
+	).Scan(&revoked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if revoked.Valid {
+		return ErrNotFound
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM members WHERE revoked_at IS NULL AND lower(display_name) = lower(?) AND member_id != ?`,
+		name, memberID,
+	).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return ErrLoginTaken
+	}
+	res, err := conn.ExecContext(ctx,
+		`UPDATE members SET display_name = ? WHERE member_id = ? AND revoked_at IS NULL`,
+		name, memberID,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 func (s *Store) InsertDevice(d Device) error {

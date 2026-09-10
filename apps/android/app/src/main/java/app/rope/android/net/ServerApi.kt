@@ -64,6 +64,11 @@ class ServerApi(
         return out
     }
 
+    fun renameMe(name: String): String {
+        val body = JSONObject().put("display_name", name).toString().toByteArray()
+        return authed("PATCH", "/v1/me", body).getString("display_name")
+    }
+
     fun createInvite(ttlSeconds: Int = 3600): Pair<String, String> {
         val body = JSONObject().put("ttl_seconds", ttlSeconds).toString().toByteArray()
         val obj = authed("POST", "/v1/invites", body)

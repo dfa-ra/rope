@@ -11,19 +11,28 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
+import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.MeNameRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,9 +45,11 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onRenameMe: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
+    var renameDraft by remember(me) { mutableStateOf(me) }
     Column(
         Modifier
             .fillMaxSize()
@@ -73,6 +84,23 @@ fun SettingsPane(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+                if (profile != null) {
+                    OutlinedTextField(
+                        renameDraft,
+                        { renameDraft = it },
+                        label = { Text("Имя") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(RopeShapes.field),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    )
+                    TextButton(
+                        onClick = { onRenameMe(renameDraft) },
+                        enabled = MeNameRules.parse(renameDraft) != null &&
+                            MeNameRules.parse(renameDraft) != me,
+                    ) { Text("Сохранить имя") }
                 }
             }
         }
