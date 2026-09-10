@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -115,6 +116,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -157,6 +160,8 @@ import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
+import app.rope.android.data.SavedKind
+import app.rope.android.data.SavedKindRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
@@ -744,6 +749,7 @@ fun ChatPane(
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
+    onSetSavedKind: (SavedKind) -> Unit = {},
     onConsumedScroll: () -> Unit = {},
     onAttachGallery: () -> Unit = onAttach,
     onAttachFile: () -> Unit = onAttach,
@@ -774,8 +780,11 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = remember(state.messages, state.messageQuery) {
-        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val showSavedKinds = SavedKindRules.shows(state.peer?.deviceId, state.group != null)
+    val kind = if (showSavedKinds) state.savedKind else SavedKind.ALL
+    val visible = remember(state.messages, state.messageQuery, kind, showSavedKinds) {
+        val scoped = if (showSavedKinds) SavedKindRules.apply(state.messages, kind) else state.messages
+        scoped.filter { MessageSearch.matches(it, state.messageQuery) }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
     val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
@@ -909,6 +918,25 @@ fun ChatPane(
                 }
             }
         }
+        if (showSavedKinds && !selecting) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SavedKindRules.chips().forEach { chip ->
+                    FilterChip(
+                        selected = kind == chip,
+                        onClick = { onSetSavedKind(chip) },
+                        label = { Text(SavedKindRules.label(chip)) },
+                        modifier = Modifier.semantics {
+                            contentDescription = SavedKindRules.label(chip)
+                        },
+                    )
+                }
+            }
+        }
         if (showSearch && !selecting) {
             TextField(
                 value = state.messageQuery,
@@ -948,7 +976,11 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
-                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                val empty = if (showSavedKinds) {
+                    SavedKindRules.emptyCopy(kind, state.messageQuery)
+                } else {
+                    ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                }
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,

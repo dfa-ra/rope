@@ -47,6 +47,8 @@ import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
+import app.rope.android.data.SavedKind
+import app.rope.android.data.SavedKindRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -167,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val savedKind: SavedKind = SavedKind.ALL,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    savedKind = store.savedKind(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -384,6 +388,12 @@ class RopeRepository(private val app: Application) {
 
     fun setChatQuery(query: String) {
         _state.value = _state.value.copy(chatQuery = query)
+    }
+
+    fun setSavedKind(kind: SavedKind) {
+        if (_state.value.savedKind == kind) return
+        store.saveSavedKind(kind)
+        _state.value = _state.value.copy(savedKind = kind)
     }
 
     fun setMessageQuery(query: String) {
