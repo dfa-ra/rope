@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SettingsRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -547,6 +548,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openSaved() {
+        if (!SettingsRules.shouldOpenSaved(_state.value.screen == Screen.Chat, openChatId())) return
         persistOpenDraft()
         enterChat(SavedMessagesRules.ID, SavedMessagesRules.stubPeer(), null)
     }

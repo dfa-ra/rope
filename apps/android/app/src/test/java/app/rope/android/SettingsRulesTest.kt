@@ -75,5 +75,9 @@ class SettingsRulesTest {
         assertFalse(SettingsRules.savedMessagesHint().contains("FCM"))
         assertFalse(SettingsRules.savedMessagesHint().contains("облак", ignoreCase = true))
         assertTrue(SavedMessagesRules.skipNetwork(SavedMessagesRules.ID))
+        assertTrue(SettingsRules.shouldOpenSaved(isChat = false, SavedMessagesRules.ID))
+        assertTrue(SettingsRules.shouldOpenSaved(isChat = true, "bob"))
+        assertFalse(SettingsRules.shouldOpenSaved(isChat = true, SavedMessagesRules.ID))
+        assertEquals(6, app.rope.android.data.LocalStore.VERSION)
     }
 }

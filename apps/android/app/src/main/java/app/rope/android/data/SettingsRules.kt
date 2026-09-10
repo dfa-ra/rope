@@ -48,4 +48,8 @@ object SettingsRules {
     fun savedMessagesTitle(): String = SavedMessagesRules.TITLE
 
     fun savedMessagesHint(): String = SavedMessagesRules.IDLE_SUBTITLE
+
+    /** Skip if the Saved thread is already the open chat. Settings is never Chat. */
+    fun shouldOpenSaved(isChat: Boolean, openChatId: String?): Boolean =
+        !(isChat && SavedMessagesRules.isSaved(openChatId))
 }
