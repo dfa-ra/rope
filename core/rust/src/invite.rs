@@ -16,6 +16,13 @@ pub fn build_invite_url(link: InviteLink) -> Result<String, RopeError> {
     if link.host.is_empty() || link.token.is_empty() || link.fingerprint.is_empty() {
         return Err(RopeError::Invite("missing fields".into()));
     }
+    reject_control(&link.host)?;
+    reject_control(&link.server_id)?;
+    reject_control(&link.fingerprint)?;
+    reject_control(&link.token)?;
+    if let Some(name) = &link.display_name {
+        reject_control(name)?;
+    }
     let mut url = format!(
         "rope://join?v={}&host={}&port={}&sid={}&fp={}&tok={}",
         link.version,
@@ -149,7 +156,16 @@ fn decode_query(s: &str) -> Result<String, RopeError> {
             }
         }
     }
-    String::from_utf8(bytes).map_err(|_| RopeError::Invite("invite not utf-8".into()))
+    let out = String::from_utf8(bytes).map_err(|_| RopeError::Invite("invite not utf-8".into()))?;
+    reject_control(&out)?;
+    Ok(out)
+}
+
+fn reject_control(s: &str) -> Result<(), RopeError> {
+    if s.bytes().any(|b| b == b'\n' || b == b'\r' || b == 0) {
+        return Err(RopeError::Invite("control in field".into()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -181,5 +197,48 @@ mod tests {
         let link = parse_invite_url("rope://join?v=1&host=h&port=8443&sid=s&fp=aa&tok=t").unwrap();
         let err = verify_invite_against_server(&link, "s", "bb").unwrap_err();
         assert!(matches!(err, RopeError::FingerprintMismatch));
+    }
+
+    #[test]
+    fn decode_rejects_percent_encoded_lf_in_host() {
+        let err = parse_invite_url(
+            "rope://join?v=1&host=h%0a.evil&port=8443&sid=s&fp=aa&tok=t",
+        )
+        .unwrap_err();
+        assert!(matches!(err, RopeError::Invite(_)));
+    }
+
+    #[test]
+    fn decode_rejects_cr_nul_and_name_lf() {
+        assert!(parse_invite_url(
+            "rope://join?v=1&host=h&port=8443&sid=s%0d&fp=aa&tok=t"
+        )
+        .is_err());
+        assert!(parse_invite_url(
+            "rope://join?v=1&host=h&port=8443&sid=s&fp=aa&tok=t%00x"
+        )
+        .is_err());
+        assert!(parse_invite_url(
+            "rope://join?v=1&host=h&port=8443&sid=s&fp=aa&tok=t&name=Ada%0a"
+        )
+        .is_err());
+        assert!(parse_invite_url(
+            "rope://join?v=1&host=h&port=8443&sid=s&fp=aa%0A&tok=t"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn build_rejects_lf_in_host() {
+        let link = InviteLink {
+            version: 1,
+            host: "h\n.evil".into(),
+            port: 8443,
+            server_id: "s".into(),
+            fingerprint: "aa".into(),
+            token: "t".into(),
+            display_name: None,
+        };
+        assert!(build_invite_url(link).is_err());
     }
 }
