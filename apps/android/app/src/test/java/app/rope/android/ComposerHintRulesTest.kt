@@ -59,6 +59,17 @@ class ComposerHintRulesTest {
     }
 
     @Test
+    fun crlfNameFallsBackToOtvetBeforeTrim() {
+        val lf = ComposerHintRules.reply("Аня\nAdmin", "привет")
+        assertEquals(ComposerHintRules.REPLY_FALLBACK_TITLE, lf.title)
+        assertFalse(lf.title.contains('\n'))
+        assertEquals("Ответ", ComposerHintRules.reply("Аня\r", "привет").title)
+        assertEquals("Ответ", ComposerHintRules.reply("Аня\u0000x", "привет").title)
+        assertEquals("Ответ", ComposerHintRules.reply("Аня\n", "привет").title)
+        assertEquals("Аня", ComposerHintRules.reply("  Аня  ", "привет").title)
+    }
+
+    @Test
     fun replyChromeShowsSpanNotOnlyFullBody() {
         val copy = ComposerHintRules.reply("Аня", "длинное исходное сообщение", "фрагмент")
         assertEquals("фрагмент", copy.body)

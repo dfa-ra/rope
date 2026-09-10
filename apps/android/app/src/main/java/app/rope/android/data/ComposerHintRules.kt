@@ -24,7 +24,7 @@ object ComposerHintRules {
 
     fun reply(name: String, preview: String, spanText: String = ""): ComposerHintCopy = ComposerHintCopy(
         kind = ComposerHintKind.REPLY,
-        title = name.trim().ifBlank { REPLY_FALLBACK_TITLE },
+        title = replyTitle(name),
         body = clipBody(spanText.ifBlank { preview }),
         dismissContentDescription = DISMISS_REPLY,
     )
@@ -41,6 +41,14 @@ object ComposerHintRules {
         if (one.isEmpty()) return FALLBACK_BODY
         if (one.length <= BODY_MAX) return one
         return one.take(BODY_MAX - 1).trimEnd() + "…"
+    }
+
+    /** CR/LF/NUL in a peer name must not split reply chrome. */
+    private fun replyTitle(name: String): String {
+        if (name.indexOf('\n') >= 0 || name.indexOf('\r') >= 0 || name.indexOf('\u0000') >= 0) {
+            return REPLY_FALLBACK_TITLE
+        }
+        return name.trim().ifBlank { REPLY_FALLBACK_TITLE }
     }
 
     private val WHITESPACE = Regex("\\s+")
