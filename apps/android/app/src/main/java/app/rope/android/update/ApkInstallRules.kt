@@ -1,17 +1,28 @@
 package app.rope.android.update
 
 import java.io.File
+import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.StandardOpenOption
 
 /**
  * PackageInstaller sessions must read the GitHub APK from app-private
- * `cache/updates/` (same tree FileProvider exposes). The APK must be a
- * direct child — nested `updates/sub/` paths fail closed. Not envelope crypto.
+ * `cache/updates/` (same tree FileProvider XML names). The APK must be a
+ * direct child — nested `updates/sub/` paths and symlinks fail closed.
+ * [open] re-checks [allow] so a swap between check and read cannot follow
+ * a link. Not envelope crypto.
  */
 object ApkInstallRules {
     const val UPDATES_DIR = "updates"
     const val MIN_BYTES = 1024L
 
     fun allow(file: File, updatesDir: File): Boolean {
+        try {
+            if (Files.isSymbolicLink(file.toPath())) return false
+        } catch (_: Exception) {
+            return false
+        }
         if (!file.isFile || file.length() < MIN_BYTES) return false
         val name = file.name
         if (name.indexOf('\n') >= 0 || name.indexOf('\r') >= 0 || name.indexOf('\u0000') >= 0) {
@@ -23,6 +34,27 @@ object ApkInstallRules {
         val target = canonical(file) ?: return false
         val parent = File(target).parent ?: return false
         return parent == root
+    }
+
+    /**
+     * Bytes for PackageInstaller / FileProvider. Fail closed if [allow]
+     * disagrees before or after the NOFOLLOW open (TOCTOU).
+     */
+    fun open(file: File, updatesDir: File): InputStream? {
+        if (!allow(file, updatesDir)) return null
+        val stream = try {
+            Files.newInputStream(file.toPath(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)
+        } catch (_: Exception) {
+            return null
+        }
+        if (!allow(file, updatesDir)) {
+            try {
+                stream.close()
+            } catch (_: Exception) {
+            }
+            return null
+        }
+        return stream
     }
 
     private fun canonical(file: File): String? = try {

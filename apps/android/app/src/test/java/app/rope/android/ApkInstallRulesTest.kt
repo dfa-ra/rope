@@ -1,6 +1,7 @@
 package app.rope.android
 
 import app.rope.android.update.ApkInstallRules
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,6 +70,29 @@ class ApkInstallRulesTest {
             val direct = File(updates, "rope-0.1.5.apk")
             direct.writeBytes(ByteArray(ApkInstallRules.MIN_BYTES.toInt() + 8))
             assertTrue(ApkInstallRules.allow(direct, updates))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun rejectSameDirSymlinkAndOpenRechecksAllow() {
+        val root = createTempDirectory("rope-apk-open").toFile()
+        try {
+            val updates = File(root, ApkInstallRules.UPDATES_DIR).apply { mkdirs() }
+            val real = File(updates, "rope-0.1.5.apk")
+            real.writeBytes(ByteArray(ApkInstallRules.MIN_BYTES.toInt() + 8))
+            val link = File(updates, "rope-0.1.6.apk")
+            java.nio.file.Files.createSymbolicLink(link.toPath(), real.toPath())
+            assertFalse(ApkInstallRules.allow(link, updates))
+            assertEquals(null, ApkInstallRules.open(link, updates))
+
+            ApkInstallRules.open(real, updates)!!.use { input ->
+                assertEquals(real.length(), input.readBytes().size.toLong())
+            }
+            val nested = File(File(updates, "sub").apply { mkdirs() }, "rope-0.1.5.apk")
+            nested.writeBytes(ByteArray(ApkInstallRules.MIN_BYTES.toInt() + 8))
+            assertEquals(null, ApkInstallRules.open(nested, updates))
         } finally {
             root.deleteRecursively()
         }

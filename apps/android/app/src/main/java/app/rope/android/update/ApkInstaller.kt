@@ -10,7 +10,6 @@ import java.io.File
 class ApkInstaller(private val context: Context) {
     fun install(file: File) {
         val updates = File(context.cacheDir, ApkInstallRules.UPDATES_DIR)
-        if (!ApkInstallRules.allow(file, updates)) error("APK не скачан")
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(context.packageName)
@@ -20,9 +19,12 @@ class ApkInstaller(private val context: Context) {
         val sessionId = installer.createSession(params)
         val session = installer.openSession(sessionId)
         try {
-            session.openWrite("base.apk", 0, file.length()).use { out ->
-                file.inputStream().use { it.copyTo(out) }
-                session.fsync(out)
+            val src = ApkInstallRules.open(file, updates) ?: error("APK не скачан")
+            src.use { input ->
+                session.openWrite("base.apk", 0, file.length()).use { out ->
+                    input.copyTo(out)
+                    session.fsync(out)
+                }
             }
             val callback = Intent(context, InstallStatusReceiver::class.java).apply {
                 action = ACTION
