@@ -63,6 +63,7 @@ import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.NotifyChatRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
@@ -227,6 +228,7 @@ class RopeRepository(private val app: Application) {
     private var wssAudio: WssAudioSession? = null
     private val wssFrameBusy = AtomicBoolean(false)
     private val sessionStarted = AtomicBoolean(false)
+    @Volatile private var pendingNotifyChatId: String? = null
     private val callMachine = CallMachine()
     private var callPeerName: String = ""
     private var connectWatch: Job? = null
@@ -270,6 +272,7 @@ class RopeRepository(private val app: Application) {
                 error(e)
             } finally {
                 _state.value = _state.value.copy(sessionReady = true)
+                tryConsumeNotifyChat()
             }
         }
     }
@@ -566,6 +569,64 @@ class RopeRepository(private val app: Application) {
             else -> _state.value = _state.value.copy(
                 error = "Этой группы нет. Голосовые и фото вернулись в личный чат.",
             )
+        }
+    }
+
+    fun openFromNotification(chatId: String) {
+        val id = NotifyChatRules.chatId(chatId) ?: return
+        pendingNotifyChatId = id
+        tryConsumeNotifyChat()
+    }
+
+    private fun tryConsumeNotifyChat() {
+        if (!_state.value.sessionReady) return
+        if (_state.value.profile == null) return
+        val id = pendingNotifyChatId ?: return
+        if (!NotifyChatRules.canOpen(signedIn = true, incoming = id)) return
+        pendingNotifyChatId = null
+        onMain {
+            if (NotifyChatRules.alreadyShowing(openChatId(), id) &&
+                _state.value.screen == Screen.Chat
+            ) {
+                return@onMain
+            }
+            val s = _state.value.screen
+            if (NotifyChatRules.parentChats(
+                    onChat = s == Screen.Chat,
+                    onChats = s == Screen.Chats,
+                    onArchive = s == Screen.Archive,
+                )
+            ) {
+                go(Screen.Chats)
+            }
+            openChatById(id)
+        }
+    }
+
+    private fun openChatById(chatId: String) {
+        val id = NotifyChatRules.chatId(chatId) ?: return
+        when {
+            SavedMessagesRules.isSaved(id) -> openSaved()
+            ChatIds.isGroup(id) -> {
+                val gid = ChatIds.rawGroupId(id)
+                val g = _state.value.groups.find { it.groupId == gid } ?: store.group(gid)
+                if (g != null) openGroup(g)
+            }
+            else -> {
+                val conv = _state.value.conversations.find { PeerIds.same(it.id, id) }
+                val peer = conv?.peer
+                    ?: PeerIds.findDevice(_state.value.devices, id)
+                    ?: conv?.takeIf { !it.isGroup }?.let {
+                        DirectoryDevice(it.id, "", it.title, ByteArray(0), "", it.online)
+                    }
+                if (peer != null) {
+                    openChat(peer)
+                    return
+                }
+                if (store.messages(id).isNotEmpty()) {
+                    openChat(DirectoryDevice(id, "", id.take(8), ByteArray(0), "", false))
+                }
+            }
         }
     }
 
@@ -3407,7 +3468,7 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            notifier.message(title, body, AlbumRules.notifyId(body, albumId), chatId)
         }
     }
 

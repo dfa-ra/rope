@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.NotifyChatRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -29,11 +30,23 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        chatId: String? = null,
+    ) {
+        val id = NotifyChatRules.chatId(chatId)
+        val launch = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (id != null) {
+                putExtra(NotifyChatRules.EXTRA_CHAT_ID, id)
+            }
+        }
         val intent = PendingIntent.getActivity(
             context,
-            1,
-            Intent(context, MainActivity::class.java),
+            if (id != null) NotifyChatRules.requestCode(id) else 1,
+            launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val n = NotificationCompat.Builder(context, MSG)
