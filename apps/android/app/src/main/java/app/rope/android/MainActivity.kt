@@ -162,7 +162,7 @@ class MainActivity : AppCompatActivity() {
                     onOpenConversation = repo::openConversation,
                     onDraft = repo::setDraft,
                     onSend = repo::sendDraft,
-                    onInvite = repo::createInvite,
+                    onInvite = { repo.createInvite() },
                     onInviteTtl = repo::createInvite,
                     onStatus = repo::refreshStatus,
                     onScan = {
