@@ -36,8 +36,8 @@ object ChatListPreviewRules {
         }
         if (last != null) {
             val body = when {
-                saved -> last.preview()
-                isGroup -> GroupChatUx.listPreview(last, myDeviceId) ?: last.preview()
+                saved -> LpChatRules.body(last)
+                isGroup -> GroupChatUx.listPreview(last, myDeviceId) ?: LpChatRules.body(last)
                 else -> dmLast(last, myDeviceId)
             }
             return ChatListPreviewCopy(body, ChatListPreviewKind.LAST)
@@ -52,7 +52,7 @@ object ChatListPreviewRules {
     }
 
     fun dmLast(last: ChatMessage, myDeviceId: String): String {
-        val body = last.preview()
+        val body = LpChatRules.body(last)
         val mine = last.outgoing || (myDeviceId.isNotBlank() && last.senderId == myDeviceId)
         return if (mine) "$YOU: $body" else body
     }
