@@ -182,6 +182,7 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
+import app.rope.android.data.VoiceOnceRules
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
 import kotlin.math.roundToInt
@@ -755,6 +756,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onToggleRecordingOnce: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1112,6 +1114,7 @@ fun ChatPane(
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
+                onToggleRecordingOnce = onToggleRecordingOnce,
             )
         }
     }
@@ -1548,6 +1551,7 @@ private fun MessageBubble(
                                 positionMs = if (state.voiceProgressId == m.id) state.voicePositionMs else 0L,
                                 playerDurationMs = if (state.voiceProgressId == m.id) state.voiceDurationMs else 0L,
                                 speed = state.voiceSpeed,
+                                heardOnce = m.id in state.heardOnceVoice,
                                 onPlay = onPlay,
                                 onSeek = onSeekVoice,
                                 onCycleSpeed = onCycleVoiceSpeed,
@@ -2237,6 +2241,7 @@ private fun ComposerBar(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
+    onToggleRecordingOnce: () -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
@@ -2354,6 +2359,8 @@ private fun ComposerBar(
                         recordMs = state.recordMs,
                         locked = recordingLocked,
                         hint = slideHint,
+                        once = state.recordingOnce,
+                        onToggleOnce = onToggleRecordingOnce,
                         modifier = Modifier
                             .weight(1f)
                             .padding(bottom = 6.dp),
@@ -2519,6 +2526,8 @@ private fun RecordingStrip(
     recordMs: Long,
     locked: Boolean,
     hint: VoiceGesture,
+    once: Boolean = false,
+    onToggleOnce: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val pulse = rememberInfiniteTransition(label = "recPulse")
@@ -2569,6 +2578,21 @@ private fun RecordingStrip(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        if (locked) {
+            Text(
+                VoiceOnceRules.LABEL,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (once) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(RopeShapes.chip))
+                    .clickable(onClick = onToggleOnce)
+                    .background(
+                        if (once) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 

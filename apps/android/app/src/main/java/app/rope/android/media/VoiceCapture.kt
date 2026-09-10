@@ -112,6 +112,7 @@ class VoicePlayer {
         private set
     var speed: Float = VoicePlayback.SPEED_1X
         private set
+    var onComplete: ((String) -> Unit)? = null
 
     /** Playing now, or paused with a kept position. */
     val activeId: String? get() = playingId ?: loadedId.takeIf { player != null }
@@ -184,7 +185,11 @@ class VoicePlayer {
         stop()
         val p = MediaPlayer()
         p.setDataSource(path)
-        p.setOnCompletionListener { stop() }
+        p.setOnCompletionListener {
+            val done = loadedId
+            stop()
+            if (done != null) onComplete?.invoke(done)
+        }
         p.prepare()
         player = p
         loadedId = id

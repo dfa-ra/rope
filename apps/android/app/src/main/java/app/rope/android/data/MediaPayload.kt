@@ -25,6 +25,7 @@ data class MediaPayload(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val waveform: List<Int> = emptyList(),
+    val once: Boolean = false,
 ) {
     fun withReply(
         replyTo: String?,
@@ -79,6 +80,7 @@ data class MediaPayload(
                 waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
                 put("wf", arr)
             }
+            if (once) put("once", true)
         }
         .toString()
 
@@ -94,7 +96,7 @@ data class MediaPayload(
     fun preview(): String {
         val cap = JsonIds.optional(caption)
         return when (kind) {
-            "voice" -> "Голосовое · ${formatDuration(durationMs)}"
+            "voice" -> if (once) "Голосовое · один раз · ${formatDuration(durationMs)}" else "Голосовое · ${formatDuration(durationMs)}"
             "image" -> cap ?: if (!albumId.isNullOrBlank() && albumCount > 1) {
                 AlbumRules.preview(albumCount, videoCount = 0)
             } else {
@@ -137,6 +139,7 @@ data class MediaPayload(
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 waveform = readWaveform(o.optJSONArray("wf")),
+                once = o.optBoolean("once", false),
             )
         }
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.VoiceOnceRules
 import app.rope.android.data.VoicePlayback
 
 /**
@@ -51,9 +52,13 @@ fun VoiceMessageBubble(
     onPlay: (ChatMessage) -> Unit,
     onSeek: (ChatMessage, Long) -> Unit,
     onCycleSpeed: () -> Unit,
+    heardOnce: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val extra = runCatching { MediaPayload.parse(message.extra) }.getOrNull()
+    val once = extra?.once == true
+    val canPlay = VoiceOnceRules.canPlay(message.outgoing, once, heardOnce)
+    val canSeek = VoiceOnceRules.canSeek(once)
     val total = VoicePlayback.resolvedDuration(playerDurationMs, extra?.durationMs ?: 0L)
     val pos = VoicePlayback.displayPosition(playing || positionMs > 0L, positionMs)
     val fraction = VoicePlayback.fraction(pos, total)
@@ -71,10 +76,18 @@ fun VoiceMessageBubble(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            IconButton(onClick = { onPlay(message) }, modifier = Modifier.size(36.dp)) {
+            IconButton(
+                onClick = { if (canPlay) onPlay(message) },
+                enabled = canPlay,
+                modifier = Modifier.size(36.dp),
+            ) {
                 Icon(
                     if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    contentDescription = if (playing) "Пауза" else "Голос",
+                    contentDescription = when {
+                        !canPlay -> VoiceOnceRules.HEARD
+                        playing -> "Пауза"
+                        else -> "Голос"
+                    },
                 )
             }
             if (sending || downloading) {
@@ -91,7 +104,7 @@ fun VoiceMessageBubble(
                 fraction = animated,
                 fill = fill,
                 track = track,
-                enabled = extra != null && !downloading && total > 0L,
+                enabled = extra != null && !downloading && total > 0L && canSeek,
                 onSeekFraction = { frac -> onSeek(message, VoicePlayback.seekMs(frac, total)) },
             )
             Row(
@@ -103,16 +116,18 @@ fun VoiceMessageBubble(
             ) {
                 Text(
                     when {
+                        !canPlay -> VoiceOnceRules.HEARD
                         downloading -> "скачивается…"
                         extra != null -> {
                             val clock = VoicePlayback.clock(pos, total)
-                            if (sending) "$clock · отправка…" else clock
+                            val mark = if (once) " · ${VoiceOnceRules.LABEL}" else ""
+                            if (sending) "$clock · отправка…" else "$clock$mark"
                         }
                         else -> message.text
                     },
                     style = MaterialTheme.typography.labelSmall,
                 )
-                if (extra != null && !downloading) {
+                if (extra != null && !downloading && !once) {
                     Text(
                         VoicePlayback.speedLabel(speed),
                         style = MaterialTheme.typography.labelSmall,

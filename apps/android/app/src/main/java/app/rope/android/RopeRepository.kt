@@ -70,6 +70,7 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceOnceRules
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -185,6 +186,8 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val recordingOnce: Boolean = false,
+    val heardOnceVoice: Set<String> = emptySet(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -204,7 +207,9 @@ class RopeRepository(private val app: Application) {
     private val vault = IdentityVault(app)
     private val notifier = RopeNotifier(app)
     private val voiceRecorder = VoiceRecorder(app)
-    private val voicePlayer = VoicePlayer()
+    private val voicePlayer = VoicePlayer().also { player ->
+        player.onComplete = { id -> consumeOnceVoice(id) }
+    }
     private val videoNoteRecorder = VideoNoteRecorder(app)
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
@@ -217,6 +222,7 @@ class RopeRepository(private val app: Application) {
     private var unfurlJob: Job? = null
     @Volatile private var unfurlResult: PackedLinkPreview? = null
     private var voiceProgressJob: Job? = null
+    private var oncePlayId: String? = null
     private var reconnectAttempt = 0
     private var tone: ToneGenerator? = null
     private val mediaAttempts = mutableSetOf<String>()
@@ -256,6 +262,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    heardOnceVoice = store.heardOnceVoice(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -966,7 +973,7 @@ class RopeRepository(private val app: Application) {
             voiceRecorder.start()
             unfurlJob?.cancel()
             unfurlResult = null
-            _state.value = _state.value.copy(recording = true, recordMs = 0, error = null)
+            _state.value = _state.value.copy(recording = true, recordMs = 0, recordingOnce = false, error = null)
             recordJob?.cancel()
             recordJob = scope.launch {
                 while (_state.value.recording) {
@@ -992,7 +999,8 @@ class RopeRepository(private val app: Application) {
             null
         }
         recordJob?.cancel()
-        _state.value = _state.value.copy(recording = false, recordMs = 0)
+        val once = _state.value.recordingOnce
+        _state.value = _state.value.copy(recording = false, recordMs = 0, recordingOnce = false)
         if (!send || take == null || take.durationMs < VoiceRecorder.MIN_MS) {
             take?.file?.delete()
             return
@@ -1015,6 +1023,7 @@ class RopeRepository(private val app: Application) {
                     destPeer = destPeer,
                     destGroup = destGroup,
                     waveform = wave,
+                    once = once,
                 )
             } catch (e: Exception) {
                 error(e)
@@ -1097,12 +1106,20 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun toggleRecordingOnce() {
+        if (!_state.value.recording) return
+        _state.value = _state.value.copy(recordingOnce = !_state.value.recordingOnce)
+    }
+
     fun toggleVoice(msg: ChatMessage) {
+        val flagged = VoiceOnceRules.flagged(msg)
+        if (!VoiceOnceRules.canPlay(msg.outgoing, flagged, msg.id in _state.value.heardOnceVoice)) return
         val path = msg.localPath
         if (path.isNullOrBlank()) {
             retryMedia(msg)
             return
         }
+        oncePlayId = if (VoiceOnceRules.consumeOnComplete(msg.outgoing, flagged)) msg.id else null
         voicePlayer.toggle(msg.id, path)
         publishVoiceProgress()
         voiceProgressJob?.cancel()
@@ -1118,6 +1135,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun seekVoice(msg: ChatMessage, positionMs: Long) {
+        if (!VoiceOnceRules.canSeek(VoiceOnceRules.flagged(msg))) return
         val path = msg.localPath
         if (path.isNullOrBlank()) {
             retryMedia(msg)
@@ -1140,6 +1158,20 @@ class RopeRepository(private val app: Application) {
     fun cycleVoiceSpeed() {
         voicePlayer.cycleSpeed()
         publishVoiceProgress()
+    }
+
+    private fun consumeOnceVoice(id: String) {
+        val fromChat = _state.value.messages.find { it.id == id }
+        val consume = if (fromChat != null) {
+            VoiceOnceRules.consumeOnComplete(fromChat.outgoing, VoiceOnceRules.flagged(fromChat))
+        } else {
+            id == oncePlayId
+        }
+        if (!consume) return
+        oncePlayId = null
+        val next = VoiceOnceRules.mark(_state.value.heardOnceVoice, id)
+        store.saveHeardOnceVoice(next)
+        _state.value = _state.value.copy(heardOnceVoice = next)
     }
 
     private fun publishVoiceProgress() {
@@ -1174,6 +1206,7 @@ class RopeRepository(private val app: Application) {
             scope.launch { downloadLinkThumb(msg.id, lp) }
         }
         if (msg.extra.isBlank()) return
+        if (VoiceOnceRules.skipDownload(msg.outgoing, VoiceOnceRules.flagged(msg), msg.id in _state.value.heardOnceVoice)) return
         if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VOICE && msg.kind != MessageKind.FILE && msg.kind != MessageKind.VIDEO && msg.kind != MessageKind.VIDEO_NOTE) return
         val path = msg.localPath
         if (!force && path != null && File(path).isFile && File(path).length() > 8) return
@@ -1590,6 +1623,7 @@ class RopeRepository(private val app: Application) {
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
         waveform: List<Int> = emptyList(),
+        once: Boolean = false,
     ) {
         val id = identity ?: return
         val group = destGroup
@@ -1616,6 +1650,7 @@ class RopeRepository(private val app: Application) {
             albumCount = if (grouped) albumCount else 1,
             caption = cap,
             waveform = waveform,
+            once = VoiceOnceRules.pack(kind, once),
         ).withReply(
             pack.id,
             pack.preview,
