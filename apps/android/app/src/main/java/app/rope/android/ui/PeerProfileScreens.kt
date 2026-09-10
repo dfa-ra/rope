@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
+import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
@@ -45,12 +47,18 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onArchiveChat: (String) -> Unit = {},
+    onUnarchiveChat: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val chatId = peer?.deviceId
+    val canArchive = ArchiveRules.canArchive(chatId)
+    val archived = ArchiveRules.isArchived(state.conversations, chatId)
+    val archiveLabel = ArchiveRules.profileAction(archived)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +100,16 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (canArchive && chatId != null) {
+                        TextButton(
+                            onClick = {
+                                if (archived) onUnarchiveChat(chatId) else onArchiveChat(chatId)
+                            },
+                            modifier = Modifier.semantics { contentDescription = archiveLabel },
+                        ) {
+                            Text(archiveLabel)
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {

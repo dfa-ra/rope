@@ -25,9 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ChatIds
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.RoleRules
 
@@ -103,6 +107,8 @@ fun GroupInfoPane(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
+    onArchiveChat: (String) -> Unit = {},
+    onUnarchiveChat: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -120,6 +126,10 @@ fun GroupInfoPane(
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
+    val chatId = ChatIds.group(g.groupId)
+    val canArchive = ArchiveRules.canArchive(chatId)
+    val archived = ArchiveRules.isArchived(state.conversations, chatId)
+    val archiveLabel = ArchiveRules.profileAction(archived)
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -136,6 +146,16 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (canArchive) {
+                            TextButton(
+                                onClick = {
+                                    if (archived) onUnarchiveChat(chatId) else onArchiveChat(chatId)
+                                },
+                                modifier = Modifier.semantics { contentDescription = archiveLabel },
+                            ) {
+                                Text(archiveLabel)
+                            }
+                        }
                     }
                 }
             }

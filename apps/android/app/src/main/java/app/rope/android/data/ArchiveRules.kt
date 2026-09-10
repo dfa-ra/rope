@@ -71,4 +71,9 @@ object ArchiveRules {
 
     fun archivedOf(conversations: List<Conversation>): List<Conversation> =
         conversations.filter { shouldHideFromMain(it) }
+
+    fun isArchived(conversations: List<Conversation>, id: String?): Boolean =
+        !id.isNullOrBlank() && conversations.any { it.id == id && shouldHideFromMain(it) }
+
+    fun profileAction(archived: Boolean): String = if (archived) UNARCHIVE else ARCHIVE
 }
