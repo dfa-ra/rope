@@ -1,8 +1,10 @@
 package app.rope.android
 
 import app.rope.android.data.AlbumRules
+import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatThreadItem
+import app.rope.android.data.Conversation
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
@@ -96,6 +98,31 @@ class UnreadSeparatorRulesTest {
         assertEquals(UnreadFab.DOWN, UnreadSeparatorRules.fab(atBottom = false, unreadVisible = false, hasUnread = true, unreadAbove = false))
         assertNull(UnreadSeparatorRules.fab(atBottom = true, unreadVisible = true, hasUnread = true, unreadAbove = false))
         assertNull(UnreadSeparatorRules.fab(atBottom = true, unreadVisible = false, hasUnread = true, unreadAbove = false))
+    }
+
+    @Test
+    fun fabBadgeShowsUnreadCount() {
+        assertEquals("", UnreadSeparatorRules.fabBadge(null, 7))
+        assertEquals("", UnreadSeparatorRules.fabBadge(UnreadFab.DOWN, 0))
+        assertEquals("3", UnreadSeparatorRules.fabBadge(UnreadFab.UP, 3))
+        assertEquals("99+", UnreadSeparatorRules.fabBadge(UnreadFab.DOWN, 120))
+        assertEquals("К непрочитанным", UnreadSeparatorRules.fabContentDescription(UnreadFab.UP, ""))
+        assertEquals("К непрочитанным, 3", UnreadSeparatorRules.fabContentDescription(UnreadFab.UP, "3"))
+        assertEquals("К последним, 2", UnreadSeparatorRules.fabContentDescription(UnreadFab.DOWN, "2"))
+    }
+
+    @Test
+    fun unreadOfOpenChat() {
+        val dm = Conversation("peer", "Анна", "hi", false, true, last = null, unread = 4)
+        val group = Conversation(ChatIds.group("g1"), "Команда", "hi", true, false, last = null, unread = 9)
+        val rows = listOf(dm, group)
+        assertEquals("peer", UnreadSeparatorRules.chatId(null, "peer"))
+        assertEquals(ChatIds.group("g1"), UnreadSeparatorRules.chatId("g1", "peer"))
+        assertEquals(4, UnreadSeparatorRules.unreadOf(rows, "peer"))
+        assertEquals(9, UnreadSeparatorRules.unreadOf(rows, ChatIds.group("g1")))
+        assertEquals(0, UnreadSeparatorRules.unreadOf(rows, "missing"))
+        assertEquals(0, UnreadSeparatorRules.unreadOf(rows, null))
+        assertNull(UnreadSeparatorRules.chatId(null, ""))
     }
 
     private fun incoming(

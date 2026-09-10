@@ -63,6 +63,27 @@ object UnreadSeparatorRules {
         !atBottom -> UnreadFab.DOWN
         else -> null
     }
+
+    fun chatId(groupId: String?, peerDeviceId: String?): String? {
+        JsonIds.optional(groupId)?.let { return ChatIds.group(it) }
+        return JsonIds.optional(peerDeviceId)
+    }
+
+    fun unreadOf(conversations: List<Conversation>, chatId: String?): Int {
+        val id = chatId ?: return 0
+        return conversations.firstOrNull { it.id == id }?.unread?.coerceAtLeast(0) ?: 0
+    }
+
+    /** Count on the jump FAB. Empty when there is nothing unread. */
+    fun fabBadge(kind: UnreadFab?, unread: Int): String {
+        if (kind == null) return ""
+        return UnreadBadgeRules.label(unread)
+    }
+
+    fun fabContentDescription(kind: UnreadFab, badge: String): String {
+        val base = if (kind == UnreadFab.UP) "К непрочитанным" else "К последним"
+        return if (badge.isBlank()) base else "$base, $badge"
+    }
 }
 
 enum class UnreadFab {

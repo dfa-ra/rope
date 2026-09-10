@@ -1075,27 +1075,48 @@ fun ChatPane(
                     }
                 }
                 val fabKind = UnreadSeparatorRules.fab(atBottom, unreadVisible, unreadIdx >= 0, unreadAbove)
+                val unreadCount = UnreadSeparatorRules.unreadOf(
+                    state.conversations,
+                    UnreadSeparatorRules.chatId(state.group?.groupId, state.peer?.deviceId),
+                )
+                val fabBadge = UnreadSeparatorRules.fabBadge(fabKind, unreadCount)
                 if (fabKind != null) {
-                    FloatingActionButton(
-                        onClick = {
-                            jumpScope.launch {
-                                val target = if (fabKind == UnreadFab.UP) {
-                                    unreadIdx
-                                } else {
-                                    threadItems.lastIndex
-                                }
-                                if (target >= 0) list.animateScrollToItem(target)
-                            }
-                        },
-                        modifier = Modifier
+                    Box(
+                        Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 12.dp, bottom = 12.dp),
-                        shape = CircleShape,
                     ) {
-                        Icon(
-                            if (fabKind == UnreadFab.UP) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                            contentDescription = if (fabKind == UnreadFab.UP) "К непрочитанным" else "К последним",
-                        )
+                        FloatingActionButton(
+                            onClick = {
+                                jumpScope.launch {
+                                    val target = if (fabKind == UnreadFab.UP) {
+                                        unreadIdx
+                                    } else {
+                                        threadItems.lastIndex
+                                    }
+                                    if (target >= 0) list.animateScrollToItem(target)
+                                }
+                            },
+                            shape = CircleShape,
+                        ) {
+                            Icon(
+                                if (fabKind == UnreadFab.UP) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                contentDescription = UnreadSeparatorRules.fabContentDescription(fabKind, fabBadge),
+                            )
+                        }
+                        if (fabBadge.isNotBlank()) {
+                            Text(
+                                fabBadge,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 4.dp, y = (-4).dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
                     }
                 }
             }
