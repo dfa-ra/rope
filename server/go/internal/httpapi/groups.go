@@ -83,7 +83,7 @@ func (s *Server) groupAdd(w http.ResponseWriter, r *http.Request, a authed, body
 		writeJSON(w, 400, map[string]string{"error": "device_id"})
 		return
 	}
-	if _, err := s.Store.Device(req.DeviceID); err != nil {
+	if !s.liveGroupDevice(req.DeviceID) {
 		writeJSON(w, 404, map[string]string{"error": "unknown device"})
 		return
 	}
@@ -123,6 +123,17 @@ func (s *Server) groupRemove(w http.ResponseWriter, r *http.Request, a authed, b
 	}
 	_, _ = s.Store.BumpGroupEpoch(gid)
 	s.writeGroup(w, gid)
+}
+
+// liveGroupDevice is a directory-live device: not revoked, member not revoked.
+// Same 404 as unknown so group-add cannot confirm a kicked id.
+func (s *Server) liveGroupDevice(id string) bool {
+	dev, err := s.Store.Device(id)
+	if err != nil || dev.Revoked {
+		return false
+	}
+	mem, err := s.Store.Member(dev.MemberID)
+	return err == nil && !mem.Revoked
 }
 
 func (s *Server) writeGroup(w http.ResponseWriter, id string) {

@@ -222,3 +222,54 @@ func TestGroupMemberCannotAddOthersButCanLeave(t *testing.T) {
 	}
 	resp.Body.Close()
 }
+
+func TestGroupAddRejectsRevokedDevice(t *testing.T) {
+	_, hs, setup := testServer(t)
+	owner := newDevice(t)
+	guest := newDevice(t)
+	bootstrap(t, hs, setup, owner, "owner")
+	req := authReq(t, http.MethodPost, hs.URL+"/v1/invites", "/v1/invites", []byte(`{"ttl_seconds":60}`), owner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inv struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&inv)
+	resp.Body.Close()
+	bootstrap(t, hs, inv.Token, guest, "guest")
+
+	req = authReq(t, http.MethodPost, hs.URL+"/v1/groups", "/v1/groups", []byte(`{"name":"crew"}`), owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created groupJSON
+	_ = json.NewDecoder(resp.Body).Decode(&created)
+	resp.Body.Close()
+
+	rev := []byte(`{"device_id":"` + guest.id + `"}`)
+	req = authReq(t, http.MethodPost, hs.URL+"/v1/admin/revoke-device", "/v1/admin/revoke-device", rev, owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("revoke-device %d %s", resp.StatusCode, b)
+	}
+	resp.Body.Close()
+
+	body, _ := json.Marshal(map[string]string{"device_id": guest.id})
+	req = authReq(t, http.MethodPost, hs.URL+"/v1/groups/"+created.GroupID+"/members", "/v1/groups/"+created.GroupID+"/members", body, owner)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("add revoked want 404 got %d %s", resp.StatusCode, b)
+	}
+}
