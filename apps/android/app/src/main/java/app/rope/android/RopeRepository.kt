@@ -355,6 +355,10 @@ class RopeRepository(private val app: Application) {
                 if (NavRules.refreshesLists(next.last())) refreshConversations()
                 true
             }
+            BackLayer.ToChats -> {
+                go(ChatHomeRules.HOME, tab = true)
+                true
+            }
             BackLayer.CloseEmoji,
             BackLayer.CloseSearch,
             BackLayer.CloseDialog,
@@ -365,7 +369,8 @@ class RopeRepository(private val app: Application) {
 
     private fun applyNav(screen: Screen, mode: NavMode): UiState {
         val base = _state.value
-        val stack = BackStack.apply(BackStack.currentStack(base.backStack, base.screen), screen, mode)
+        val raw = BackStack.apply(BackStack.currentStack(base.backStack, base.screen), screen, mode)
+        val stack = if (raw.last() == Screen.Chat) ChatHomeRules.stackUnderThread(raw) else raw
         val keepUnread = stack.last() == Screen.Chat || stack.last() == Screen.PeerProfile
         return base.copy(
             screen = stack.last(),

@@ -15,6 +15,7 @@ enum class BackLayer {
     CancelComposer,
     CancelPendingMedia,
     Pop,
+    ToChats,
     Exit,
 }
 
@@ -113,7 +114,13 @@ object BackStack {
             } else {
                 null
             }
-            composer ?: if (canPop(currentStack(state.backStack, state.screen))) BackLayer.Pop else BackLayer.Exit
+            composer ?: if (canPop(currentStack(state.backStack, state.screen))) {
+                BackLayer.Pop
+            } else if (ChatHomeRules.consumesExit(state.screen == Screen.Chat)) {
+                BackLayer.ToChats
+            } else {
+                BackLayer.Exit
+            }
         }
     }
 

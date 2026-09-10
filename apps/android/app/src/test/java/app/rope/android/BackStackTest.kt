@@ -62,6 +62,16 @@ class BackStackTest {
     }
 
     @Test
+    fun loneChatBackGoesToChatList() {
+        assertEquals(
+            BackLayer.ToChats,
+            BackStack.decide(UiState(screen = Screen.Chat, backStack = listOf(Screen.Chat))),
+        )
+        assertTrue(BackStack.consumesSystemBack(UiState(screen = Screen.Chat, backStack = listOf(Screen.Chat))))
+        assertEquals(BackLayer.Exit, BackStack.decide(UiState(screen = Screen.Home, backStack = listOf(Screen.Home))))
+    }
+
+    @Test
     fun groupChatPopsToGroups() {
         var stack = BackStack.push(listOf(Screen.Groups), Screen.Chat)
         assertEquals(listOf(Screen.Groups, Screen.Chat), stack)
