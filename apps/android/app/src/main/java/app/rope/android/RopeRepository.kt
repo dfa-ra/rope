@@ -49,6 +49,8 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.VoiceDraft
+import app.rope.android.data.VoiceDraftRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -149,6 +151,8 @@ data class UiState(
     val draftText: String = "",
     val onlineIds: Set<String> = emptySet(),
     val recording: Boolean = false,
+    val recordingLocked: Boolean = false,
+    val voiceDraft: VoiceDraft? = null,
     val recordingVideoNote: Boolean = false,
     val recordMs: Long = 0,
     val playingVoiceId: String? = null,
@@ -287,6 +291,7 @@ class RopeRepository(private val app: Application) {
             return
         }
         val from = _state.value.screen
+        if (from == Screen.Chat && screen != Screen.Chat) leaveChatRecording()
         if (screen != Screen.Chat) persistOpenDraft()
         var next = applyNav(screen, if (tab) NavMode.SwitchTab else NavMode.Push).copy(error = null)
         if (NavRules.clearsChatQuery(from, screen)) {
@@ -337,6 +342,7 @@ class RopeRepository(private val app: Application) {
                 true
             }
             BackLayer.Pop -> {
+                parkLockedVoice()
                 persistOpenDraft()
                 val next = BackStack.pop(BackStack.currentStack(s.backStack, s.screen))
                 val dest = next.last()
@@ -963,6 +969,7 @@ class RopeRepository(private val app: Application) {
 
     fun startVoice() {
         if (_state.value.recording || _state.value.recordingVideoNote) return
+        if (VoiceDraftRules.restore(_state.value.voiceDraft, openChatId()) != null) return
         try {
             voiceRecorder.start()
             unfurlJob?.cancel()
@@ -986,14 +993,67 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    fun finishVoice(send: Boolean) {
+    fun lockVoice() {
+        if (!_state.value.recording) return
+        _state.value = _state.value.copy(recordingLocked = true)
+    }
+
+    fun parkLockedVoice() {
+        if (!VoiceDraftRules.keep(_state.value.recordingLocked, _state.value.recording)) return
+        val chatId = VoiceDraftRules.parseChatId(openChatId()) ?: run {
+            finishVoice(false)
+            return
+        }
         val take = try {
             voiceRecorder.stop()
         } catch (_: Exception) {
             null
         }
         recordJob?.cancel()
-        _state.value = _state.value.copy(recording = false, recordMs = 0)
+        val path = VoiceDraftRules.parsePath(take?.file?.absolutePath)
+        if (take == null || path == null) {
+            take?.file?.delete()
+            _state.value = _state.value.copy(recording = false, recordingLocked = false, recordMs = 0, voiceDraft = null)
+            return
+        }
+        _state.value = _state.value.copy(
+            recording = false,
+            recordingLocked = true,
+            recordMs = take.durationMs,
+            voiceDraft = VoiceDraft(
+                chatId = chatId,
+                path = path,
+                durationMs = take.durationMs,
+                waveform = take.waveform,
+            ),
+        )
+    }
+
+    private fun leaveChatRecording() {
+        if (VoiceDraftRules.keep(_state.value.recordingLocked, _state.value.recording)) {
+            parkLockedVoice()
+        } else if (_state.value.recording) {
+            finishVoice(false)
+        }
+    }
+
+    fun finishVoice(send: Boolean) {
+        val parked = VoiceDraftRules.restore(_state.value.voiceDraft, openChatId())
+        if (parked != null && !_state.value.recording) {
+            finishParkedVoice(parked, send)
+            return
+        }
+        if (VoiceDraftRules.keep(_state.value.recordingLocked, _state.value.recording) && !send) {
+            parkLockedVoice()
+            return
+        }
+        val take = try {
+            voiceRecorder.stop()
+        } catch (_: Exception) {
+            null
+        }
+        recordJob?.cancel()
+        _state.value = _state.value.copy(recording = false, recordingLocked = false, recordMs = 0)
         if (!send || take == null || take.durationMs < VoiceRecorder.MIN_MS) {
             take?.file?.delete()
             return
@@ -1021,6 +1081,40 @@ class RopeRepository(private val app: Application) {
                 error(e)
             } finally {
                 take.file.delete()
+            }
+        }
+    }
+
+    private fun finishParkedVoice(draft: VoiceDraft, send: Boolean) {
+        val file = java.io.File(draft.path)
+        _state.value = _state.value.copy(recordingLocked = false, recordMs = 0, voiceDraft = null)
+        if (!send || !file.isFile || draft.durationMs < VoiceRecorder.MIN_MS) {
+            file.delete()
+            return
+        }
+        val pack = replyPack(_state.value.replyTo)
+        val destPeer = _state.value.peer
+        val destGroup = _state.value.group
+        _state.value = _state.value.copy(replyTo = null, replySpan = null)
+        scope.launch {
+            try {
+                val bytes = file.readBytes()
+                val wave = draft.waveform.ifEmpty { VoiceWaveform.extract(file.absolutePath) }
+                sendMediaBytes(
+                    bytes,
+                    "audio/mp4",
+                    file.name,
+                    "voice",
+                    draft.durationMs,
+                    pack = pack,
+                    destPeer = destPeer,
+                    destGroup = destGroup,
+                    waveform = wave,
+                )
+            } catch (e: Exception) {
+                error(e)
+            } finally {
+                file.delete()
             }
         }
     }
@@ -2153,6 +2247,7 @@ class RopeRepository(private val app: Application) {
         } else {
             emptyList()
         }
+        val restored = VoiceDraftRules.restore(_state.value.voiceDraft, chatId)
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
@@ -2169,6 +2264,9 @@ class RopeRepository(private val app: Application) {
             pendingAttachments = pending,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
+            recording = false,
+            recordingLocked = restored != null,
+            recordMs = restored?.durationMs ?: 0L,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)

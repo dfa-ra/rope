@@ -102,6 +102,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -158,6 +159,8 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ChatIds
+import app.rope.android.data.VoiceDraftRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -755,6 +758,8 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onLockVoice: () -> Unit = {},
+    onParkVoice: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1108,6 +1113,8 @@ fun ChatPane(
                 onAttach = { showAttach = true },
                 onVoiceStart = onVoiceStart,
                 onVoiceFinish = onVoiceFinish,
+                onLockVoice = onLockVoice,
+                onParkVoice = onParkVoice,
                 onCancelComposer = onCancelComposer,
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
@@ -2233,19 +2240,22 @@ private fun ComposerBar(
     onAttach: () -> Unit,
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
+    onLockVoice: () -> Unit = {},
+    onParkVoice: () -> Unit = {},
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
 ) {
-    var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
     var showEmoji by remember { mutableStateOf(false) }
     var localText by remember { mutableStateOf(state.draftText) }
     var lastSeenDraft by remember { mutableStateOf(state.draftText) }
     val scope = rememberCoroutineScope()
     var debounce by remember { mutableStateOf<Job?>(null) }
-    val chatKey = state.group?.groupId ?: state.peer?.deviceId.orEmpty()
+    val openId = state.group?.let { ChatIds.group(it.groupId) } ?: state.peer?.deviceId
+    val recordingLocked = state.recordingLocked || VoiceDraftRules.restore(state.voiceDraft, openId) != null
+    val chatKey = openId.orEmpty()
     LaunchedEffect(chatKey) {
         localText = state.draftText
         lastSeenDraft = state.draftText
@@ -2263,13 +2273,16 @@ private fun ComposerBar(
             if (state.draftText != localText) localText = state.draftText
         }
     }
+    DisposableEffect(Unit) {
+        onDispose { onParkVoice() }
+    }
     BackHandler(enabled = showEmoji && !state.recording) { showEmoji = false }
-    BackHandler(enabled = state.recording) { onVoiceFinish(false) }
-    LaunchedEffect(state.recording) {
-        if (!state.recording) {
-            recordingLocked = false
+    BackHandler(enabled = state.recording && !recordingLocked) { onVoiceFinish(false) }
+    LaunchedEffect(state.recording, recordingLocked) {
+        if (!state.recording && !recordingLocked) {
             slideHint = VoiceGesture.HOLD
-        } else {
+        }
+        if (state.recording || recordingLocked) {
             showEmoji = false
         }
     }
@@ -2344,12 +2357,12 @@ private fun ComposerBar(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (state.recording && recordingLocked) {
+                if (recordingLocked) {
                     IconButton(onClick = { onVoiceFinish(false) }) {
                         Icon(Icons.Outlined.Close, contentDescription = "Отменить запись", tint = RecRed)
                     }
                 }
-                if (state.recording) {
+                if (state.recording || recordingLocked) {
                     RecordingStrip(
                         recordMs = state.recordMs,
                         locked = recordingLocked,
@@ -2446,7 +2459,7 @@ private fun ComposerBar(
                                         latest = ComposerRules.voiceGesture(dx, dy)
                                         if (latest == VoiceGesture.LOCK) {
                                             lockedNow = true
-                                            recordingLocked = true
+                                            onLockVoice()
                                         }
                                         slideHint = if (lockedNow) VoiceGesture.LOCK else latest
                                         change.consume()

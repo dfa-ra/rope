@@ -188,6 +188,8 @@ class MainActivity : AppCompatActivity() {
                     onAttachUris = { (application as RopeApp).repo.stageAttachments(it) },
                     onVoiceStart = { withMic("voice") { repo.startVoice() } },
                     onVoiceFinish = repo::finishVoice,
+                    onLockVoice = repo::lockVoice,
+                    onParkVoice = repo::parkLockedVoice,
                     onSeekVoice = repo::seekVoice,
                     onCycleVoiceSpeed = repo::cycleVoiceSpeed,
                     onVideoNoteStart = { withNoteMedia { repo.startVideoNote() } },
