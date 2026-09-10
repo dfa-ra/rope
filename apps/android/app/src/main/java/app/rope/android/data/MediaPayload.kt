@@ -411,6 +411,7 @@ data class ChatPrefs(
     val draft: String = "",
     val pinnedMessageId: String? = null,
     val archived: Boolean = false,
+    val linkPreviews: Boolean = true,
 ) {
     fun toJson(): String = JSONObject()
         .put("pinned", pinned)
@@ -420,6 +421,7 @@ data class ChatPrefs(
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
         .put("archived", archived)
+        .put("link_previews", linkPreviews)
         .toString()
 
     companion object {
@@ -435,6 +437,7 @@ data class ChatPrefs(
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
                     archived = o.optBoolean("archived"),
+                    linkPreviews = LpOffRules.parsePref(o.has("link_previews"), o.optBoolean("link_previews")),
                 )
             } catch (_: Exception) {
                 ChatPrefs()

@@ -15,6 +15,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,11 +26,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.ChatIds
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupNameRules
+import app.rope.android.data.LpOffRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -105,6 +110,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onRename: (String) -> Unit = {},
+    onToggleChatLinkPreviews: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -156,6 +162,33 @@ fun GroupInfoPane(
                                 enabled = GroupNameRules.parse(renameDraft) != null &&
                                     GroupNameRules.parse(renameDraft) != g.name,
                             ) { Text("Сохранить название") }
+                        }
+                    }
+                }
+            }
+            if (LpOffRules.applies(ChatIds.group(g.groupId))) {
+                item {
+                    SectionCard {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(LpOffRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    LpOffRules.HINT,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = state.chatLinkPreviews,
+                                onCheckedChange = { checked ->
+                                    if (checked != state.chatLinkPreviews) onToggleChatLinkPreviews()
+                                },
+                                modifier = Modifier.semantics { contentDescription = LpOffRules.TITLE },
+                            )
                         }
                     }
                 }

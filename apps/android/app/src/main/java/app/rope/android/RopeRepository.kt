@@ -64,6 +64,7 @@ import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.LpOffRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
@@ -168,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val chatLinkPreviews: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -591,6 +593,22 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.linkPreviewsEnabled
         store.saveLinkPreviews(next)
         _state.value = _state.value.copy(linkPreviewsEnabled = next)
+        if (!next) {
+            unfurlJob?.cancel()
+            unfurlResult = null
+            _state.value = _state.value.copy(composerPreview = null)
+        } else {
+            scheduleUnfurl(_state.value.draftText)
+        }
+    }
+
+    fun toggleChatLinkPreviews() {
+        val id = openChatId() ?: return
+        if (!LpOffRules.applies(id)) return
+        val cur = store.chatPrefs(id)
+        val next = !cur.linkPreviews
+        store.saveChatPrefs(id, cur.copy(linkPreviews = next))
+        _state.value = _state.value.copy(chatLinkPreviews = next)
         if (!next) {
             unfurlJob?.cancel()
             unfurlResult = null
@@ -1838,7 +1856,7 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(composerPreviewDismissedUrl = null)
         }
         if (!LinkPreviewRules.shouldFetch(
-                _state.value.linkPreviewsEnabled,
+                LpOffRules.enabled(_state.value.linkPreviewsEnabled, _state.value.chatLinkPreviews),
                 _state.value.recording || _state.value.recordingVideoNote,
                 text,
             ) ||
@@ -1855,7 +1873,7 @@ class RopeRepository(private val app: Application) {
             val self = coroutineContext[Job]
             delay(LinkPreviewRules.UNFURL_DEBOUNCE_MS)
             if (_state.value.recording || _state.value.recordingVideoNote) return@launch
-            if (!_state.value.linkPreviewsEnabled) return@launch
+            if (!LpOffRules.enabled(_state.value.linkPreviewsEnabled, _state.value.chatLinkPreviews)) return@launch
             if (!LinkPreviewRules.keepUnfurl(url, _state.value.draftText)) return@launch
             val withThumb = fetchPackedPreview(url)
             if (withThumb == null) {
@@ -1893,7 +1911,7 @@ class RopeRepository(private val app: Application) {
     ): PackedLinkPreview? {
         val deadlineNs = System.nanoTime() + LinkPreviewRules.SEND_WAIT_MS * 1_000_000L
         val packed = LinkPreviewRules.resolveSendPreview(
-            enabled = _state.value.linkPreviewsEnabled,
+            enabled = LpOffRules.enabled(_state.value.linkPreviewsEnabled, _state.value.chatLinkPreviews),
             sendText = text,
             dismissedUrl = dismissedUrl,
             attached = attached,
@@ -2169,6 +2187,7 @@ class RopeRepository(private val app: Application) {
             pendingAttachments = pending,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
+            chatLinkPreviews = LpOffRules.effective(chatId, prefs.linkPreviews),
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
