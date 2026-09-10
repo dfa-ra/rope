@@ -146,6 +146,7 @@ import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
+import app.rope.android.data.CodeCopyRules
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
@@ -740,6 +741,7 @@ fun ChatPane(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
+    onCopyCode: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
@@ -1132,6 +1134,7 @@ fun ChatPane(
             },
             onReply = { onReply(target); menuMessage = null },
             onCopy = { onCopy(target); menuMessage = null },
+            onCopyCode = { onCopyCode(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
@@ -1834,6 +1837,7 @@ private fun MessageTapOverlay(
     onReact: (String) -> Unit,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onCopyCode: () -> Unit = {},
     onForward: () -> Unit,
     onPin: () -> Unit,
     onDelete: () -> Unit,
@@ -1874,6 +1878,7 @@ private fun MessageTapOverlay(
                 pinned = pinned,
                 onReply = onReply,
                 onCopy = onCopy,
+                onCopyCode = onCopyCode,
                 onForward = onForward,
                 onPin = onPin,
                 onDelete = onDelete,
@@ -1889,6 +1894,7 @@ private fun MessageActionMenu(
     pinned: Boolean,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onCopyCode: () -> Unit = {},
     onForward: () -> Unit,
     onPin: () -> Unit,
     onDelete: () -> Unit,
@@ -1907,6 +1913,9 @@ private fun MessageActionMenu(
             }
             if (ChatActions.canCopy(m)) {
                 MessageMenuRow(Icons.Outlined.ContentCopy, "Копировать", onCopy)
+            }
+            if (CodeCopyRules.canCopy(m)) {
+                MessageMenuRow(Icons.Outlined.ContentCopy, CodeCopyRules.LABEL, onCopyCode)
             }
             if (ChatActions.canForward(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)

@@ -42,6 +42,7 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
+import app.rope.android.data.CodeCopyRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
@@ -777,6 +778,11 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun copyCode(msg: ChatMessage) {
+        val payload = CodeCopyRules.payload(msg) ?: return
+        copyText(payload)
     }
 
     fun togglePinMessage(msg: ChatMessage) {
