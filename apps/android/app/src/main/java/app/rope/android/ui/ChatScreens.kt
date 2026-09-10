@@ -75,7 +75,9 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Deselect
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
@@ -838,6 +840,18 @@ fun ChatPane(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (ChatSelection.showsAction(visible)) {
+                    IconButton(onClick = { selectedIds = ChatSelection.nextIds(selectedIds, visible) }) {
+                        Icon(
+                            if (ChatSelection.allSelected(selectedIds, visible)) {
+                                Icons.Outlined.Deselect
+                            } else {
+                                Icons.Outlined.SelectAll
+                            },
+                            contentDescription = ChatSelection.actionLabel(selectedIds, visible),
+                        )
+                    }
+                }
                 if (singleSelected != null && ChatActions.canEdit(singleSelected)) {
                     IconButton(onClick = { onEdit(singleSelected); selectedIds = emptySet() }) {
                         Icon(Icons.Outlined.Edit, contentDescription = "Изменить")
