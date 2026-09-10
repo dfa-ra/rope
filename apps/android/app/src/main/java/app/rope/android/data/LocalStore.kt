@@ -388,6 +388,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
 
+    fun saveAbout(text: String) {
+        put(BioRules.KEY, BioRules.sanitize(text))
+    }
+
+    fun about(): String = BioRules.sanitize(get(BioRules.KEY))
+
     fun saveLinkPreviews(enabled: Boolean) {
         put("link_previews", if (enabled) "1" else "0")
     }

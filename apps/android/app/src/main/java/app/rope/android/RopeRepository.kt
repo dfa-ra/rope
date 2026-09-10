@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.BioRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
@@ -167,6 +168,7 @@ data class UiState(
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
+    val about: String = "",
     val linkPreviewsEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                 _state.value = _state.value.copy(
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
+                    about = store.about(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
                 store.rehomeMisroutedMedia()
@@ -585,6 +588,13 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun setAbout(text: String) {
+        val next = BioRules.sanitize(text)
+        if (next == _state.value.about) return
+        store.saveAbout(next)
+        _state.value = _state.value.copy(about = next)
     }
 
     fun toggleLinkPreviews() {
