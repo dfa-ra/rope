@@ -147,6 +147,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
+import app.rope.android.data.CompactChatRules
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
@@ -311,6 +312,7 @@ fun ChatsPane(
                                     onPin = { onPinChat(c.id) },
                                     onMute = { onMuteChat(c.id) },
                                     query = state.chatQuery,
+                                    compact = state.compactChats,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
                                 )
@@ -333,6 +335,7 @@ fun ChatsPane(
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
                                 query = state.chatQuery,
+                                compact = state.compactChats,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
                             )
@@ -546,6 +549,7 @@ internal fun ConversationRow(
     onPin: () -> Unit,
     onMute: () -> Unit,
     query: String = "",
+    compact: Boolean = false,
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
 ) {
@@ -587,11 +591,20 @@ internal fun ConversationRow(
                     onClick = onClick,
                     onLongClick = { menu = !menu },
                 )
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(
+                    horizontal = CompactChatRules.PAD_H.dp,
+                    vertical = CompactChatRules.rowPadV(compact).dp,
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            InitialsAvatar(c.title, c.isGroup, c.online, saved = SavedMessagesRules.isSaved(c))
+            InitialsAvatar(
+                c.title,
+                c.isGroup,
+                c.online,
+                size = CompactChatRules.avatarDp(compact).dp,
+                saved = SavedMessagesRules.isSaved(c),
+            )
             Column(Modifier.weight(1f)) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -605,7 +618,14 @@ internal fun ConversationRow(
                             text = c.title,
                             query = query,
                             style = if (UnreadBadgeRules.emphasizeTitle(c.unread)) {
-                                MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                                val base = if (CompactChatRules.titleCompact(compact)) {
+                                    MaterialTheme.typography.titleSmall
+                                } else {
+                                    MaterialTheme.typography.titleMedium
+                                }
+                                base.copy(fontWeight = FontWeight.SemiBold)
+                            } else if (CompactChatRules.titleCompact(compact)) {
+                                MaterialTheme.typography.titleSmall
                             } else {
                                 MaterialTheme.typography.titleMedium
                             },
