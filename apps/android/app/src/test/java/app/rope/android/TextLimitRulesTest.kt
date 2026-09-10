@@ -10,7 +10,7 @@ import org.junit.Test
 
 class TextLimitRulesTest {
     @Test
-    fun telegramCapIs4096AndCounterIsNOverMax() {
+    fun telegramCapIs4096RunesAndCounterIsNOverMax() {
         assertEquals(6, LocalStore.VERSION)
         assertEquals(4096, TextLimitRules.TEXT_MAX)
         assertEquals(1024, MediaSendRules.CAPTION_MAX)
@@ -22,6 +22,19 @@ class TextLimitRulesTest {
         assertTrue(TextLimitRules.atLimit(over))
         assertFalse(TextLimitRules.atLimit("hi"))
         assertEquals("hi", TextLimitRules.limit("hi"))
+    }
+
+    @Test
+    fun supplementaryPlaneEmojiCountsAsOneRune() {
+        val thumb = "👍"
+        assertEquals(2, thumb.length)
+        assertEquals(1, TextLimitRules.runeCount(thumb))
+        val over = thumb.repeat(TextLimitRules.TEXT_MAX + 4)
+        val clipped = TextLimitRules.limit(over)
+        assertEquals(TextLimitRules.TEXT_MAX, TextLimitRules.runeCount(clipped))
+        assertEquals(TextLimitRules.TEXT_MAX * 2, clipped.length)
+        assertFalse(clipped.last().isHighSurrogate())
+        assertEquals(thumb, TextLimitRules.takeRunes(thumb + "я", 1))
     }
 
     @Test
@@ -44,6 +57,11 @@ class TextLimitRulesTest {
         assertEquals(
             "б".repeat(TextLimitRules.TEXT_MAX),
             TextLimitRules.forComposer("б".repeat(TextLimitRules.TEXT_MAX + 3), pendingMedia = false),
+        )
+        val emojiOver = "👍".repeat(TextLimitRules.TEXT_MAX + 2)
+        assertEquals(
+            TextLimitRules.TEXT_MAX,
+            TextLimitRules.runeCount(TextLimitRules.forComposer(emojiOver, pendingMedia = false)),
         )
         assertEquals("ок", TextLimitRules.forComposer("ок", pendingMedia = false))
         assertEquals("ок", TextLimitRules.forComposer("ок", pendingMedia = true))
