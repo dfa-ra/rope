@@ -13,6 +13,10 @@ const (
 	Magic           = "ROPE"
 	ProtocolVersion = 1
 	TypeText        = 1
+	TypeMedia       = 2
+	TypeGroupText   = 3
+	TypeCall        = 4
+	TypeReceipt     = 5
 	HeaderAADLen    = 96
 	MaxCiphertext   = 65536
 )
@@ -43,6 +47,9 @@ func Parse(raw []byte) (Parsed, error) {
 	}
 	version := binary.LittleEndian.Uint16(raw[4:6])
 	msgType := raw[6]
+	if !KnownType(msgType) {
+		return Parsed{}, fmt.Errorf("unknown envelope type")
+	}
 	id, err := uuid.FromBytes(raw[8:24])
 	if err != nil {
 		return Parsed{}, err
@@ -71,6 +78,15 @@ func Parse(raw []byte) (Parsed, error) {
 		SignedBody: raw[:len(raw)-64],
 		Signature:  sig,
 	}, nil
+}
+
+func KnownType(t uint8) bool {
+	switch t {
+	case TypeText, TypeMedia, TypeGroupText, TypeCall, TypeReceipt:
+		return true
+	default:
+		return false
+	}
 }
 
 func VerifySender(p Parsed, publicKey []byte) error {
