@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.DeleteMessageRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -718,10 +719,11 @@ class RopeRepository(private val app: Application) {
     }
 
     fun deleteMessage(msg: ChatMessage) {
-        if (!msg.outgoing || msg.deleted) return
+        if (!DeleteMessageRules.canShow(msg)) return
         store.markDeleted(msg.id)
         refreshOpenChat()
-        if (SavedMessagesRules.skipNetwork(openChatId() ?: msg.peerDeviceId)) return
+        val skip = SavedMessagesRules.skipNetwork(openChatId() ?: msg.peerDeviceId)
+        if (!DeleteMessageRules.notifyPeer(msg.outgoing, skip)) return
         sendControl(EnvelopeTypes.RECEIPT, ChatControl(ChatControl.DELETE, msg.id).toJson().toByteArray())
     }
 

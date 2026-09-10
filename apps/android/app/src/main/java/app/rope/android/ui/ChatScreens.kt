@@ -146,6 +146,7 @@ import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
+import app.rope.android.data.DeleteMessageRules
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListMode
@@ -1919,7 +1920,7 @@ private fun MessageActionMenu(
                 )
             }
             if (ChatActions.canDelete(m)) {
-                MessageMenuRow(Icons.Outlined.Delete, "Удалить", onDelete)
+                MessageMenuRow(Icons.Outlined.Delete, DeleteMessageRules.menuLabel(m), onDelete)
             }
             if (ChatActions.canOpen(m)) {
                 MessageMenuRow(Icons.Outlined.OpenInFull, "Открыть", onOpen)

@@ -262,7 +262,7 @@ class Stage2UxTest {
         assertTrue(ChatActions.canReply(incoming))
         assertTrue(ChatActions.canForward(incoming))
         assertFalse(ChatActions.canEdit(incoming))
-        assertFalse(ChatActions.canDelete(incoming))
+        assertTrue(ChatActions.canDelete(incoming))
         assertTrue(ChatActions.canEdit(mine))
         assertTrue(ChatActions.canDelete(mine))
         assertFalse(ChatActions.canEdit(photo))

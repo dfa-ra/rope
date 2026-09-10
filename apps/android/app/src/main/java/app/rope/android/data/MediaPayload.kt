@@ -393,7 +393,7 @@ object ChatActions {
             !msg.deleted &&
             (msg.kind == MessageKind.TEXT || msg.kind == MessageKind.GROUP_TEXT)
 
-    fun canDelete(msg: ChatMessage): Boolean = msg.outgoing && !msg.deleted
+    fun canDelete(msg: ChatMessage): Boolean = DeleteMessageRules.canShow(msg)
 
     fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
 
