@@ -410,30 +410,37 @@ data class ChatPrefs(
     val lastReadMs: Long = 0,
     val draft: String = "",
     val pinnedMessageId: String? = null,
+    val pinnedMessageIds: List<String> = emptyList(),
     val archived: Boolean = false,
 ) {
-    fun toJson(): String = JSONObject()
-        .put("pinned", pinned)
-        .put("muted", muted)
-        .put("unread", unread)
-        .put("last_read_ms", lastReadMs)
-        .put("draft", draft)
-        .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
-        .put("archived", archived)
-        .toString()
+    fun toJson(): String {
+        val ids = PinListRules.stored(pinnedMessageIds, pinnedMessageId)
+        return JSONObject()
+            .put("pinned", pinned)
+            .put("muted", muted)
+            .put("unread", unread)
+            .put("last_read_ms", lastReadMs)
+            .put("draft", draft)
+            .put("pinned_message", PinListRules.latest(ids) ?: JSONObject.NULL)
+            .put("pinned_messages", PinListRules.toArray(ids))
+            .put("archived", archived)
+            .toString()
+    }
 
     companion object {
         fun parse(raw: String?): ChatPrefs {
             if (raw.isNullOrBlank()) return ChatPrefs()
             return try {
                 val o = JSONObject(raw)
+                val ids = PinListRules.parse(o)
                 ChatPrefs(
                     pinned = o.optBoolean("pinned"),
                     muted = o.optBoolean("muted"),
                     unread = o.optInt("unread"),
                     lastReadMs = o.optLong("last_read_ms"),
                     draft = o.optString("draft"),
-                    pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
+                    pinnedMessageId = PinListRules.latest(ids),
+                    pinnedMessageIds = ids,
                     archived = o.optBoolean("archived"),
                 )
             } catch (_: Exception) {

@@ -66,6 +66,7 @@ import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
+import app.rope.android.data.PinListRules
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
@@ -182,6 +183,7 @@ data class UiState(
     val scrollToMessageId: String? = null,
     val notice: String? = null,
     val pinnedMessageId: String? = null,
+    val pinnedMessageIds: List<String> = emptyList(),
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
@@ -782,17 +784,42 @@ class RopeRepository(private val app: Application) {
         if (msg.deleted) return
         val chatId = openChatId() ?: msg.peerDeviceId
         val cur = store.chatPrefs(chatId)
-        val nextId = if (cur.pinnedMessageId == msg.id) null else msg.id
-        store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = nextId))
-        _state.value = _state.value.copy(pinnedMessageId = nextId)
+        val current = PinListRules.stored(cur.pinnedMessageIds, cur.pinnedMessageId)
+        val next = PinListRules.toggle(current, msg.id)
+        persistPins(chatId, cur, next)
         sendControl(
             EnvelopeTypes.RECEIPT,
             ChatControl(
                 ChatControl.PIN,
                 msg.id,
-                op = if (nextId == null) ReactionPayload.CLEAR else ReactionPayload.SET,
+                op = if (PinListRules.contains(next, msg.id)) ReactionPayload.SET else ReactionPayload.CLEAR,
             ).toJson().toByteArray(),
         )
+    }
+
+    fun unpinAllMessages() {
+        val chatId = openChatId() ?: return
+        val cur = store.chatPrefs(chatId)
+        val current = PinListRules.stored(cur.pinnedMessageIds, cur.pinnedMessageId)
+        if (!PinListRules.showUnpinAll(current.size)) return
+        persistPins(chatId, cur, emptyList())
+        current.forEach { id ->
+            sendControl(
+                EnvelopeTypes.RECEIPT,
+                ChatControl(ChatControl.PIN, id, op = ReactionPayload.CLEAR).toJson().toByteArray(),
+            )
+        }
+    }
+
+    private fun persistPins(chatId: String, cur: ChatPrefs, ids: List<String>) {
+        val next = PinListRules.normalize(ids)
+        store.saveChatPrefs(chatId, PinListRules.withPins(cur, next))
+        if (openChatId() == chatId) {
+            _state.value = _state.value.copy(
+                pinnedMessageId = PinListRules.latest(next),
+                pinnedMessageIds = next,
+            )
+        }
     }
 
     fun jumpToMessage(id: String?) {
@@ -2142,6 +2169,7 @@ class RopeRepository(private val app: Application) {
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
+            pinnedMessageIds = PinListRules.stored(prefs.pinnedMessageIds, prefs.pinnedMessageId),
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
@@ -2787,11 +2815,13 @@ class RopeRepository(private val app: Application) {
                         if (ChatControlRules.allowPin(sender.deviceId, target, members) && target != null) {
                             val chatId = target.peerDeviceId
                             val cur = store.chatPrefs(chatId)
-                            val next = if (control.op == ReactionPayload.CLEAR) null else control.targetId
-                            store.saveChatPrefs(chatId, cur.copy(pinnedMessageId = next))
-                            if (openChatId() == chatId) {
-                                _state.value = _state.value.copy(pinnedMessageId = next)
-                            }
+                            val current = PinListRules.stored(cur.pinnedMessageIds, cur.pinnedMessageId)
+                            val next = PinListRules.applyRemote(
+                                current,
+                                control.targetId,
+                                clear = control.op == ReactionPayload.CLEAR,
+                            )
+                            persistPins(chatId, cur, next)
                         }
                     }
                     reaction != null -> {

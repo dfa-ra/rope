@@ -295,6 +295,7 @@ class Stage2UxTest {
         assertEquals(3, prefs.unread)
         assertEquals("черн", prefs.draft)
         assertEquals("m1", prefs.pinnedMessageId)
+        assertEquals(listOf("m1"), prefs.pinnedMessageIds)
         val msg = ChatMessage("m", "p", false, "Секретный текст", MessageStatus.DELIVERED_TO_DEVICE, 1L)
         assertTrue(MessageSearch.matches(msg, "секрет"))
         assertFalse(MessageSearch.matches(msg, "фото"))

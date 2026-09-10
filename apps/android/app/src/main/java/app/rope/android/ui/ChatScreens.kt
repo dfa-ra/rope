@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -156,6 +157,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.PinListRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
@@ -714,7 +716,7 @@ internal fun ConversationRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatPane(
     state: UiState,
@@ -741,6 +743,7 @@ fun ChatPane(
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
+    onUnpinAllMessages: () -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
@@ -793,9 +796,21 @@ fun ChatPane(
     var showAttach by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
+    var showPins by remember { mutableStateOf(false) }
+    val pinIds = remember(state.pinnedMessageIds, state.pinnedMessageId) {
+        PinListRules.stored(state.pinnedMessageIds, state.pinnedMessageId)
+    }
+    var barId by remember { mutableStateOf(state.pinnedMessageId) }
+    LaunchedEffect(pinIds, state.pinnedMessageId) {
+        barId = state.pinnedMessageId
+    }
     val selecting = selectedIds.isNotEmpty()
     val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
     val singleSelected = selectedMsgs.singleOrNull()
+    val pinnedVisible = remember(state.messages, pinIds) {
+        PinListRules.visible(state.messages, pinIds)
+    }
+    val pinned = PinListRules.barMessage(pinnedVisible, barId)
     BackHandler(enabled = menuMessage != null) {
         if (reactionExpanded) reactionExpanded = false else menuMessage = null
     }
@@ -804,6 +819,10 @@ fun ChatPane(
         onMessageQuery("")
     }
     BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
+    BackHandler(enabled = showPins && menuMessage == null) { showPins = false }
+    LaunchedEffect(pinnedVisible.size) {
+        if (pinnedVisible.isEmpty()) showPins = false
+    }
     LaunchedEffect(threadItems.size, state.messageQuery) {
         if (threadItems.isNotEmpty() && state.scrollToMessageId == null) {
             list.animateScrollToItem(threadItems.lastIndex)
@@ -818,7 +837,6 @@ fun ChatPane(
         delay(700)
         if (flashId == id) flashId = null
     }
-    val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
@@ -926,22 +944,62 @@ fun ChatPane(
             )
         }
         pinned?.let { pin ->
+            val pinCount = pinnedVisible.size
             Surface(
                 tonalElevation = 2.dp,
                 shape = RoundedCornerShape(bottomStart = RopeShapes.quote, bottomEnd = RopeShapes.quote),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onJump(pin.id) },
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
-                    Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    Modifier
+                        .combinedClickable(
+                            onClick = {
+                                onJump(pin.id)
+                                if (PinListRules.showList(pinCount)) {
+                                    barId = PinListRules.nextShown(pinnedVisible.map { it.id }, pin.id)
+                                }
+                            },
+                            onLongClick = {
+                                if (PinListRules.showList(pinCount)) showPins = true
+                            },
+                        )
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Outlined.PushPin, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    Box(
+                        Modifier
+                            .width(3.dp)
+                            .height(32.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                    Icon(
+                        Icons.Outlined.PushPin,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
                     Column(Modifier.weight(1f)) {
-                        Text("Закреплено", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text(pin.preview(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            PinListRules.barLabel(pinCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            pin.preview(),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (PinListRules.showList(pinCount)) {
+                        IconButton(onClick = { showPins = true }) {
+                            Icon(
+                                Icons.Outlined.KeyboardArrowDown,
+                                contentDescription = PinListRules.LIST_TITLE,
+                            )
+                        }
                     }
                 }
             }
@@ -1118,7 +1176,7 @@ fun ChatPane(
     menuMessage?.let { target ->
         MessageTapOverlay(
             message = target,
-            pinned = state.pinnedMessageId == target.id,
+            pinned = PinListRules.contains(pinIds, target.id),
             expanded = reactionExpanded,
             onToggleExpand = { reactionExpanded = !reactionExpanded },
             onDismiss = {
@@ -1147,6 +1205,25 @@ fun ChatPane(
             onCancel = { onVideoNoteFinish(false) },
         )
     }
+    }
+    if (showPins) {
+        PinListSheet(
+            messages = pinnedVisible.asReversed(),
+            onJump = { id ->
+                showPins = false
+                onJump(id)
+            },
+            onUnpin = onPinMessage,
+            onUnpinAll = if (PinListRules.showUnpinAll(pinnedVisible.size)) {
+                {
+                    showPins = false
+                    onUnpinAllMessages()
+                }
+            } else {
+                null
+            },
+            onDismiss = { showPins = false },
+        )
     }
     if (showAttach) {
         AttachSheet(
@@ -2758,6 +2835,75 @@ private fun GlassActionButton(
             Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
             Text(label, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PinListSheet(
+    messages: List<ChatMessage>,
+    onJump: (String?) -> Unit,
+    onUnpin: (ChatMessage) -> Unit,
+    onUnpinAll: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    PinListRules.LIST_TITLE,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (onUnpinAll != null) {
+                    TextButton(onClick = onUnpinAll) { Text(PinListRules.UNPIN_ALL) }
+                }
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+            ) {
+                items(messages, key = { it.id }) { msg ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onJump(msg.id) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            Icons.Outlined.PushPin,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            msg.preview(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { onUnpin(msg) }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Открепить")
+                        }
+                    }
+                }
+            }
         }
     }
 }
