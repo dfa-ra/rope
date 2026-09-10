@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.core.content.FileProvider
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -43,6 +44,7 @@ import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
+import app.rope.android.data.CopyPhotoRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
@@ -772,7 +774,19 @@ class RopeRepository(private val app: Application) {
     }
 
     fun copyMessage(msg: ChatMessage) {
-        if (!msg.text.isNotBlank() || msg.deleted) return
+        if (msg.deleted) return
+        val media = File(app.filesDir, CopyPhotoRules.MEDIA_DIR)
+        val photo = CopyPhotoRules.clipFile(msg, media)
+        if (photo != null) {
+            val uri = FileProvider.getUriForFile(app, CopyPhotoRules.authority(app.packageName), photo)
+            val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(
+                ClipData(CopyPhotoRules.CLIP_LABEL, CopyPhotoRules.clipMimeTypes(photo), ClipData.Item(uri)),
+            )
+            _state.value = _state.value.copy(notice = "Скопировано")
+            return
+        }
+        if (msg.text.isBlank()) return
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")

@@ -395,7 +395,8 @@ object ChatActions {
 
     fun canDelete(msg: ChatMessage): Boolean = msg.outgoing && !msg.deleted
 
-    fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
+    fun canCopy(msg: ChatMessage): Boolean =
+        !msg.deleted && (msg.text.isNotBlank() || CopyPhotoRules.canCopyImage(msg))
 
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
 
