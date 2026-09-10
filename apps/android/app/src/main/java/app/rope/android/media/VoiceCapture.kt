@@ -23,9 +23,12 @@ class VoiceRecorder(private val context: Context) {
     private var recorder: MediaRecorder? = null
     private var file: File? = null
     private var startedAt = 0L
+    private var pausedAt = 0L
+    private var pausedTotal = 0L
     private val amplitudes = mutableListOf<Int>()
 
     val recording: Boolean get() = recorder != null
+    val paused: Boolean get() = pausedAt > 0
 
     fun start(): File {
         cancel()
@@ -48,8 +51,35 @@ class VoiceRecorder(private val context: Context) {
         recorder = rec
         file = dest
         startedAt = System.currentTimeMillis()
+        pausedAt = 0L
+        pausedTotal = 0L
         amplitudes.clear()
         return dest
+    }
+
+    fun pause(): Boolean {
+        val rec = recorder ?: return false
+        if (pausedAt > 0) return true
+        return try {
+            rec.pause()
+            pausedAt = System.currentTimeMillis()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun resume(): Boolean {
+        val rec = recorder ?: return false
+        if (pausedAt == 0L) return true
+        return try {
+            rec.resume()
+            pausedTotal += System.currentTimeMillis() - pausedAt
+            pausedAt = 0L
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun amplitude(): Int {
@@ -65,9 +95,11 @@ class VoiceRecorder(private val context: Context) {
     fun stop(): VoiceTake? {
         val dest = file ?: return null
         val samples = amplitudes.toList()
+        if (pausedAt > 0) resume()
         return try {
             recorder?.stop()
-            val ms = (System.currentTimeMillis() - startedAt).coerceAtLeast(0)
+            val wall = System.currentTimeMillis() - startedAt - pausedTotal
+            val ms = wall.coerceAtLeast(0)
             val bars = VoicePlayback.barsFromAmplitudes(samples)
             VoiceTake(dest, ms, VoicePlayback.encodeWaveform(bars).takeIf { bars.isNotEmpty() }.orEmpty())
         } catch (_: Exception) {
@@ -95,6 +127,8 @@ class VoiceRecorder(private val context: Context) {
         recorder = null
         file = null
         startedAt = 0
+        pausedAt = 0L
+        pausedTotal = 0L
         amplitudes.clear()
     }
 

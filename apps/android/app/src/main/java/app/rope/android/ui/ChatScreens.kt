@@ -83,6 +83,8 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
@@ -155,6 +157,7 @@ import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
+import app.rope.android.data.PauseRecRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
@@ -755,6 +758,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onPauseVoice: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1108,6 +1112,7 @@ fun ChatPane(
                 onAttach = { showAttach = true },
                 onVoiceStart = onVoiceStart,
                 onVoiceFinish = onVoiceFinish,
+                onPauseVoice = onPauseVoice,
                 onCancelComposer = onCancelComposer,
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
@@ -2233,6 +2238,7 @@ private fun ComposerBar(
     onAttach: () -> Unit,
     onVoiceStart: () -> Unit,
     onVoiceFinish: (Boolean) -> Unit,
+    onPauseVoice: () -> Unit = {},
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
@@ -2353,7 +2359,9 @@ private fun ComposerBar(
                     RecordingStrip(
                         recordMs = state.recordMs,
                         locked = recordingLocked,
+                        paused = state.recordingPaused,
                         hint = slideHint,
+                        onPause = onPauseVoice,
                         modifier = Modifier
                             .weight(1f)
                             .padding(bottom = 6.dp),
@@ -2518,7 +2526,9 @@ private fun SendActionButton(
 private fun RecordingStrip(
     recordMs: Long,
     locked: Boolean,
+    paused: Boolean = false,
     hint: VoiceGesture,
+    onPause: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val pulse = rememberInfiniteTransition(label = "recPulse")
@@ -2534,7 +2544,8 @@ private fun RecordingStrip(
         VoiceGesture.HOLD -> RecRed
     }
     val caption = when {
-        locked -> "запись закреплена"
+        PauseRecRules.canPause(true, locked) && paused -> PauseRecRules.caption(true)
+        locked -> PauseRecRules.caption(false)
         hint == VoiceGesture.CANCEL -> "отпустите — отмена"
         hint == VoiceGesture.LOCK -> "отпустите — закрепить"
         else -> "влево — отмена · вверх — закрепить"
@@ -2569,6 +2580,15 @@ private fun RecordingStrip(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        if (PauseRecRules.canPause(true, locked)) {
+            IconButton(onClick = onPause) {
+                Icon(
+                    if (paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                    contentDescription = if (paused) PauseRecRules.RESUME else PauseRecRules.PAUSE,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
 

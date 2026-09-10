@@ -64,6 +64,7 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.PauseRecRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -148,6 +149,7 @@ data class UiState(
     val draftText: String = "",
     val onlineIds: Set<String> = emptySet(),
     val recording: Boolean = false,
+    val recordingPaused: Boolean = false,
     val recordingVideoNote: Boolean = false,
     val recordMs: Long = 0,
     val playingVoiceId: String? = null,
@@ -966,11 +968,12 @@ class RopeRepository(private val app: Application) {
             voiceRecorder.start()
             unfurlJob?.cancel()
             unfurlResult = null
-            _state.value = _state.value.copy(recording = true, recordMs = 0, error = null)
+            _state.value = _state.value.copy(recording = true, recordingPaused = false, recordMs = 0, error = null)
             recordJob?.cancel()
             recordJob = scope.launch {
                 while (_state.value.recording) {
                     delay(80)
+                    if (!PauseRecRules.clockRuns(_state.value.recordingPaused)) continue
                     voiceRecorder.amplitude()
                     val next = _state.value.recordMs + 80
                     _state.value = _state.value.copy(recordMs = next)
@@ -985,6 +988,14 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun togglePauseVoice() {
+        if (!_state.value.recording) return
+        val next = PauseRecRules.nextPaused(_state.value.recordingPaused)
+        val ok = if (next) voiceRecorder.pause() else voiceRecorder.resume()
+        if (!ok) return
+        _state.value = _state.value.copy(recordingPaused = next)
+    }
+
     fun finishVoice(send: Boolean) {
         val take = try {
             voiceRecorder.stop()
@@ -992,7 +1003,7 @@ class RopeRepository(private val app: Application) {
             null
         }
         recordJob?.cancel()
-        _state.value = _state.value.copy(recording = false, recordMs = 0)
+        _state.value = _state.value.copy(recording = false, recordingPaused = false, recordMs = 0)
         if (!send || take == null || take.durationMs < VoiceRecorder.MIN_MS) {
             take?.file?.delete()
             return
