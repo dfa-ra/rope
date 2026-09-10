@@ -1855,6 +1855,7 @@ private fun MessageTapOverlay(
     onOpen: () -> Unit,
     onInfo: () -> Unit = {},
 ) {
+    Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxSize()
