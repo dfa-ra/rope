@@ -92,7 +92,7 @@ class PinOrderRulesTest {
         val rows = ChatListRules.rows(listOf(later, savedSecond, peerFirst, idle), "", ChatListMode.ALL)
         assertEquals(listOf(anna.id, saved.id, boris.id, idle.id), rows.map { it.id })
         assertEquals(listOf(anna.id, saved.id, boris.id), ChatListRules.pinnedBlock(rows, "").map { it.id })
-        val searching = ChatListRules.rows(listOf(later, savedSecond, peerFirst), "анн")
+        val searching = ChatListRules.rows(listOf(later, savedSecond, peerFirst), "анна")
         assertEquals(listOf(anna.id), searching.map { it.id })
     }
 
