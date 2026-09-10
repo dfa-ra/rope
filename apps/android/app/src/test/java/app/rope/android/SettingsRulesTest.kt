@@ -5,6 +5,7 @@ import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,6 +17,22 @@ class SettingsRulesTest {
         assertEquals("aabb ccdd eeff 0011 2233 4455 6677 8899 aabb ccdd eeff 0011 2233 4455 6677 8899", grouped)
         assertEquals(raw.lowercase(), SettingsRules.copyFingerprintValue(grouped))
         assertEquals("dead beef", SettingsRules.formatHexGroups("dead:beef"))
+    }
+
+    @Test
+    fun pinHexRejectsControlBeforeTrim() {
+        assertEquals("aabb", SettingsRules.pinHex("aabb"))
+        assertEquals("aabb", SettingsRules.pinHex("  aabb  "))
+        assertNull(SettingsRules.pinHex("\naabb"))
+        assertNull(SettingsRules.pinHex("aabb\n"))
+        assertNull(SettingsRules.pinHex("aabb\r"))
+        assertNull(SettingsRules.pinHex("aabb\u0000"))
+        assertNull(SettingsRules.pinHex(""))
+        assertNull(SettingsRules.pinHex("   "))
+        assertEquals("dead beef", SettingsRules.formatHexGroups("  dead:beef  "))
+        assertEquals("", SettingsRules.formatHexGroups("\ndeadbeef"))
+        assertEquals("", SettingsRules.copyFingerprintValue("deadbeef\n"))
+        assertEquals("deadbeef", SettingsRules.copyFingerprintValue("  dead beef  "))
     }
 
     @Test

@@ -5,9 +5,22 @@ package app.rope.android.data
  * Notifications stay on the live WSS; this is not FCM.
  */
 object SettingsRules {
+    /**
+     * Fail closed on CR/LF/NUL before trim so a newline prefix cannot become
+     * a live Settings fingerprint or server-id hex. Spaces still trim.
+     * Empty after trim still drops. Not PinnedClient TLS compare.
+     */
+    fun pinHex(raw: String): String? {
+        if (raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0) {
+            return null
+        }
+        return raw.trim().takeIf { it.isNotEmpty() }
+    }
+
     fun formatHexGroups(hex: String): String {
-        val clean = hex.trim().lowercase().filter { it in '0'..'9' || it in 'a'..'f' }
-        if (clean.isEmpty()) return hex.trim()
+        val text = pinHex(hex) ?: return ""
+        val clean = text.lowercase().filter { it in '0'..'9' || it in 'a'..'f' }
+        if (clean.isEmpty()) return text
         return clean.chunked(4).joinToString(" ")
     }
 
@@ -41,6 +54,8 @@ object SettingsRules {
     fun aboutBody(): String =
         "Приватный self-hosted мессенджер. Ключи на телефоне, релей видит только шифротекст."
 
-    fun copyFingerprintValue(hex: String): String =
-        hex.trim().lowercase().filter { it in '0'..'9' || it in 'a'..'f' }
+    fun copyFingerprintValue(hex: String): String {
+        val text = pinHex(hex) ?: return ""
+        return text.lowercase().filter { it in '0'..'9' || it in 'a'..'f' }
+    }
 }
