@@ -35,6 +35,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
+import app.rope.android.data.JoinClipboardRules
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -616,6 +617,22 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", value))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun pasteJoinUrl(): String? {
+        val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip
+        val raw = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0).coerceToText(app).toString()
+        } else {
+            null
+        }
+        val accepted = JoinClipboardRules.accept(raw)
+        if (accepted == null) {
+            notice(JoinClipboardRules.EMPTY)
+            return null
+        }
+        return accepted
     }
 
     fun sendDraft() {

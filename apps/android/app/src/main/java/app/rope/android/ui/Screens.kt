@@ -76,6 +76,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.net.Uri
+import app.rope.android.data.JoinClipboardRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
@@ -111,6 +112,7 @@ fun RopeScaffold(
     onInvite: () -> Unit,
     onStatus: () -> Unit,
     onScan: () -> Unit,
+    onPasteJoin: () -> String? = { null },
     onUpdateApp: () -> Unit,
     onUpgradeCore: (String, String) -> Unit,
     onRestoreBackup: () -> Unit,
@@ -288,7 +290,7 @@ fun RopeScaffold(
                     when (screen) {
                         Screen.Start -> StartPane(onGo, onRestoreBackup)
                         Screen.Provision -> ProvisionPane(!state.busy, onProvision) { onBack() }
-                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan) { onBack() }
+                        Screen.Join -> JoinPane(!state.busy, state.pendingInvite.orEmpty(), onJoin, onJoinDev, onScan, onPasteJoin) { onBack() }
                         Screen.Home -> HomePane(state, onGo, onStatus, onInvite)
                         Screen.Chats, Screen.Groups, Screen.Archive -> app.rope.android.ui.ChatsPane(
                             state,
@@ -730,6 +732,7 @@ private fun JoinPane(
     onJoin: (String, String) -> Unit,
     onJoinDev: (String, Int, String, String) -> Unit,
     onScan: () -> Unit,
+    onPasteJoin: () -> String? = { null },
     onBack: () -> Unit,
 ) {
     var url by remember(initialInvite) { mutableStateOf(initialInvite) }
@@ -792,6 +795,15 @@ private fun JoinPane(
         HorizontalDivider()
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GlowButton("Сканировать QR", onScan, Modifier.fillMaxWidth(), enabled = enabled)
+            QuietButton(
+                JoinClipboardRules.LABEL,
+                {
+                    val pasted = onPasteJoin()
+                    if (pasted != null) url = pasted
+                },
+                Modifier.fillMaxWidth(),
+                enabled = enabled,
+            )
             QuietButton(
                 "Войти по ссылке",
                 { onJoin(url, name) },

@@ -171,6 +171,7 @@ class MainActivity : AppCompatActivity() {
                                 .setPrompt("Scan Rope invite"),
                         )
                     },
+                    onPasteJoin = repo::pasteJoinUrl,
                     onUpdateApp = {
                         if (!ensureInstallPermission()) return@RopeScaffold
                         repo.updateApp()
