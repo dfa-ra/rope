@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.ChatVibRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -17,8 +18,17 @@ class RopeNotifier(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 26) {
             val mgr = context.getSystemService(NotificationManager::class.java)
             mgr.createNotificationChannel(
-                NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                NotificationChannel(ChatVibRules.CHANNEL_VIB, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                    enableVibration(true)
+                    vibrationPattern = ChatVibRules.pattern(true)
+                },
+            )
+            mgr.createNotificationChannel(
+                NotificationChannel(ChatVibRules.CHANNEL_NOVIB, "Сообщения без вибрации", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                    enableVibration(false)
+                    vibrationPattern = ChatVibRules.pattern(false)
                 },
             )
             mgr.createNotificationChannel(
@@ -29,19 +39,20 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(title: String, body: String, notifyId: Int = body.hashCode(), vibrate: Boolean = true) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, MSG)
+        val n = NotificationCompat.Builder(context, ChatVibRules.channelId(vibrate))
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
+            .setVibrate(ChatVibRules.pattern(vibrate))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
     }
@@ -84,7 +95,6 @@ class RopeNotifier(private val context: Context) {
     }
 
     companion object {
-        private const val MSG = "rope-messages"
         private const val CALL = "rope-calls"
         private const val CALL_ID = 7102
     }

@@ -144,6 +144,7 @@ import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ChatVibRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
@@ -205,6 +206,7 @@ fun ChatsPane(
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
+    onVibrateChat: (String) -> Unit = {},
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
@@ -310,6 +312,7 @@ fun ChatsPane(
                                     onClick = { onOpen(c) },
                                     onPin = { onPinChat(c.id) },
                                     onMute = { onMuteChat(c.id) },
+                                    onVibrate = { onVibrateChat(c.id) },
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
@@ -332,6 +335,7 @@ fun ChatsPane(
                                 onClick = { onOpen(c) },
                                 onPin = { onPinChat(c.id) },
                                 onMute = { onMuteChat(c.id) },
+                                onVibrate = { onVibrateChat(c.id) },
                                 query = state.chatQuery,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
@@ -545,6 +549,7 @@ internal fun ConversationRow(
     onClick: () -> Unit,
     onPin: () -> Unit,
     onMute: () -> Unit,
+    onVibrate: () -> Unit = {},
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
@@ -702,6 +707,11 @@ internal fun ConversationRow(
                 }
                 TextButton(onClick = { onMute(); menu = false }) {
                     Text(if (c.muted) "Включить звук" else "Без звука")
+                }
+                if (ChatVibRules.canToggle(c.id)) {
+                    TextButton(onClick = { onVibrate(); menu = false }) {
+                        Text(ChatVibRules.menuLabel(c.vibrate))
+                    }
                 }
                 if (onArchive != null && ArchiveRules.canArchive(c.id)) {
                     TextButton(onClick = { onArchive(); menu = false }) {
