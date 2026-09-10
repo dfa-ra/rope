@@ -153,6 +153,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.GroupOnlineRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
@@ -758,14 +759,24 @@ fun ChatPane(
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
-    val online = state.group?.let { g ->
-        g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
-    } ?: (state.peer?.online == true)
+    val onlineCount = state.group?.let { g ->
+        GroupOnlineRules.onlineCount(
+            g.members,
+            state.onlineIds,
+            state.profile?.deviceId,
+            selfOnline = !state.offline,
+        )
+    } ?: 0
+    val online = if (state.group != null) {
+        onlineCount > 0
+    } else {
+        state.peer?.online == true
+    }
     val typing = state.typingName
     val subtitle = when {
         !typing.isNullOrBlank() -> typing
         saved -> SavedMessagesRules.IDLE_SUBTITLE
-        state.group != null -> "${state.group.members.size} участников · ${if (online) "кто-то в сети" else "все офлайн"}"
+        state.group != null -> GroupOnlineRules.subtitle(state.group.members.size, onlineCount)
         else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
     }
     val mentionNames = remember(state.group, state.devices, state.profile?.displayName) {

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupOnlineRules
 import app.rope.android.data.RoleRules
 
 @Composable
@@ -132,7 +133,15 @@ fun GroupInfoPane(
                     SectionCard {
                         Text(g.name, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "${g.members.size} участников",
+                            GroupOnlineRules.subtitle(
+                                g.members.size,
+                                GroupOnlineRules.onlineCount(
+                                    g.members,
+                                    state.onlineIds,
+                                    me,
+                                    selfOnline = !state.offline,
+                                ),
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
