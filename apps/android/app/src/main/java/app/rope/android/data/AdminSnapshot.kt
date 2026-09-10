@@ -14,7 +14,7 @@ data class AdminSnapshot(
 ) {
     companion object {
         fun from(obj: JSONObject): AdminSnapshot {
-            fun n(key: String) = obj.opt(key)?.toString() ?: "—"
+            fun n(key: String) = oneLine(obj.opt(key)?.toString())
             val bytes = obj.optLong("object_bytes")
             val cards = listOf(
                 AdminCard("Версия ядра", n("version"), "protocol ${n("protocol_version")}"),
@@ -33,7 +33,7 @@ data class AdminSnapshot(
         fun turnValue(obj: JSONObject): String {
             val running = obj.optBoolean("turn_running")
             val configured = obj.optBoolean("ice_enabled")
-            val err = obj.optString("turn_error").trim()
+            val err = oneLine(obj.optString("turn_error"), blank = "")
             val allocKnown = obj.has("turn_allocate_ok")
             val alloc = obj.optBoolean("turn_allocate_ok")
             return when {
@@ -46,19 +46,22 @@ data class AdminSnapshot(
         }
 
         fun turnHint(obj: JSONObject): String {
-            val err = obj.optString("turn_error").trim()
-            val turn = obj.opt("turn_port")?.toString() ?: "3478"
-            val turns = obj.opt("turns_port")?.toString().orEmpty()
-            val listen = obj.optString("turn_listen").trim()
-            val ext = obj.optString("turn_external_ip").trim()
-            val relayed = obj.optString("turn_relayed_ip").trim()
+            val err = oneLine(obj.optString("turn_error"), blank = "")
+            val turn = oneLine(obj.opt("turn_port")?.toString(), blank = "3478")
+            val turns = oneLine(obj.opt("turns_port")?.toString(), blank = "")
+            val listen = oneLine(obj.optString("turn_listen"), blank = "")
+            val ext = oneLine(
+                obj.optString("turn_external_ip").removePrefix("external-ip="),
+                blank = "",
+            )
+            val relayed = oneLine(obj.optString("turn_relayed_ip"), blank = "")
             if (err.isNotEmpty() && !obj.optBoolean("turn_running")) {
                 return err
             }
             val bits = mutableListOf("stun/turn $turn")
             if (turns.isNotEmpty() && turns != "0") bits += "turns $turns"
             if (listen.isNotEmpty()) bits += "listen $listen"
-            if (ext.isNotEmpty()) bits += ext.removePrefix("external-ip=")
+            if (ext.isNotEmpty()) bits += ext
             if (relayed.isNotEmpty()) bits += "relay $relayed"
             if (err.isNotEmpty()) bits += err
             return if (bits.isEmpty()) {
@@ -73,6 +76,15 @@ data class AdminSnapshot(
             n < 1024 -> "$n B"
             n < 1024 * 1024 -> "${n / 1024} КБ"
             else -> "${"%.1f".format(n / (1024.0 * 1024.0))} МБ"
+        }
+
+        /** CR/LF/NUL in admin JSON must not split owner chrome. */
+        private fun oneLine(raw: String?, blank: String = "—"): String {
+            val s = raw ?: return blank
+            if (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0 || s.indexOf('\u0000') >= 0) {
+                return blank
+            }
+            return s.trim().ifEmpty { blank }
         }
     }
 }
