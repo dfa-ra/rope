@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveHideTyping(enabled: Boolean) {
+        put("hide_typing", HideTypingRules.persist(enabled))
+    }
+
+    fun hideTyping(): Boolean = HideTypingRules.enabledFromKv(get("hide_typing"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

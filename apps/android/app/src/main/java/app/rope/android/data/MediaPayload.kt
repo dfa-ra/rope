@@ -586,8 +586,13 @@ object TypingRules {
     const val TTL_MS = 3500L
     const val SEND_EVERY_MS = 2000L
 
-    fun shouldSend(lastSentAt: Long, now: Long, draft: String): Boolean =
-        draft.isNotBlank() && now - lastSentAt >= SEND_EVERY_MS
+    fun shouldSend(
+        lastSentAt: Long,
+        now: Long,
+        draft: String,
+        hideTyping: Boolean = false,
+    ): Boolean =
+        !hideTyping && draft.isNotBlank() && now - lastSentAt >= SEND_EVERY_MS
 
     fun isActive(untilMs: Long, now: Long): Boolean = untilMs > now
 }

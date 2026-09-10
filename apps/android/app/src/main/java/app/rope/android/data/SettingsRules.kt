@@ -28,6 +28,8 @@ object SettingsRules {
     fun linkPreviewsHint(): String =
         "Карточка собирается на этом телефоне. Сервер ссылку не видит. Сайт видит ваш IP, как в браузере."
 
+    fun hideTypingHint(): String = HideTypingRules.hint()
+
     fun appearanceHint(): String =
         "Тёмная или светлая. Цвета логотипа не меняются."
 

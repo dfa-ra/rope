@@ -167,6 +167,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val hideTyping: Boolean = false,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    hideTyping = store.hideTyping(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -584,6 +586,12 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleHideTyping() {
+        val next = !_state.value.hideTyping
+        store.saveHideTyping(next)
+        _state.value = _state.value.copy(hideTyping = next)
     }
 
     fun toggleLinkPreviews() {
@@ -2163,7 +2171,7 @@ class RopeRepository(private val app: Application) {
 
     private fun maybeSendTyping(text: String) {
         val now = System.currentTimeMillis()
-        if (!TypingRules.shouldSend(lastTypingSentAt, now, text)) return
+        if (!TypingRules.shouldSend(lastTypingSentAt, now, text, hideTyping = _state.value.hideTyping)) return
         lastTypingSentAt = now
         val target = openChatId() ?: return
         if (SavedMessagesRules.skipNetwork(target)) return
