@@ -15,8 +15,13 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import app.rope.android.data.ChatIds
+import app.rope.android.data.ProtectContentRules
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,6 +110,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onRename: (String) -> Unit = {},
+    onToggleProtect: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -156,6 +162,33 @@ fun GroupInfoPane(
                                 enabled = GroupNameRules.parse(renameDraft) != null &&
                                     GroupNameRules.parse(renameDraft) != g.name,
                             ) { Text("Сохранить название") }
+                        }
+                    }
+                }
+            }
+            if (ProtectContentRules.applies(ChatIds.group(g.groupId))) {
+                item {
+                    SectionCard {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(ProtectContentRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    ProtectContentRules.HINT,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = state.chatProtect,
+                                onCheckedChange = { checked ->
+                                    if (checked != state.chatProtect) onToggleProtect()
+                                },
+                                modifier = Modifier.semantics { contentDescription = ProtectContentRules.TITLE },
+                            )
                         }
                     }
                 }

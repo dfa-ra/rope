@@ -386,7 +386,8 @@ object TextBody {
 object ChatActions {
     fun canReply(msg: ChatMessage): Boolean = !msg.deleted
 
-    fun canForward(msg: ChatMessage): Boolean = !msg.deleted
+    fun canForward(msg: ChatMessage, protect: Boolean = false): Boolean =
+        ProtectContentRules.canForward(msg, protect)
 
     fun canEdit(msg: ChatMessage): Boolean =
         msg.outgoing &&
@@ -395,7 +396,8 @@ object ChatActions {
 
     fun canDelete(msg: ChatMessage): Boolean = msg.outgoing && !msg.deleted
 
-    fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
+    fun canCopy(msg: ChatMessage, protect: Boolean = false): Boolean =
+        ProtectContentRules.canCopy(msg, protect)
 
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
 
@@ -411,6 +413,7 @@ data class ChatPrefs(
     val draft: String = "",
     val pinnedMessageId: String? = null,
     val archived: Boolean = false,
+    val protect: Boolean = false,
 ) {
     fun toJson(): String = JSONObject()
         .put("pinned", pinned)
@@ -420,6 +423,7 @@ data class ChatPrefs(
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
         .put("archived", archived)
+        .put("protect", protect)
         .toString()
 
     companion object {
@@ -435,6 +439,7 @@ data class ChatPrefs(
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
                     archived = o.optBoolean("archived"),
+                    protect = o.optBoolean("protect"),
                 )
             } catch (_: Exception) {
                 ChatPrefs()

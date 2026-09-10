@@ -843,9 +843,9 @@ fun ChatPane(
                         Icon(Icons.Outlined.Edit, contentDescription = "Изменить")
                     }
                 }
-                if (selectedMsgs.any { ChatActions.canForward(it) }) {
+                if (selectedMsgs.any { ChatActions.canForward(it, state.chatProtect) }) {
                     IconButton(onClick = {
-                        selectedMsgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                        selectedMsgs.firstOrNull { ChatActions.canForward(it, state.chatProtect) }?.let(onForward)
                         selectedIds = emptySet()
                     }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Переслать")
@@ -1047,7 +1047,7 @@ fun ChatPane(
             if (selecting) {
                 SelectionReplyForwardBar(
                     canReply = singleSelected != null && ChatActions.canReply(singleSelected),
-                    canForward = selectedMsgs.any { ChatActions.canForward(it) },
+                    canForward = selectedMsgs.any { ChatActions.canForward(it, state.chatProtect) },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -1057,7 +1057,7 @@ fun ChatPane(
                         selectedIds = emptySet()
                     },
                     onForward = {
-                        selectedMsgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                        selectedMsgs.firstOrNull { ChatActions.canForward(it, state.chatProtect) }?.let(onForward)
                         selectedIds = emptySet()
                     },
                 )
@@ -1136,6 +1136,7 @@ fun ChatPane(
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
+            protect = state.chatProtect,
         )
     }
     if (state.recordingVideoNote) {
@@ -1838,6 +1839,7 @@ private fun MessageTapOverlay(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    protect: Boolean = false,
 ) {
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -1878,6 +1880,7 @@ private fun MessageTapOverlay(
                 onPin = onPin,
                 onDelete = onDelete,
                 onOpen = onOpen,
+                protect = protect,
             )
         }
     }
@@ -1893,6 +1896,7 @@ private fun MessageActionMenu(
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    protect: Boolean = false,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
@@ -1905,10 +1909,10 @@ private fun MessageActionMenu(
             if (ChatActions.canReply(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.Reply, "Ответить", onReply)
             }
-            if (ChatActions.canCopy(m)) {
+            if (ChatActions.canCopy(m, protect)) {
                 MessageMenuRow(Icons.Outlined.ContentCopy, "Копировать", onCopy)
             }
-            if (ChatActions.canForward(m)) {
+            if (ChatActions.canForward(m, protect)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.ArrowForward, "Переслать", onForward)
             }
             if (ChatActions.canPin(m)) {

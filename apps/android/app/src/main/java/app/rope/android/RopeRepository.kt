@@ -65,6 +65,8 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.ChatActions
+import app.rope.android.data.ProtectContentRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -168,6 +170,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val chatProtect: Boolean = false,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -727,7 +730,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startForward(msg: ChatMessage) {
-        if (msg.deleted) return
+        if (!ChatActions.canForward(msg, _state.value.chatProtect)) return
         val stack = BackStack.listForForward(BackStack.currentStack(_state.value.backStack, _state.value.screen))
         _state.value = _state.value.copy(
             forwarding = msg,
@@ -772,8 +775,17 @@ class RopeRepository(private val app: Application) {
         refreshConversations()
     }
 
+    fun toggleProtectContent() {
+        val id = openChatId() ?: return
+        if (!ProtectContentRules.applies(id)) return
+        val cur = store.chatPrefs(id)
+        val next = !cur.protect
+        store.saveChatPrefs(id, cur.copy(protect = next))
+        _state.value = _state.value.copy(chatProtect = next)
+    }
+
     fun copyMessage(msg: ChatMessage) {
-        if (!msg.text.isNotBlank() || msg.deleted) return
+        if (!ChatActions.canCopy(msg, _state.value.chatProtect)) return
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
@@ -2169,6 +2181,7 @@ class RopeRepository(private val app: Application) {
             pendingAttachments = pending,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
+            chatProtect = ProtectContentRules.applies(chatId) && prefs.protect,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
