@@ -153,6 +153,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.EmailTapRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
@@ -1665,10 +1666,12 @@ private fun MentionText(
 ) {
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
     val links = remember(text) { LinkPreviewRules.spans(text) }
+    val occupied = remember(links) { links.map { it.start until it.endExclusive } }
+    val emails = remember(text, occupied) { EmailTapRules.spans(text, occupied) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
-    if (spans.isEmpty() && links.isEmpty()) {
+    if (spans.isEmpty() && links.isEmpty() && emails.isEmpty()) {
         Text(text, style = style)
         return
     }
@@ -1689,13 +1692,26 @@ private fun MentionText(
             )
             addStringAnnotation("URL", link.url, link.start, link.endExclusive)
         }
+        emails.forEach { mail ->
+            addStyle(
+                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                mail.start,
+                mail.endExclusive,
+            )
+            addStringAnnotation("MAIL", mail.mailto, mail.start, mail.endExclusive)
+        }
     }
     ClickableText(
         text = annotated,
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
+            val mail = annotated.getStringAnnotations("MAIL", offset, offset).firstOrNull()?.item
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
-            if (url != null) openHttps(context, url) else onPlainTap()
+            when {
+                mail != null -> openMailto(context, mail)
+                url != null -> openHttps(context, url)
+                else -> onPlainTap()
+            }
         },
     )
 }
@@ -1794,6 +1810,14 @@ private fun openHttps(context: Context, url: String) {
     if (!url.startsWith("https://", ignoreCase = true)) return
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+}
+
+private fun openMailto(context: Context, mailto: String) {
+    if (!mailto.startsWith("mailto:")) return
+    if (mailto.indexOf('\n') >= 0 || mailto.indexOf('\r') >= 0 || mailto.indexOf('\u0000') >= 0) return
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse(mailto)))
     }
 }
 
