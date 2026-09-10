@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.VolumeOff
-import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -167,7 +167,7 @@ fun VideoMessageBubble(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (muted) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                    if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
                     contentDescription = VideoMuteRules.contentDescription(muted),
                     tint = Color.White,
                     modifier = Modifier.size(18.dp),
@@ -244,7 +244,7 @@ fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (muted) Icons.Outlined.VolumeOff else Icons.Outlined.VolumeUp,
+                if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
                 contentDescription = VideoMuteRules.contentDescription(muted),
                 tint = Color.White,
                 modifier = Modifier.size(20.dp),
