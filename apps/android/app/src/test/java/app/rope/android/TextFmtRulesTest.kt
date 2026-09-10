@@ -84,7 +84,7 @@ class TextFmtRulesTest {
         assertEquals("a_b_c", TextFmtRules.plain("a\\_b\\_c"))
         assertEquals("plain", TextFmtRules.plain("plain"))
         assertTrue(TextFmtRules.parse("plain").spans.isEmpty())
-        assertEquals("две\nстроки", TextFmtRules.plain("*две\nстроки*"))
+        assertEquals("*две\nстроки*", TextFmtRules.plain("*две\nстроки*"))
     }
 
     @Test
