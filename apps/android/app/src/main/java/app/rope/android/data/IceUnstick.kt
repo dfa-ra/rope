@@ -39,7 +39,15 @@ object IceUnstick {
         val acted: Boolean get() = fallbackDirect || restartIce || terminal || fallbackWss
     }
 
+    /**
+     * Fail closed on CR/LF/NUL before trim so a newline prefix cannot be
+     * a live CHECKING path. Spaces still trim. Empty after trim still
+     * searches. Not VideoCallRules ICE WSS-fallback names.
+     */
     fun searchingPath(ice: String): Boolean {
+        if (ice.indexOf('\n') >= 0 || ice.indexOf('\r') >= 0 || ice.indexOf('\u0000') >= 0) {
+            return false
+        }
         val name = ice.trim().uppercase()
         return name.isEmpty() ||
             name == "CHECKING" ||
