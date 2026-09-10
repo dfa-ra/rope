@@ -95,6 +95,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
@@ -180,7 +181,9 @@ import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.Reaction
 import app.rope.android.data.ReactionCodec
+import app.rope.android.data.ReactionWhoRules
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -1956,14 +1959,23 @@ private fun ReactionRow(
     ) {
         ReactionCodec.grouped(m.reactions).forEach { (emoji, people) ->
             val mineHere = people.any { it.deviceId == myId }
-            ReactionChip(emoji, people.size, mineHere, mine) { onReact(m, emoji) }
+            ReactionChip(emoji, people, mineHere, mine) { onReact(m, emoji) }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boolean, onClick: () -> Unit) {
+private fun ReactionChip(
+    emoji: String,
+    people: List<Reaction>,
+    mineHere: Boolean,
+    mine: Boolean,
+    onClick: () -> Unit,
+) {
+    val count = people.size
     var pop by remember(count, mineHere) { mutableStateOf(true) }
+    var showWho by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (pop) 1.22f else 1f,
         animationSpec = spring(dampingRatio = 0.45f, stiffness = 500f),
@@ -1979,13 +1991,34 @@ private fun ReactionChip(emoji: String, count: Int, mineHere: Boolean, mine: Boo
         shape = RoundedCornerShape(RopeShapes.chip),
         modifier = Modifier
             .scale(scale)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    if (ReactionWhoRules.canShow(people)) showWho = true
+                },
+            ),
     ) {
         Text(
             "$emoji $count",
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelMedium,
             color = if (mine) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+    if (showWho) {
+        AlertDialog(
+            onDismissRequest = { showWho = false },
+            title = { Text(ReactionWhoRules.title(emoji, count)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ReactionWhoRules.names(people).forEach { name ->
+                        Text(name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showWho = false }) { Text("Закрыть") }
+            },
         )
     }
 }
