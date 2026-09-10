@@ -908,7 +908,7 @@ class RopeRepository(private val app: Application) {
                     single.kind == "video" &&
                     NoteGalleryRules.durationOk(single.durationMs)
                 if (asNote && !note) notice(NoteGalleryRules.TOO_LONG)
-                val items = if (note) {
+                val items = if (note && single != null) {
                     listOf(single.copy(kind = NoteGalleryRules.kind(true)))
                 } else {
                     prepared

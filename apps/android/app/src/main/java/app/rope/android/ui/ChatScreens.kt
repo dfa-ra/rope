@@ -2341,14 +2341,14 @@ private fun ComposerBar(
                     onCancel = onCancelPendingMedia,
                 )
                 if (NoteGalleryRules.shows(state.pendingAttachments.size, videos, durationMs)) {
-                    FilterChip(
-                        selected = asNote,
+                    TextButton(
                         onClick = onToggleSendAsNote,
-                        label = { Text(NoteGalleryRules.ACTION) },
-                        modifier = Modifier
-                            .padding(start = 12.dp, bottom = 4.dp)
-                            .semantics { contentDescription = NoteGalleryRules.ACTION },
-                    )
+                        modifier = Modifier.padding(start = 4.dp),
+                    ) {
+                        Icon(Icons.Outlined.Videocam, contentDescription = NoteGalleryRules.ACTION)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (asNote) NoteGalleryRules.TITLE else NoteGalleryRules.ACTION)
+                    }
                 }
             }
             state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
