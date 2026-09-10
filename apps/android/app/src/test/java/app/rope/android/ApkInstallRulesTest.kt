@@ -97,4 +97,22 @@ class ApkInstallRulesTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun providerPathIsSingleUpdatesChild() {
+        val root = createTempDirectory("rope-apk-uri").toFile()
+        try {
+            val updates = File(root, ApkInstallRules.UPDATES_DIR).apply { mkdirs() }
+            val ok = File(updates, "rope-0.1.5.apk")
+            assertEquals(ok, ApkInstallRules.fileForProviderPath("/updates/rope-0.1.5.apk", updates))
+            assertEquals(ok, ApkInstallRules.fileForProviderPath("updates/rope-0.1.5.apk", updates))
+            assertEquals(null, ApkInstallRules.fileForProviderPath("/updates/sub/rope-0.1.5.apk", updates))
+            assertEquals(null, ApkInstallRules.fileForProviderPath("/updates/../rope-0.1.5.apk", updates))
+            assertEquals(null, ApkInstallRules.fileForProviderPath("/updates/rope-0.1.5.apk\n", updates))
+            assertEquals(null, ApkInstallRules.fileForProviderPath("/files/rope-0.1.5.apk", updates))
+            assertEquals(null, ApkInstallRules.fileForProviderPath("/updates/.", updates))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 }

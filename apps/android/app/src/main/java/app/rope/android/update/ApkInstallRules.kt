@@ -57,7 +57,23 @@ object ApkInstallRules {
         return stream
     }
 
-    private fun canonical(file: File): String? = try {
+    /**
+     * Map a FileProvider path (`/updates/<apk>`) to a direct child of
+     * [updatesDir]. Nested segments and `..` fail closed.
+     */
+    fun fileForProviderPath(path: String?, updatesDir: File): File? {
+        val raw = path?.trim('/') ?: return null
+        val parts = raw.split('/')
+        if (parts.size != 2) return null
+        if (parts[0] != UPDATES_DIR) return null
+        val name = parts[1]
+        if (name.isEmpty() || name == "." || name == "..") return null
+        if (name.indexOf('\n') >= 0 || name.indexOf('\r') >= 0 || name.indexOf('\u0000') >= 0) {
+            return null
+        }
+        if ('/' in name || '\\' in name) return null
+        return File(updatesDir, name)
+    }
         file.canonicalPath
     } catch (_: Exception) {
         null
