@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestValidGroupName(t *testing.T) {
@@ -30,6 +31,8 @@ func TestValidGroupName(t *testing.T) {
 		t.Fatalf("40 emoji %q %v", name, ok)
 	}
 }
+
+func TestGroupRenameOrganizerAndRejectControl(t *testing.T) {
 	_, hs, setup := testServer(t)
 	owner := newDevice(t)
 	guest := newDevice(t)
