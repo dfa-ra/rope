@@ -163,6 +163,7 @@ class MainActivity : AppCompatActivity() {
                     onDraft = repo::setDraft,
                     onSend = repo::sendDraft,
                     onInvite = repo::createInvite,
+                    onSaveInviteQr = repo::saveInviteQr,
                     onStatus = repo::refreshStatus,
                     onScan = {
                         scanner.launch(

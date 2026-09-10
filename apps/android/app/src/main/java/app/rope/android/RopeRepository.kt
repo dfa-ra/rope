@@ -3,12 +3,17 @@ package app.rope.android
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.view.SurfaceHolder
@@ -47,6 +52,7 @@ import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
+import app.rope.android.data.SaveInviteQrRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
@@ -95,6 +101,9 @@ import app.rope.android.update.PublicBackupRules
 import app.rope.android.update.PublicDownloads
 import app.rope.android.update.AppRelease
 import app.rope.android.update.AppUpdater
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import java.io.ByteArrayOutputStream
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
@@ -616,6 +625,61 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", value))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun saveInviteQr(url: String) {
+        val accepted = SaveInviteQrRules.accept(url) ?: return
+        if (!RoleRules.canInvite(_state.value.profile?.role)) return
+        try {
+            val png = inviteQrPng(accepted)
+            writeInviteQrPng(png)
+            _state.value = _state.value.copy(notice = SaveInviteQrRules.NOTICE)
+        } catch (e: Exception) {
+            error(e)
+        }
+    }
+
+    private fun inviteQrPng(url: String): ByteArray {
+        val bits = QRCodeWriter().encode(url, BarcodeFormat.QR_CODE, 512, 512)
+        val bmp = Bitmap.createBitmap(bits.width, bits.height, Bitmap.Config.RGB_565)
+        for (x in 0 until bits.width) {
+            for (y in 0 until bits.height) {
+                bmp.setPixel(x, y, if (bits[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
+            }
+        }
+        val out = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+        return out.toByteArray()
+    }
+
+    private fun writeInviteQrPng(bytes: ByteArray) {
+        val name = SaveInviteQrRules.displayName()
+        if (Build.VERSION.SDK_INT >= 29) {
+            val resolver = app.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, SaveInviteQrRules.MIME)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, SaveInviteQrRules.PICTURES)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("не удалось сохранить QR")
+            try {
+                resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: error("не удалось записать QR")
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                throw e
+            }
+            return
+        }
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val rope = File(dir, "Rope")
+        rope.mkdirs()
+        File(rope, name).writeBytes(bytes)
     }
 
     fun sendDraft() {

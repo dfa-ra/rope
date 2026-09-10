@@ -77,6 +77,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.net.Uri
 import app.rope.android.data.RoleRules
+import app.rope.android.data.SaveInviteQrRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
 import app.rope.android.provision.ProvisionForm
@@ -109,6 +110,7 @@ fun RopeScaffold(
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onInvite: () -> Unit,
+    onSaveInviteQr: (String) -> Unit = {},
     onStatus: () -> Unit,
     onScan: () -> Unit,
     onUpdateApp: () -> Unit,
@@ -338,7 +340,12 @@ fun RopeScaffold(
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
-                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                            InvitePane(
+                                state.inviteUrl.orEmpty(),
+                                { onBack() },
+                                { onTab(Screen.Home) },
+                                onSaveInviteQr,
+                            )
                         } else {
                             HomePane(state, onGo, onStatus, onInvite)
                         }
@@ -803,7 +810,12 @@ private fun JoinPane(
 }
 
 @Composable
-private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
+private fun InvitePane(
+    url: String,
+    onBack: () -> Unit,
+    onHome: () -> Unit = onBack,
+    onSaveInviteQr: (String) -> Unit = {},
+) {
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -835,6 +847,15 @@ private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onB
                         )
                         Text(url, style = MaterialTheme.typography.bodySmall)
                     }
+                }
+                val save = SaveInviteQrRules.accept(url)
+                FadeIn(280) {
+                    QuietButton(
+                        SaveInviteQrRules.LABEL,
+                        { save?.let(onSaveInviteQr) },
+                        Modifier.fillMaxWidth().semantics { contentDescription = SaveInviteQrRules.LABEL },
+                        enabled = save != null,
+                    )
                 }
             } else {
                 RopeEmptyState(
