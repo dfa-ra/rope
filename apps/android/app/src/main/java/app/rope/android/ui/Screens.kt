@@ -76,6 +76,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.net.Uri
+import app.rope.android.data.InviteTtlRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
@@ -109,6 +110,7 @@ fun RopeScaffold(
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onInvite: () -> Unit,
+    onInviteTtl: (Int) -> Unit = {},
     onStatus: () -> Unit,
     onScan: () -> Unit,
     onUpdateApp: () -> Unit,
@@ -338,7 +340,14 @@ fun RopeScaffold(
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
-                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                            InvitePane(
+                                state.inviteUrl.orEmpty(),
+                                { onBack() },
+                                { onTab(Screen.Home) },
+                                onInviteTtl,
+                                state.inviteTtlSeconds,
+                                state.busy,
+                            )
                         } else {
                             HomePane(state, onGo, onStatus, onInvite)
                         }
@@ -802,8 +811,16 @@ private fun JoinPane(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
+private fun InvitePane(
+    url: String,
+    onBack: () -> Unit,
+    onHome: () -> Unit = onBack,
+    onInviteTtl: (Int) -> Unit = {},
+    ttlSeconds: Int = InviteTtlRules.DEFAULT,
+    busy: Boolean = false,
+) {
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -841,6 +858,20 @@ private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onB
                     title = "Ссылка ещё готовится",
                     body = "Подождите секунду. Петля в шапке вернёт на главную.",
                 )
+            }
+            FadeIn(280) {
+                Text(InviteTtlRules.TITLE, style = MaterialTheme.typography.titleMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InviteTtlRules.CHIPS.forEach { chip ->
+                        FilterChip(
+                            selected = InviteTtlRules.clamp(ttlSeconds) == chip.seconds,
+                            onClick = { onInviteTtl(chip.seconds) },
+                            enabled = InviteTtlRules.enabled(busy),
+                            label = { Text(chip.label) },
+                            modifier = Modifier.semantics { contentDescription = chip.label },
+                        )
+                    }
+                }
             }
         }
     }

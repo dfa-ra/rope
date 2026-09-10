@@ -46,6 +46,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
+import app.rope.android.data.InviteTtlRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
@@ -136,6 +137,7 @@ data class UiState(
     val peer: DirectoryDevice? = null,
     val group: RopeGroup? = null,
     val inviteUrl: String? = null,
+    val inviteTtlSeconds: Int = InviteTtlRules.DEFAULT,
     val pendingInvite: String? = null,
     val statusText: String = "",
     val admin: AdminSnapshot? = null,
@@ -257,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    inviteTtlSeconds = store.inviteTtlSeconds(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -1423,15 +1426,21 @@ class RopeRepository(private val app: Application) {
         }
     }
 
-    fun createInvite() {
+    fun createInvite(ttlSeconds: Int = 0) {
         if (!RoleRules.canInvite(_state.value.profile?.role)) {
             return
         }
+        val ttl = if (ttlSeconds <= 0) {
+            store.inviteTtlSeconds()
+        } else {
+            InviteTtlRules.clamp(ttlSeconds)
+        }
+        store.saveInviteTtl(ttl)
         scope.launch {
             busy(true)
             try {
                 val profile = store.profile() ?: error("no server")
-                val (token, _) = api?.createInvite() ?: error("not connected")
+                val (token, _) = api?.createInvite(ttl) ?: error("not connected")
                 val url = buildInviteUrl(
                     uniffi.rope_core.InviteLink(
                         1u,
@@ -1443,7 +1452,11 @@ class RopeRepository(private val app: Application) {
                         null,
                     ),
                 )
-                _state.value = applyNav(Screen.Invite, NavMode.Push).copy(inviteUrl = url, busy = false)
+                _state.value = applyNav(Screen.Invite, NavMode.Push).copy(
+                    inviteUrl = url,
+                    inviteTtlSeconds = ttl,
+                    busy = false,
+                )
             } catch (e: Exception) {
                 error(e)
             }
