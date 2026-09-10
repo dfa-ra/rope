@@ -87,6 +87,7 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.VerticalAlignTop
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -152,6 +153,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.FirstMessageRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -777,6 +779,7 @@ fun ChatPane(
     val visible = remember(state.messages, state.messageQuery) {
         state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
     }
+    val firstId = FirstMessageRules.id(visible)
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
     val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
         UnreadSeparatorRules.insert(
@@ -898,6 +901,11 @@ fun ChatPane(
                 }
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
+                }
+                if (FirstMessageRules.visible(firstId)) {
+                    IconButton(onClick = { firstId?.let(onJump) }) {
+                        Icon(Icons.Outlined.VerticalAlignTop, contentDescription = FirstMessageRules.ACTION)
+                    }
                 }
                 if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
                     IconButton(onClick = onCall) {
