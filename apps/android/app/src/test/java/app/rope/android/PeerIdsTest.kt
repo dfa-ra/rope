@@ -19,11 +19,24 @@ class PeerIdsTest {
     @Test
     fun normalizeAndSameIgnoreCase() {
         assertEquals("abc", PeerIds.normalize("ABC"))
+        assertEquals("abc", PeerIds.normalize(" abc "))
         assertTrue(PeerIds.same("AbC", "abc"))
         assertFalse(PeerIds.same("abc", "abd"))
         assertFalse(PeerIds.same("", ""))
         assertTrue(PeerIds.looksLikeDevice("A".repeat(64)))
         assertFalse(PeerIds.looksLikeDevice("not-a-device"))
+    }
+
+    @Test
+    fun newlinePrefixIsNotALiveDeviceId() {
+        val hex = "a".repeat(64)
+        assertEquals("", PeerIds.normalize("\n$hex"))
+        assertEquals("", PeerIds.normalize("$hex\n"))
+        assertEquals("", PeerIds.normalize("$hex\r"))
+        assertEquals("", PeerIds.normalize("$hex\u0000"))
+        assertFalse(PeerIds.same("\n$hex", hex))
+        assertFalse(PeerIds.looksLikeDevice("\n$hex"))
+        assertEquals("", PeerIds.wireId(null, "\n$hex"))
     }
 
     @Test

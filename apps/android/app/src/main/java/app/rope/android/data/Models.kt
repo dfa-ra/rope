@@ -160,7 +160,15 @@ object ChatRouting {
 
 /** Device / member ids on the wire are 64-hex or UUID; compare them case-insensitively. */
 object PeerIds {
-    fun normalize(raw: String?): String = JsonIds.optional(raw)?.lowercase().orEmpty()
+    /**
+     * Fail closed on CR/LF/NUL before trim so a newline prefix cannot be
+     * stripped into a live device or member id. Spaces still trim.
+     */
+    fun normalize(raw: String?): String {
+        if (raw.isNullOrEmpty()) return ""
+        if (raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0) return ""
+        return JsonIds.optional(raw)?.lowercase().orEmpty()
+    }
 
     fun same(a: String?, b: String?): Boolean {
         val x = normalize(a)
