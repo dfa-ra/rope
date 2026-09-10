@@ -175,6 +175,7 @@ import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
+import app.rope.android.data.QuickReactRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -1120,6 +1121,7 @@ fun ChatPane(
             message = target,
             pinned = state.pinnedMessageId == target.id,
             expanded = reactionExpanded,
+            favorite = state.quickReact,
             onToggleExpand = { reactionExpanded = !reactionExpanded },
             onDismiss = {
                 menuMessage = null
@@ -1829,6 +1831,7 @@ private fun MessageTapOverlay(
     message: ChatMessage,
     pinned: Boolean,
     expanded: Boolean,
+    favorite: String = QuickReactRules.DEFAULT,
     onToggleExpand: () -> Unit,
     onDismiss: () -> Unit,
     onReact: (String) -> Unit,
@@ -1868,6 +1871,7 @@ private fun MessageTapOverlay(
                 onPick = onReact,
                 expanded = expanded,
                 onToggleExpand = onToggleExpand,
+                favorite = favorite,
             )
             MessageActionMenu(
                 m = message,

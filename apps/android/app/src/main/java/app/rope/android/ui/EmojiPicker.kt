@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.RopeGrayDark
 import app.rope.android.RopeShapes
 import app.rope.android.data.EmojiPack
+import app.rope.android.data.QuickReactRules
 import kotlinx.coroutines.delay
 
 /**
@@ -135,6 +136,7 @@ fun ReactionPicker(
     onPick: (String) -> Unit,
     expanded: Boolean,
     onToggleExpand: () -> Unit,
+    favorite: String = QuickReactRules.DEFAULT,
 ) {
     BackHandler(enabled = expanded) { onToggleExpand() }
     Surface(
@@ -148,7 +150,7 @@ fun ReactionPicker(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 4.dp),
             ) {
-                EmojiPack.quickReactions.forEach { emoji ->
+                QuickReactRules.tray(favorite).forEach { emoji ->
                     ReactionPickEmoji(emoji, onPick)
                 }
                 Icon(

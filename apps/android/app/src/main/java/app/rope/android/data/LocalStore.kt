@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveQuickReact(emoji: String) {
+        put("quick_react", QuickReactRules.parse(emoji))
+    }
+
+    fun quickReact(): String = QuickReactRules.parse(get("quick_react"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
