@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         splash.setKeepOnScreenCondition { !composeReady.get() }
         val repo = (application as RopeApp).repo
         repo.start(intent?.data?.toString())
+        ingestShare(intent)
         requestNotifications()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
@@ -245,6 +246,7 @@ class MainActivity : AppCompatActivity() {
                     onDismissLinkPreview = repo::dismissComposerPreview,
                     onCancelPendingMedia = repo::cancelPendingMedia,
                     onCancelForward = repo::cancelForward,
+                    onCancelShare = repo::cancelInboundShare,
                     onChatQuery = repo::setChatQuery,
                     onMessageQuery = repo::setMessageQuery,
                     onPinChat = repo::togglePinChat,
@@ -268,6 +270,35 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        ingestShare(intent)
+    }
+
+    private fun ingestShare(intent: Intent?) {
+        if (intent == null) return
+        val consumed = intent.getBooleanExtra(app.rope.android.data.ShareInRules.EXTRA_CONSUMED, false)
+        val stream = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        val streams = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+        }
+        val ok = (application as RopeApp).repo.takeInboundShare(
+            intent.action,
+            stream?.toString(),
+            streams?.map { it.toString() }.orEmpty(),
+            intent.getStringExtra(Intent.EXTRA_TEXT),
+            consumed,
+        )
+        if (ok) {
+            intent.putExtra(app.rope.android.data.ShareInRules.EXTRA_CONSUMED, true)
+            setIntent(intent)
+        }
     }
 
     private fun tryInstallPending() {

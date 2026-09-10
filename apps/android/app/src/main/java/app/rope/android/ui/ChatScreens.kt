@@ -158,6 +158,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ShareInRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -202,6 +203,7 @@ fun ChatsPane(
     onNewGroup: () -> Unit,
     onUpdateApp: () -> Unit = {},
     onCancelForward: () -> Unit = {},
+    onCancelShare: () -> Unit = {},
     onQuery: (String) -> Unit = {},
     onPinChat: (String) -> Unit = {},
     onMuteChat: (String) -> Unit = {},
@@ -212,6 +214,10 @@ fun ChatsPane(
 ) {
     Column(Modifier.fillMaxSize()) {
         val forwarding = state.forwarding
+        val sharing = ShareInRules.active(
+            state.inboundShareUris.map { it.toString() },
+            state.inboundShareText,
+        )
         when {
             forwarding != null -> {
                 Surface(
@@ -235,6 +241,31 @@ fun ChatsPane(
                             )
                         }
                         TextButton(onClick = onCancelForward) { Text("Отмена") }
+                    }
+                }
+            }
+            sharing -> {
+                Surface(
+                    tonalElevation = 3.dp,
+                    shape = RoundedCornerShape(bottomStart = RopeShapes.card, bottomEnd = RopeShapes.card),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(ShareInRules.PICK, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                ShareInRules.TITLE,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = onCancelShare) { Text("Отмена") }
                     }
                 }
             }
@@ -270,7 +301,7 @@ fun ChatsPane(
                 ChatListMode.ALL -> "Поиск"
             },
         )
-        val isForwarding = state.forwarding != null
+        val isForwarding = state.forwarding != null || sharing
         val archived = ArchiveRules.archivedOf(state.conversations)
         val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
         val rows = ChatListRules.rows(source, state.chatQuery, listMode)

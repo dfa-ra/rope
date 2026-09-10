@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ShareInRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -175,6 +176,8 @@ data class UiState(
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
+    val inboundShareUris: List<Uri> = emptyList(),
+    val inboundShareText: String? = null,
     val chatQuery: String = "",
     val messageQuery: String = "",
     val typingName: String? = null,
@@ -227,6 +230,7 @@ class RopeRepository(private val app: Application) {
     private var wssAudio: WssAudioSession? = null
     private val wssFrameBusy = AtomicBoolean(false)
     private val sessionStarted = AtomicBoolean(false)
+    private var parkedShare: ShareInRules.Inbound? = null
     private val callMachine = CallMachine()
     private var callPeerName: String = ""
     private var connectWatch: Job? = null
@@ -552,9 +556,19 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openConversation(c: Conversation) {
-        if (_state.value.forwarding != null) {
+        val shareUris = _state.value.inboundShareUris
+        val shareText = _state.value.inboundShareText
+        val sharing = ShareInRules.active(shareUris.map { it.toString() }, shareText)
+        if (!sharing && _state.value.forwarding != null) {
             completeForward(c)
             return
+        }
+        if (sharing) {
+            _state.value = _state.value.copy(
+                inboundShareUris = emptyList(),
+                inboundShareText = null,
+                forwarding = null,
+            )
         }
         when {
             SavedMessagesRules.isSaved(c.id) -> openSaved()
@@ -563,10 +577,47 @@ class RopeRepository(private val app: Application) {
             !c.isGroup -> openChat(
                 DirectoryDevice(c.id, "", c.title, ByteArray(0), "", c.online),
             )
-            else -> _state.value = _state.value.copy(
-                error = "Этой группы нет. Голосовые и фото вернулись в личный чат.",
-            )
+            else -> {
+                _state.value = _state.value.copy(
+                    error = "Этой группы нет. Голосовые и фото вернулись в личный чат.",
+                )
+                return
+            }
         }
+        if (sharing) {
+            if (shareUris.isNotEmpty()) stageAttachments(shareUris)
+            if (!shareText.isNullOrBlank()) setDraft(shareText)
+        }
+    }
+
+    fun takeInboundShare(
+        action: String?,
+        stream: String?,
+        streams: List<String>,
+        text: String?,
+        consumed: Boolean = false,
+    ): Boolean {
+        val inbound = ShareInRules.consume(action, stream, streams, text, consumed) ?: return false
+        if (identity == null || store.profile() == null) {
+            parkedShare = inbound
+            return true
+        }
+        showSharePicker(inbound)
+        return true
+    }
+
+    fun cancelInboundShare() {
+        parkedShare = null
+        _state.value = _state.value.copy(inboundShareUris = emptyList(), inboundShareText = null)
+    }
+
+    private fun showSharePicker(inbound: ShareInRules.Inbound) {
+        persistOpenDraft()
+        _state.value = applyNav(Screen.Chats, NavMode.SwitchTab).copy(
+            inboundShareUris = inbound.uris.map(Uri::parse),
+            inboundShareText = inbound.text,
+            forwarding = null,
+        )
     }
 
     fun toggleTheme() {
@@ -2060,6 +2111,10 @@ class RopeRepository(private val app: Application) {
         connectSocket(withIce)
         RopeConnectionService.start(app)
         checkAppUpdate(openStatus = false)
+        parkedShare?.let {
+            parkedShare = null
+            showSharePicker(it)
+        }
     }
 
     private fun refreshIceServers(profile: ServerProfile): ServerProfile {
