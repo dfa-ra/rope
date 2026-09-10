@@ -84,6 +84,8 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -182,6 +184,8 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
+import app.rope.android.data.VoiceMiniRules
+import app.rope.android.data.VoicePlayback
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
 import kotlin.math.roundToInt
@@ -3161,6 +3165,57 @@ fun ImageViewer(
                 .padding(8.dp),
         ) {
             Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White)
+        }
+    }
+}
+
+@Composable
+fun VoiceMiniBar(
+    title: String,
+    playing: Boolean,
+    speed: Float,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+    onCycleSpeed: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 4.dp,
+        shadowElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpen)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    VoiceMiniRules.subtitle(speed, playing),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onCycleSpeed) {
+                Text(VoicePlayback.speedLabel(speed))
+            }
+            IconButton(onClick = onToggle) {
+                Icon(
+                    if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                    contentDescription = if (playing) VoiceMiniRules.PAUSE else VoiceMiniRules.PLAY,
+                )
+            }
+            IconButton(onClick = onStop) {
+                Icon(Icons.Outlined.Close, contentDescription = VoiceMiniRules.CLOSE)
+            }
         }
     }
 }

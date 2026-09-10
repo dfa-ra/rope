@@ -123,6 +123,8 @@ fun RopeScaffold(
     onVoiceFinish: (Boolean) -> Unit,
     onSeekVoice: (app.rope.android.data.ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onStopVoice: () -> Unit = {},
+    onOpenVoiceMini: () -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
@@ -359,6 +361,31 @@ fun RopeScaffold(
                         )
                     }
                 }
+            }
+            val openId = state.group?.let { app.rope.android.data.ChatIds.group(it.groupId) }
+                ?: state.peer?.deviceId
+            val inThread = app.rope.android.data.VoiceMiniRules.inPlayingThread(
+                screenIsChat = state.screen == Screen.Chat,
+                openChatId = openId,
+                clipChatId = state.playingVoiceChatId,
+            )
+            if (
+                app.rope.android.data.VoiceMiniRules.visible(
+                    activeId = state.voiceProgressId,
+                    inPlayingThread = inThread,
+                    liveCall = state.call != null,
+                    allowChrome = NavRules.showsBottomBar(state.screen, signedIn),
+                )
+            ) {
+                app.rope.android.ui.VoiceMiniBar(
+                    title = state.playingVoiceTitle.orEmpty().ifBlank { "Голосовое" },
+                    playing = state.playingVoiceId != null,
+                    speed = state.voiceSpeed,
+                    onOpen = onOpenVoiceMini,
+                    onToggle = { state.playingVoiceMsg?.let(onPlay) },
+                    onCycleSpeed = onCycleVoiceSpeed,
+                    onStop = onStopVoice,
+                )
             }
         }
     }

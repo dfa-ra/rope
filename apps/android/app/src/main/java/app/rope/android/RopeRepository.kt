@@ -70,6 +70,7 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceMiniRules
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -155,6 +156,9 @@ data class UiState(
     val voicePositionMs: Long = 0,
     val voiceDurationMs: Long = 0,
     val voiceSpeed: Float = VoicePlayback.SPEED_1X,
+    val playingVoiceChatId: String? = null,
+    val playingVoiceTitle: String? = null,
+    val playingVoiceMsg: ChatMessage? = null,
     val call: CallInfo? = null,
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
@@ -1104,6 +1108,7 @@ class RopeRepository(private val app: Application) {
             return
         }
         voicePlayer.toggle(msg.id, path)
+        rememberVoiceMini(msg)
         publishVoiceProgress()
         voiceProgressJob?.cancel()
         if (voicePlayer.playingId != null) {
@@ -1142,13 +1147,68 @@ class RopeRepository(private val app: Application) {
         publishVoiceProgress()
     }
 
+    fun stopVoice() {
+        voicePlayer.stop()
+        _state.value = _state.value.copy(
+            playingVoiceId = null,
+            voiceProgressId = null,
+            voicePositionMs = 0,
+            voiceDurationMs = 0,
+            playingVoiceChatId = null,
+            playingVoiceTitle = null,
+            playingVoiceMsg = null,
+        )
+    }
+
+    fun openVoiceMini() {
+        val clip = _state.value.playingVoiceMsg ?: return
+        val chatId = _state.value.playingVoiceChatId ?: return
+        val conv = _state.value.conversations.find { it.id == chatId }
+        if (conv != null) {
+            openConversation(conv)
+        } else {
+            when {
+                SavedMessagesRules.isSaved(chatId) -> openSaved()
+                ChatIds.isGroup(chatId) -> store.group(ChatIds.rawGroupId(chatId))?.let { openGroup(it) }
+                else -> openChat(DirectoryDevice(chatId, "", _state.value.playingVoiceTitle.orEmpty(), ByteArray(0), "", false))
+            }
+        }
+        _state.value = _state.value.copy(scrollToMessageId = clip.id)
+    }
+
+    private fun rememberVoiceMini(msg: ChatMessage) {
+        if (voicePlayer.activeId == null) {
+            _state.value = _state.value.copy(
+                playingVoiceChatId = null,
+                playingVoiceTitle = null,
+                playingVoiceMsg = null,
+            )
+            return
+        }
+        val chatId = openChatId() ?: _state.value.playingVoiceChatId ?: return
+        val title = VoiceMiniRules.title(
+            groupName = _state.value.group?.name,
+            peerName = _state.value.peer?.displayName,
+            saved = SavedMessagesRules.isSaved(chatId),
+        )
+        _state.value = _state.value.copy(
+            playingVoiceChatId = chatId,
+            playingVoiceTitle = title,
+            playingVoiceMsg = msg,
+        )
+    }
+
     private fun publishVoiceProgress() {
+        val active = voicePlayer.activeId
         _state.value = _state.value.copy(
             playingVoiceId = voicePlayer.playingId,
-            voiceProgressId = voicePlayer.activeId,
+            voiceProgressId = active,
             voicePositionMs = voicePlayer.positionMs(),
             voiceDurationMs = voicePlayer.durationMs(),
             voiceSpeed = voicePlayer.speed,
+            playingVoiceChatId = if (active == null) null else _state.value.playingVoiceChatId,
+            playingVoiceTitle = if (active == null) null else _state.value.playingVoiceTitle,
+            playingVoiceMsg = if (active == null) null else _state.value.playingVoiceMsg,
         )
     }
 
