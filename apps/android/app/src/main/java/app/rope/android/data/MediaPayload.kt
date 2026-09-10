@@ -391,7 +391,9 @@ object ChatActions {
     fun canEdit(msg: ChatMessage): Boolean =
         msg.outgoing &&
             !msg.deleted &&
-            (msg.kind == MessageKind.TEXT || msg.kind == MessageKind.GROUP_TEXT)
+            (msg.kind == MessageKind.TEXT ||
+                msg.kind == MessageKind.GROUP_TEXT ||
+                MediaCaptionEditRules.eligibleKind(msg))
 
     fun canDelete(msg: ChatMessage): Boolean = msg.outgoing && !msg.deleted
 
@@ -750,8 +752,12 @@ object ComposerRules {
         recording: Boolean,
         recordingLocked: Boolean = false,
         pendingMedia: Boolean = false,
+        allowEmpty: Boolean = false,
     ): Boolean =
-        (pendingMedia && !recording) || (draft.isNotBlank() && !recording) || recordingLocked
+        (pendingMedia && !recording) ||
+            (allowEmpty && !recording) ||
+            (draft.isNotBlank() && !recording) ||
+            recordingLocked
 
     fun showMicButton(draft: String, recording: Boolean, recordingLocked: Boolean = false): Boolean =
         (draft.isBlank() || recording) && !recordingLocked

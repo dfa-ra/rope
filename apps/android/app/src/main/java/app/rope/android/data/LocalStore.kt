@@ -223,6 +223,19 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun editMessage(id: String, text: String): Boolean {
         val msg = message(id) ?: return false
+        val caption = MediaCaptionEditRules.apply(msg, text)
+        if (caption != null) {
+            writableDatabase.execSQL(
+                "UPDATE messages SET body_enc = ?, extra = ?, meta = ? WHERE id = ?",
+                arrayOf(
+                    encrypt(caption.preview),
+                    caption.extra,
+                    MessageMeta.of(msg.copy(text = caption.preview, extra = caption.extra, edited = true)).toJson(),
+                    id,
+                ),
+            )
+            return true
+        }
         val oldUrl = LinkPreviewRules.firstHttps(msg.text)
         val newUrl = LinkPreviewRules.firstHttps(text)
         val keep = !oldUrl.isNullOrBlank() && oldUrl == newUrl

@@ -176,6 +176,7 @@ import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
+import app.rope.android.data.MediaCaptionEditRules
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
@@ -2278,6 +2279,7 @@ private fun ComposerBar(
         state.recording,
         recordingLocked,
         pendingMedia = state.pendingAttachments.isNotEmpty(),
+        allowEmpty = state.editTarget?.let { MediaCaptionEditRules.allowBlankCommit(it) } == true,
     )
     val micScale by animateFloatAsState(
         targetValue = if (state.recording && !recordingLocked) 1.18f else 1f,
@@ -2399,7 +2401,9 @@ private fun ComposerBar(
                                     Box {
                                         if (localText.isEmpty()) {
                                             Text(
-                                                if (state.pendingAttachments.isNotEmpty()) {
+                                                if (state.pendingAttachments.isNotEmpty() ||
+                                                    MediaCaptionEditRules.isCaptionKind(state.editTarget?.kind)
+                                                ) {
                                                     MediaSendRules.PLACEHOLDER
                                                 } else {
                                                     "Сообщение"

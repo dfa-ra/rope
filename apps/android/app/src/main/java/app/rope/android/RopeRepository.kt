@@ -36,6 +36,8 @@ import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
+import app.rope.android.data.ChatActions
+import app.rope.android.data.MediaCaptionEditRules
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
@@ -621,7 +623,7 @@ class RopeRepository(private val app: Application) {
         val edit = _state.value.editTarget
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
             val text = _state.value.draftText
-            if (text.isBlank()) return
+            if (text.isBlank() && !MediaCaptionEditRules.allowBlankCommit(edit)) return
             _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null, composerPreview = null, composerPreviewDismissedUrl = null)
             persistOpenDraft()
             applyEdit(edit, text)
@@ -694,13 +696,12 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startEdit(msg: ChatMessage) {
-        if (!msg.outgoing || msg.deleted) return
-        if (msg.kind != MessageKind.TEXT && msg.kind != MessageKind.GROUP_TEXT) return
+        if (!ChatActions.canEdit(msg)) return
         _state.value = _state.value.copy(
             editTarget = msg,
             replyTo = null,
             replySpan = null,
-            draftText = msg.text,
+            draftText = MediaCaptionEditRules.draft(msg),
             pendingAttachments = emptyList(),
         )
     }

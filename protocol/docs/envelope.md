@@ -93,7 +93,7 @@ Optional `album_id` / `album_index` / `album_count` group 2–10 photos and/or v
 
 `kind=video` is the same type=2 object JSON (duration in `duration_ms`). The client compresses the clip to the existing 25 MiB object cap before `encryptObject`. Videos may be album members (`album_id` shared with photos). No new envelope type.
 
-Optional `caption` is UTF-8 text on a photo or video send (one caption per album, on the first member). Empty caption omits the key. Kotlin packs this JSON; the existing Rust `encrypt_typed` / `encryptObject` path encrypts it. The relay never sees plaintext.
+Optional `caption` is UTF-8 text on a photo or video send (one caption per album, on the first member). Empty caption omits the key. Kotlin packs this JSON; the existing Rust `encrypt_typed` / `encryptObject` path encrypts it. The relay never sees plaintext. An outgoing author may later rewrite that caption via the existing ChatControl `edit` (text is the new caption; object bytes are unchanged).
 
 Optional `ff` is the attributed-forward origin display name («Переслано от …»). It is not a reply quote. Forwards must not set reply fields (`r` / `rp` / `rn`). Local Saved Messages / Избранное (`peer_id=saved:`) stays in the client LocalStore and never becomes a mailbox envelope or object on the VPS.
 
