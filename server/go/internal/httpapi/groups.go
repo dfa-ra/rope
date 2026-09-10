@@ -83,11 +83,16 @@ func (s *Server) groupAdd(w http.ResponseWriter, r *http.Request, a authed, body
 		writeJSON(w, 400, map[string]string{"error": "device_id"})
 		return
 	}
-	if _, err := s.Store.Device(req.DeviceID); err != nil {
+	deviceID, ok := validDeviceID(req.DeviceID)
+	if !ok {
+		writeJSON(w, 400, map[string]string{"error": "device_id"})
+		return
+	}
+	if _, err := s.Store.Device(deviceID); err != nil {
 		writeJSON(w, 404, map[string]string{"error": "unknown device"})
 		return
 	}
-	if err := s.Store.AddGroupMember(gid, req.DeviceID); err != nil {
+	if err := s.Store.AddGroupMember(gid, deviceID); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}
@@ -109,7 +114,12 @@ func (s *Server) groupRemove(w http.ResponseWriter, r *http.Request, a authed, b
 		writeJSON(w, 400, map[string]string{"error": "device_id"})
 		return
 	}
-	self := strings.EqualFold(req.DeviceID, a.Device.ID)
+	deviceID, ok := validDeviceID(req.DeviceID)
+	if !ok {
+		writeJSON(w, 400, map[string]string{"error": "device_id"})
+		return
+	}
+	self := strings.EqualFold(deviceID, a.Device.ID)
 	if !self {
 		ok, err := s.canManageGroup(a, gid)
 		if err != nil || !ok {
@@ -117,7 +127,7 @@ func (s *Server) groupRemove(w http.ResponseWriter, r *http.Request, a authed, b
 			return
 		}
 	}
-	if err := s.Store.RemoveGroupMember(gid, req.DeviceID); err != nil {
+	if err := s.Store.RemoveGroupMember(gid, deviceID); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "db"})
 		return
 	}
