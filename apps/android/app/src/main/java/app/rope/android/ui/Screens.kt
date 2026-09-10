@@ -356,6 +356,8 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onCall = onCall,
+                            onVideoCall = onVideoCall,
                         )
                     }
                 }

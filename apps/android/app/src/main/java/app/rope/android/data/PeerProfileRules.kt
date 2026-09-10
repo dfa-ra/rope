@@ -29,4 +29,11 @@ object PeerProfileRules {
         count <= 0 -> SECTION
         else -> "$SECTION · $count"
     }
+
+    const val CALL_LABEL = "Звонок"
+    const val VIDEO_LABEL = "Видео"
+
+    /** Same gate as the chat header — 1:1 only, not Saved, not groups. */
+    fun showCall(peerId: String?, isGroup: Boolean): Boolean =
+        VideoCallRules.showHeader(peerId, isGroup)
 }

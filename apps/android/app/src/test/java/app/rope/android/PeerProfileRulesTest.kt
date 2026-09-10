@@ -4,6 +4,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.SavedMessagesRules
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,6 +45,17 @@ class PeerProfileRulesTest {
         assertEquals("Профиль", PeerProfileRules.title("  "))
         assertEquals("Профиль", PeerProfileRules.title(null))
         assertEquals(3, PeerProfileRules.GRID_COLUMNS)
+    }
+
+    @Test
+    fun callActionsMatchChatHeaderGate() {
+        assertTrue(PeerProfileRules.showCall("bob", isGroup = false))
+        assertFalse(PeerProfileRules.showCall("bob", isGroup = true))
+        assertFalse(PeerProfileRules.showCall(SavedMessagesRules.ID, isGroup = false))
+        assertFalse(PeerProfileRules.showCall(null, isGroup = false))
+        assertFalse(PeerProfileRules.showCall("", isGroup = false))
+        assertEquals("Звонок", PeerProfileRules.CALL_LABEL)
+        assertEquals("Видео", PeerProfileRules.VIDEO_LABEL)
     }
 
     private fun img(
