@@ -140,7 +140,8 @@ data class CallSignal(
 
         fun hasForbiddenScheme(value: String): Boolean {
             val lower = value.lowercase()
-            return "file:" in lower || "javascript:" in lower || "data:" in lower
+            return "file:" in lower || "javascript:" in lower || "data:" in lower ||
+                "blob:" in lower || "intent:" in lower
         }
     }
 
