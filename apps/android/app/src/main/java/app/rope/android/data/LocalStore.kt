@@ -221,6 +221,27 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         writableDatabase.execSQL("UPDATE messages SET local_path = ? WHERE id = ?", arrayOf(path, id))
     }
 
+    fun localPathsExcept(peerId: String): List<String> {
+        val c = readableDatabase.rawQuery(
+            "SELECT local_path FROM messages WHERE peer_id != ? AND local_path IS NOT NULL AND local_path != ''",
+            arrayOf(peerId),
+        )
+        val out = mutableListOf<String>()
+        c.use {
+            while (it.moveToNext()) {
+                JsonIds.optional(it.getString(0))?.let { path -> out += path }
+            }
+        }
+        return out
+    }
+
+    fun clearChatLocalPaths(peerId: String) {
+        writableDatabase.execSQL(
+            "UPDATE messages SET local_path = NULL WHERE peer_id = ?",
+            arrayOf(peerId),
+        )
+    }
+
     fun editMessage(id: String, text: String): Boolean {
         val msg = message(id) ?: return false
         val oldUrl = LinkPreviewRules.firstHttps(msg.text)

@@ -103,6 +103,7 @@ fun GroupInfoPane(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
+    onClearChatMedia: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -138,6 +139,9 @@ fun GroupInfoPane(
                         )
                     }
                 }
+            }
+            item {
+                ChatStorageCard(state.messages, onClearChatMedia)
             }
             item { Text("Участники", style = MaterialTheme.typography.titleSmall) }
             items(g.members, key = { it }) { id ->

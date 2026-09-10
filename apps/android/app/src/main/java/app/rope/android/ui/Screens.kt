@@ -138,6 +138,7 @@ fun RopeScaffold(
     onAddMember: (String) -> Unit,
     onRemoveMember: (String) -> Unit,
     onLeaveGroup: () -> Unit = {},
+    onClearChatMedia: () -> Unit = {},
     onRevokeMember: (String) -> Unit = {},
     onAcceptCall: () -> Unit,
     onRejectCall: () -> Unit,
@@ -350,12 +351,19 @@ fun RopeScaffold(
                             onToggleLinkPreviews,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(
+                            state,
+                            onAddMember,
+                            onRemoveMember,
+                            onLeaveGroup,
+                            onClearChatMedia = onClearChatMedia,
+                        ) { onBack() }
                         Screen.PeerProfile -> app.rope.android.ui.PeerProfilePane(
                             state,
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onClearChatMedia = onClearChatMedia,
                         )
                     }
                 }

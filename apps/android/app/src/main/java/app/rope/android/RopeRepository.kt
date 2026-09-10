@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ChatStorageRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -715,6 +716,22 @@ class RopeRepository(private val app: Application) {
 
     fun cancelPendingMedia() {
         _state.value = _state.value.copy(pendingAttachments = emptyList())
+    }
+
+    fun clearOpenChatMedia() {
+        val chatId = openChatId() ?: return
+        val mine = store.messages(chatId)
+        val paths = ChatStorageRules.cachedPaths(mine)
+        val bytes = ChatStorageRules.bytesOf(paths) { path ->
+            File(path).takeIf { it.isFile }?.length() ?: 0L
+        }
+        if (!ChatStorageRules.canClear(bytes)) return
+        ChatStorageRules.filesSafeToDelete(paths, store.localPathsExcept(chatId)).forEach { path ->
+            File(path).takeIf { it.isFile }?.delete()
+        }
+        store.clearChatLocalPaths(chatId)
+        refreshOpenChat()
+        notice(ChatStorageRules.DONE)
     }
 
     fun deleteMessage(msg: ChatMessage) {

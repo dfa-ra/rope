@@ -23,8 +23,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,9 +40,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ChatStorageRules
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.media.ImageCodec
+import java.io.File
 
 @Composable
 fun PeerProfilePane(
@@ -45,6 +52,7 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onClearChatMedia: () -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
@@ -93,6 +101,13 @@ fun PeerProfilePane(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                ChatStorageCard(
+                    state.messages,
+                    onClearChatMedia,
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
                 Text(
@@ -157,6 +172,61 @@ private fun SharedPhotoTile(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+fun ChatStorageCard(
+    messages: List<ChatMessage>,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bytes = remember(messages) {
+        ChatStorageRules.bytesOf(ChatStorageRules.cachedPaths(messages)) { path ->
+            File(path).takeIf { it.isFile }?.length() ?: 0L
+        }
+    }
+    var confirm by remember { mutableStateOf(false) }
+    SectionCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(ChatStorageRules.TITLE, style = MaterialTheme.typography.titleMedium)
+            Text(ChatStorageRules.label(bytes), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                ChatStorageRules.HINT,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (ChatStorageRules.canClear(bytes)) {
+                if (confirm) {
+                    Text(
+                        ChatStorageRules.CONFIRM,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    GlowButton(
+                        ChatStorageRules.CONFIRM_ACTION,
+                        {
+                            onClear()
+                            confirm = false
+                        },
+                        Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = ChatStorageRules.CONFIRM_ACTION },
+                    )
+                    TextButton(onClick = { confirm = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text(ChatStorageRules.CANCEL)
+                    }
+                } else {
+                    QuietButton(
+                        ChatStorageRules.ACTION,
+                        { confirm = true },
+                        Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = ChatStorageRules.ACTION },
+                    )
+                }
+            }
         }
     }
 }
