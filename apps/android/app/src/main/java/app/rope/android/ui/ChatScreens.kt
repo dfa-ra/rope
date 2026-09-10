@@ -1716,9 +1716,9 @@ private fun MentionText(
         text = annotated,
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
-            val hit = hidden.firstOrNull { offset in it }
+            val hit = hidden.firstOrNull { range -> SpoilerRules.covers(listOf(range), offset) }
             if (hit != null) {
-                revealed = revealed + hit
+                revealed = revealed + listOf(hit)
                 return@ClickableText
             }
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
