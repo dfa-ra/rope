@@ -1,6 +1,7 @@
 package app.rope.android
 
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 import org.junit.Assert.assertEquals
@@ -65,5 +66,14 @@ class SettingsRulesTest {
         assertEquals(Screen.Settings, HomeCtas.settings.destination)
         assertTrue(HomeCtas.shortcuts.contains(HomeCtas.settings))
         assertEquals("Настройки", HomeCtas.settings.label)
+    }
+
+    @Test
+    fun savedMessagesJumpStaysOnThisDevice() {
+        assertEquals("Избранное", SettingsRules.savedMessagesTitle())
+        assertEquals("Только на этом устройстве", SettingsRules.savedMessagesHint())
+        assertFalse(SettingsRules.savedMessagesHint().contains("FCM"))
+        assertFalse(SettingsRules.savedMessagesHint().contains("облак", ignoreCase = true))
+        assertTrue(SavedMessagesRules.skipNetwork(SavedMessagesRules.ID))
     }
 }

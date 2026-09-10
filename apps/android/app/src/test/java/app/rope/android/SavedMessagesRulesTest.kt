@@ -15,6 +15,7 @@ import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThreadEmptyRules
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -92,6 +93,8 @@ class SavedMessagesRulesTest {
         assertTrue(SavedMessagesRules.isLocalObject(SavedMessagesRules.localObjectId("abc")))
         assertFalse(SavedMessagesRules.isLocalObject("server-uuid"))
         assertTrue(SavedMessagesRules.skipNetwork(SavedMessagesRules.ID))
+        assertEquals(SavedMessagesRules.TITLE, SettingsRules.savedMessagesTitle())
+        assertEquals(SavedMessagesRules.IDLE_SUBTITLE, SettingsRules.savedMessagesHint())
         val from = ForwardRules.originName(
             ChatMessage(
                 id = "s",

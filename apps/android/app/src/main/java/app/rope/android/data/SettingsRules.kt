@@ -43,4 +43,9 @@ object SettingsRules {
 
     fun copyFingerprintValue(hex: String): String =
         hex.trim().lowercase().filter { it in '0'..'9' || it in 'a'..'f' }
+
+    /** Settings → Избранное. Same local thread as the chat-list row; not a cloud vault. */
+    fun savedMessagesTitle(): String = SavedMessagesRules.TITLE
+
+    fun savedMessagesHint(): String = SavedMessagesRules.IDLE_SUBTITLE
 }

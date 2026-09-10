@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
 import app.rope.android.data.RevokeRules
+import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
 
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onOpenSaved: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -69,6 +71,38 @@ fun SettingsPane(
                             } else {
                                 "Rope ${BuildConfig.VERSION_NAME}"
                             },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        FadeIn(100) {
+            SectionCard {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenSaved)
+                        .semantics { contentDescription = SettingsRules.savedMessagesTitle() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    InitialsAvatar(
+                        title = SavedMessagesRules.TITLE,
+                        group = false,
+                        online = false,
+                        size = 40.dp,
+                        showPresence = false,
+                        saved = true,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            SettingsRules.savedMessagesTitle(),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            SettingsRules.savedMessagesHint(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
