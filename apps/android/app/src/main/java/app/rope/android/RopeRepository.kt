@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.AddToGroupRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -1219,6 +1220,23 @@ class RopeRepository(private val app: Application) {
                 val updated = api?.addGroupMember(g.groupId, deviceId)?.copy(createdBy = g.createdBy) ?: return@launch
                 store.upsertGroup(updated)
                 _state.value = _state.value.copy(group = updated)
+                refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
+    fun addPeerToGroup(group: RopeGroup, deviceId: String) {
+        val s = _state.value
+        if (!AddToGroupRules.canAdd(group, deviceId, s.profile?.deviceId, s.profile?.role)) return
+        scope.launch {
+            try {
+                val updated = api?.addGroupMember(group.groupId, deviceId)?.copy(createdBy = group.createdBy)
+                    ?: return@launch
+                store.upsertGroup(updated)
+                val open = if (s.group?.groupId == updated.groupId) updated else s.group
+                _state.value = _state.value.copy(group = open, notice = AddToGroupRules.notice(updated.name))
                 refreshDirectory()
             } catch (e: Exception) {
                 error(e)

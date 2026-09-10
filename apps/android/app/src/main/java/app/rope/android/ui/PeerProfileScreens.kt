@@ -25,6 +25,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -34,9 +38,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
+import app.rope.android.data.AddToGroupRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.RopeGroup
 import app.rope.android.media.ImageCodec
 
 @Composable
@@ -45,12 +51,21 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onAddToGroup: (RopeGroup, String) -> Unit = { _, _ -> },
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val peerId = peer?.deviceId
+    val eligible = AddToGroupRules.eligible(
+        state.groups,
+        peerId,
+        state.profile?.deviceId,
+        state.profile?.role,
+    )
+    var pendingGroupId by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +107,46 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+            if (eligible.isNotEmpty() && peerId != null) {
+                item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                    Text(
+                        AddToGroupRules.SECTION,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                items(
+                    eligible,
+                    key = { it.groupId },
+                    span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) },
+                ) { g ->
+                    val label = if (pendingGroupId == g.groupId) AddToGroupRules.confirm(g.name) else g.name
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (pendingGroupId == g.groupId) {
+                                    onAddToGroup(g, peerId)
+                                    pendingGroupId = null
+                                } else {
+                                    pendingGroupId = g.groupId
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .semantics { contentDescription = label },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        InitialsAvatar(g.name, group = true, online = false, size = 40.dp)
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
