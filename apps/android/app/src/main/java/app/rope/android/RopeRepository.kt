@@ -177,6 +177,7 @@ data class UiState(
     val forwarding: ChatMessage? = null,
     val chatQuery: String = "",
     val messageQuery: String = "",
+    val searchVoice: Boolean = false,
     val typingName: String? = null,
     val viewingImage: ChatMessage? = null,
     val scrollToMessageId: String? = null,
@@ -317,6 +318,7 @@ class RopeRepository(private val app: Application) {
             }
             BackLayer.ClearMessageQuery -> {
                 setMessageQuery("")
+                setSearchVoice(false)
                 true
             }
             BackLayer.ClearChatQuery -> {
@@ -345,6 +347,7 @@ class RopeRepository(private val app: Application) {
                     error = null,
                     viewingImage = null,
                     messageQuery = "",
+                    searchVoice = false,
                     chatQuery = NavRules.chatQueryAfterPop(s.screen, dest, s.chatQuery),
                     unreadAnchorId = if (next.last() == Screen.Chat || next.last() == Screen.PeerProfile) {
                         s.unreadAnchorId
@@ -388,6 +391,15 @@ class RopeRepository(private val app: Application) {
 
     fun setMessageQuery(query: String) {
         _state.value = _state.value.copy(messageQuery = query)
+    }
+
+    fun toggleSearchVoice() {
+        _state.value = _state.value.copy(searchVoice = !_state.value.searchVoice)
+    }
+
+    fun setSearchVoice(on: Boolean) {
+        if (_state.value.searchVoice == on) return
+        _state.value = _state.value.copy(searchVoice = on)
     }
 
     fun setGroupName(name: String) {
@@ -2141,6 +2153,7 @@ class RopeRepository(private val app: Application) {
             replySpan = null,
             editTarget = null,
             messageQuery = "",
+            searchVoice = false,
             pinnedMessageId = prefs.pinnedMessageId,
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,

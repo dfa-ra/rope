@@ -1,5 +1,7 @@
 package app.rope.android
 
+import app.rope.android.data.SearchVoiceRules
+
 enum class NavMode { Push, SwitchTab, Reset }
 
 enum class BackLayer {
@@ -100,7 +102,7 @@ object BackStack {
         hints.emojiOpen -> BackLayer.CloseEmoji
         hints.searchOpen -> BackLayer.CloseSearch
         hints.dialogOpen -> BackLayer.CloseDialog
-        state.messageQuery.isNotBlank() -> BackLayer.ClearMessageQuery
+        SearchVoiceRules.searching(state.messageQuery, state.searchVoice) -> BackLayer.ClearMessageQuery
         NavRules.backClearsChatQuery(state.screen) && state.chatQuery.isNotBlank() -> BackLayer.ClearChatQuery
         state.forwarding != null -> BackLayer.CancelForward
         else -> {

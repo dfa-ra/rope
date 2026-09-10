@@ -194,6 +194,8 @@ class MainActivity : AppCompatActivity() {
                     onVideoNoteFinish = repo::finishVideoNote,
                     onVideoNotePreview = repo::bindVideoNotePreview,
                     onVideoNotePreviewGone = repo::unbindVideoNotePreview,
+                    onToggleSearchVoice = repo::toggleSearchVoice,
+                    onClearSearchVoice = { repo.setSearchVoice(false) },
                     onCall = { withMic("call") { repo.startCall() } },
                     onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,

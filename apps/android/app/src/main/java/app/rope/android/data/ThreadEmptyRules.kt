@@ -15,11 +15,11 @@ object ThreadEmptyRules {
     const val SEARCH_BODY_FALLBACK = "Попробуйте изменить запрос."
     const val COPY_MAX = 80
 
-    fun copy(query: String, saved: Boolean = false): ThreadEmptyCopy {
-        if (ChatListRules.searching(query)) {
+    fun copy(query: String, saved: Boolean = false, voiceOnly: Boolean = false): ThreadEmptyCopy {
+        if (SearchVoiceRules.searching(query, voiceOnly)) {
             return ThreadEmptyCopy(
                 title = SEARCH_TITLE,
-                body = searchBody(query),
+                body = SearchVoiceRules.emptyBody(query, voiceOnly),
             )
         }
         if (saved) {

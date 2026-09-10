@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -158,6 +161,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SearchVoiceRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -755,6 +759,8 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onToggleSearchVoice: () -> Unit = {},
+    onClearSearchVoice: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -774,15 +780,15 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = remember(state.messages, state.messageQuery) {
-        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val visible = remember(state.messages, state.messageQuery, state.searchVoice) {
+        state.messages.filter { SearchVoiceRules.matches(it, state.messageQuery, state.searchVoice) }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
-    val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
+    val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery, state.searchVoice) {
         UnreadSeparatorRules.insert(
             AlbumRules.collapse(DateSeparatorRules.items(visible)),
             state.unreadAnchorId,
-            searching = state.messageQuery.isNotBlank(),
+            searching = SearchVoiceRules.searching(state.messageQuery, state.searchVoice),
         )
     }
     val list = rememberLazyListState()
@@ -802,6 +808,7 @@ fun ChatPane(
     BackHandler(enabled = showSearch && menuMessage == null) {
         showSearch = false
         onMessageQuery("")
+        onClearSearchVoice()
     }
     BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
     LaunchedEffect(threadItems.size, state.messageQuery) {
@@ -896,7 +903,13 @@ fun ChatPane(
                         color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
+                IconButton(onClick = {
+                    showSearch = !showSearch
+                    if (!showSearch) {
+                        onMessageQuery("")
+                        onClearSearchVoice()
+                    }
+                }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
                 if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
@@ -924,6 +937,14 @@ fun ChatPane(
                 ),
                 shape = RoundedCornerShape(RopeShapes.search),
             )
+            FilterChip(
+                selected = state.searchVoice,
+                onClick = onToggleSearchVoice,
+                label = { Text(SearchVoiceRules.LABEL) },
+                modifier = Modifier
+                    .padding(start = 12.dp, bottom = 4.dp)
+                    .semantics { contentDescription = SearchVoiceRules.LABEL },
+            )
         }
         pinned?.let { pin ->
             Surface(
@@ -948,7 +969,7 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
-                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved, voiceOnly = state.searchVoice)
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
