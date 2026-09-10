@@ -117,6 +117,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 - **0.3.50:** local Telegram-like chat archive on the chat list; object download failures are a uniform 404; invite TTL is capped at 24 hours; JSON API responses send `Cache-Control: no-store`; guest directory listings omit revoked members. Also: bootstrap does not echo invite/setup token status; group add/remove others is organizer/owner; WSS handshake failures do not echo reasons; incoming-call peer name is hidden on the lockscreen. Not envelope crypto.
 - **0.3.51 security:** LocalStore `decryptBytes` and IdentityVault wrap require a 12-byte AES-GCM IV; `SecretKv.unwrap` returns null on a corrupt wrap; GitHub APK asset names reject CR/LF; APKs install only from `cache/updates`. Not envelope crypto.
 - **0.3.52 security:** SecretKv wrap/unwrap, ICE hostname/TURN/hangup, group rename PATCH, and PeerIds reject CR/LF/NUL; APK install paths must be a direct child of `cache/updates`. LocalStore stays v6. Not envelope crypto.
+- Settings **Имя** saves the local display name. Distinct from nicks. LocalStore stays v6.
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator

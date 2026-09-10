@@ -618,6 +618,19 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(notice = "Скопировано")
     }
 
+    fun setDisplayName(raw: String) {
+        val login = LoginRules.normalize(raw)
+        if (!LoginRules.isValid(login)) {
+            notice(UserFacing.LOGIN)
+            return
+        }
+        val profile = _state.value.profile ?: return
+        if (profile.displayName == login) return
+        val updated = profile.copy(displayName = login)
+        store.saveProfile(updated)
+        _state.value = _state.value.copy(profile = updated)
+    }
+
     fun sendDraft() {
         val edit = _state.value.editTarget
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
