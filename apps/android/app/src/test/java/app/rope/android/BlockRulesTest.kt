@@ -57,7 +57,7 @@ class BlockRulesTest {
         assertEquals(emptySet<String>(), BlockRules.parse(null))
         assertEquals(emptySet<String>(), BlockRules.parse("not-json"))
         assertEquals("Анна", BlockRules.label("peer-1", listOf(anna)))
-        assertEquals("abcd1234…", BlockRules.preview("abcdefghijklmnop"))
+        assertEquals("abcdefgh…", BlockRules.preview("abcdefghijklmnop"))
         assertEquals("short", BlockRules.preview("short"))
     }
 
