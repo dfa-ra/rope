@@ -3,7 +3,11 @@ package app.rope.android
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -63,6 +67,7 @@ import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.SaveOutRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
@@ -167,6 +172,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val saveOutgoingGallery: Boolean = false,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +262,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    saveOutgoingGallery = store.saveOutgoingGallery(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -584,6 +591,12 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleSaveOutgoingGallery() {
+        val next = !_state.value.saveOutgoingGallery
+        store.saveOutgoingGallery(next)
+        _state.value = _state.value.copy(saveOutgoingGallery = next)
     }
 
     fun toggleLinkPreviews() {
@@ -1628,6 +1641,7 @@ class RopeRepository(private val app: Application) {
             val objectId = SavedMessagesRules.localObjectId(UUID.randomUUID().toString())
             val payload = payloadOf(objectId, null)
             val cache = persistPlain(objectId, name, mime, bytes)
+            maybeSaveOutgoing(cache, kind, mime)
             insertLocalSaved(
                 text = payload.preview(),
                 kind = payload.messageKind(),
@@ -1643,6 +1657,7 @@ class RopeRepository(private val app: Application) {
         val inKnownGroup = group != null && _state.value.groups.any { it.groupId == group.groupId }
         val payload = payloadOf(objectId, if (inKnownGroup) group?.groupId else null)
         val cache = persistPlain(objectId, name, mime, bytes)
+        maybeSaveOutgoing(cache, kind, mime)
         if (inKnownGroup && group != null) {
             sendGroupPayload(
                 group,
@@ -1804,7 +1819,58 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun persistPlain(objectId: String, name: String, mime: String, bytes: ByteArray): File {
-        return ImageCodec.persist(File(app.filesDir, "media"), objectId, mime, name, bytes)
+        return ImageCodec.persist(File(app.filesDir, SaveOutRules.MEDIA_DIR), objectId, mime, name, bytes)
+    }
+
+    private fun maybeSaveOutgoing(file: File, kind: String, mime: String) {
+        if (!SaveOutRules.shouldSave(_state.value.saveOutgoingGallery, kind)) return
+        val media = File(app.filesDir, SaveOutRules.MEDIA_DIR)
+        if (!SaveOutRules.allow(file, media)) return
+        runCatching {
+            writeOutgoingGallery(
+                file,
+                SaveOutRules.displayName(file),
+                SaveOutRules.mimeFor(kind, mime, file),
+                SaveOutRules.isVideo(kind),
+            )
+        }
+    }
+
+    private fun writeOutgoingGallery(file: File, name: String, mime: String, video: Boolean) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val collection = if (video) {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            val resolver = app.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, SaveOutRules.relativePath(video))
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(collection, values) ?: return
+            try {
+                resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+                    ?: run {
+                        resolver.delete(uri, null, null)
+                        return
+                    }
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } catch (_: Exception) {
+                resolver.delete(uri, null, null)
+            }
+            return
+        }
+        val dir = Environment.getExternalStoragePublicDirectory(
+            if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES,
+        )
+        val rope = File(dir, "Rope")
+        rope.mkdirs()
+        File(rope, name).writeBytes(file.readBytes())
     }
 
     private fun scheduleUnfurl(text: String) {

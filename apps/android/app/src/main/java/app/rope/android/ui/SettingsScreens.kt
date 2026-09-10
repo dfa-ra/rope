@@ -36,6 +36,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleSaveOutgoing: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -120,6 +121,28 @@ fun SettingsPane(
                             if (checked != state.linkPreviewsEnabled) onToggleLinkPreviews()
                         },
                         modifier = Modifier.semantics { contentDescription = "Предпросмотр ссылок" },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(app.rope.android.data.SaveOutRules.LABEL, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            app.rope.android.data.SaveOutRules.HINT,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.saveOutgoingGallery,
+                        onCheckedChange = { checked ->
+                            if (checked != state.saveOutgoingGallery) onToggleSaveOutgoing()
+                        },
+                        modifier = Modifier.semantics { contentDescription = app.rope.android.data.SaveOutRules.LABEL },
                     )
                 }
             }
