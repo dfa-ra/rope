@@ -14,9 +14,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -24,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.ChatExportRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +46,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onExportChats: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -202,6 +213,58 @@ fun SettingsPane(
                 Text("Rope ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     SettingsRules.aboutBody(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        FadeIn(280) {
+            var pass by remember { mutableStateOf("") }
+            var confirm by remember { mutableStateOf("") }
+            SectionCard {
+                Text(ChatExportRules.SECTION, style = MaterialTheme.typography.titleMedium)
+                Text(ChatExportRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    ChatExportRules.BODY,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    pass,
+                    { pass = it },
+                    label = { Text("Пароль") },
+                    singleLine = true,
+                    enabled = !state.busy,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    confirm,
+                    { confirm = it },
+                    label = { Text("Ещё раз") },
+                    singleLine = true,
+                    enabled = !state.busy,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    ChatExportRules.HINT,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = { onExportChats(pass) },
+                    enabled = !state.busy && ChatExportRules.passphraseOk(pass, confirm),
+                    modifier = Modifier.semantics { contentDescription = ChatExportRules.BUTTON },
+                ) {
+                    Text(if (state.busy) ChatExportRules.BUSY else ChatExportRules.BUTTON)
+                }
+                Text(
+                    ChatExportRules.FOOTER,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

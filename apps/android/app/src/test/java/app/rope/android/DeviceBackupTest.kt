@@ -64,6 +64,16 @@ class DeviceBackupTest {
     }
 
     @Test
+    fun openRejectsRobkTakeout() {
+        try {
+            DeviceBackup.open(byteArrayOf(0x52, 0x4F, 0x42, 0x4B, 9)) { error("no") }
+            org.junit.Assert.fail("expected robk reject")
+        } catch (e: IllegalStateException) {
+            assertTrue(e.message.orEmpty().contains("экспорт"))
+        }
+    }
+
+    @Test
     fun toBytesIsCleartextJsonIncludingGithubToken() {
         val json = String(sample().toBytes(), Charsets.UTF_8)
         assertTrue(json.contains("ghp_test"))

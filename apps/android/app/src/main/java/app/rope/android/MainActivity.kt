@@ -52,6 +52,13 @@ class MainActivity : AppCompatActivity() {
         (application as RopeApp).repo.restoreFromFile(bytes)
     }
 
+    private val chatExportCreate = registerForActivityResult(
+        ActivityResultContracts.CreateDocument(app.rope.android.data.ChatExportRules.MIME),
+    ) { uri ->
+        val repo = (application as RopeApp).repo
+        if (uri == null) repo.cancelChatExport() else repo.writeChatExport(uri)
+    }
+
     private var afterAudio: String? = null
 
     private val audioPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -235,6 +242,11 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onExportChats = { pass ->
+                        if (repo.prepareChatExport(pass)) {
+                            chatExportCreate.launch(repo.chatExportFileName())
+                        }
+                    },
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,

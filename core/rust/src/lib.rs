@@ -1,6 +1,7 @@
 uniffi::setup_scaffolding!();
 
 mod auth;
+mod backup;
 mod envelope;
 mod error;
 mod group;
@@ -146,6 +147,16 @@ pub fn fingerprint_from_cert_der(der: Vec<u8>) -> String {
 #[uniffi::export]
 pub fn dev_http_fingerprint() -> String {
     invite::dev_http_fingerprint()
+}
+
+#[uniffi::export]
+pub fn seal_chat_backup(password: String, plaintext: Vec<u8>) -> Result<Vec<u8>, RopeError> {
+    backup::seal_chat_backup(&password, &plaintext)
+}
+
+#[uniffi::export]
+pub fn open_chat_backup(password: String, blob: Vec<u8>) -> Result<Vec<u8>, RopeError> {
+    backup::open_chat_backup(&password, &blob)
 }
 
 #[uniffi::export]

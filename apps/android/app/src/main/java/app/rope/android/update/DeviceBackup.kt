@@ -62,7 +62,15 @@ data class DeviceBackup(
             )
         }
 
+        fun isRobk(raw: ByteArray): Boolean =
+            raw.size >= 4 &&
+                raw[0] == 0x52.toByte() &&
+                raw[1] == 0x4F.toByte() &&
+                raw[2] == 0x42.toByte() &&
+                raw[3] == 0x4B.toByte()
+
         fun open(raw: ByteArray, decrypt: (ByteArray) -> ByteArray): DeviceBackup {
+            if (isRobk(raw)) error("это экспорт переписки, не ключ устройства")
             if (isSealed(raw)) {
                 return parse(decrypt(raw.copyOfRange(MAGIC.size, raw.size)))
             }

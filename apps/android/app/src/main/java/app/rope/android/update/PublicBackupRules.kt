@@ -8,4 +8,5 @@ object PublicBackupRules {
     const val allowIdentityDump = false
     const val allowAutoRestore = false
     const val allowApkCopy = true
+    const val allowRobkDownloads = false
 }

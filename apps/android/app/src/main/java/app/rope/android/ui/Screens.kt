@@ -180,6 +180,7 @@ fun RopeScaffold(
     onDismissNotice: () -> Unit,
     onBack: () -> Boolean = { false },
     onTab: (Screen) -> Unit = onGo,
+    onExportChats: (String) -> Unit = {},
 ) {
     val signedIn = state.profile != null
     val splash = rememberSplashOverlay(state)
@@ -348,6 +349,7 @@ fun RopeScaffold(
                             onToggleNotifications,
                             onCopyText,
                             onToggleLinkPreviews,
+                            onExportChats,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }

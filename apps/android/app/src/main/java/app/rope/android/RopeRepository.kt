@@ -26,6 +26,8 @@ import app.rope.android.data.CallSignal
 import app.rope.android.data.CallToneRules
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
+import app.rope.android.data.ChatExportChat
+import app.rope.android.data.ChatExportRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
@@ -120,6 +122,7 @@ import uniffi.rope_core.encryptObject
 import uniffi.rope_core.knownEnvelopeType
 import uniffi.rope_core.parseInviteUrl
 import uniffi.rope_core.publicIdentityFromBlob
+import uniffi.rope_core.sealChatBackup
 import uniffi.rope_core.verifyInvite
 import java.io.File
 import java.util.UUID
@@ -210,6 +213,7 @@ class RopeRepository(private val app: Application) {
     val state: StateFlow<UiState> = _state
 
     private var identity: DeviceIdentity? = null
+    private var pendingExportPass: String? = null
     private var api: ServerApi? = null
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
@@ -596,6 +600,80 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(composerPreview = null)
         } else {
             scheduleUnfurl(_state.value.draftText)
+        }
+    }
+
+    fun chatExportFileName(): String = ChatExportRules.suggestedName(System.currentTimeMillis())
+
+    fun prepareChatExport(pass: String): Boolean {
+        if (_state.value.busy) return false
+        if (pass.length < ChatExportRules.MIN_PASS) {
+            _state.value = _state.value.copy(error = "Пароль — минимум 12 символов")
+            return false
+        }
+        pendingExportPass = pass
+        return true
+    }
+
+    fun cancelChatExport() {
+        pendingExportPass = null
+    }
+
+    fun writeChatExport(uri: Uri) {
+        val pass = pendingExportPass
+        pendingExportPass = null
+        if (pass.isNullOrBlank()) return
+        scope.launch {
+            busy(true)
+            val dir = File(app.cacheDir, "export-${UUID.randomUUID()}")
+            try {
+                dir.mkdirs()
+                val mediaRoot = File(app.filesDir, "media")
+                val chats = mutableListOf<ChatExportChat>()
+                val rows = mutableListOf<JSONObject>()
+                val media = mutableListOf<Pair<String, File>>()
+                val used = mutableSetOf<String>()
+                val devices = _state.value.devices.associateBy { it.deviceId }
+                val groups = store.groups().associateBy { ChatIds.group(it.groupId) }
+                for ((peerId, _) in store.conversations()) {
+                    val kind = ChatExportRules.chatKind(peerId)
+                    val title = when {
+                        SavedMessagesRules.isSaved(peerId) -> SavedMessagesRules.TITLE
+                        ChatIds.isGroup(peerId) -> groups[peerId]?.name?.ifBlank { peerId } ?: peerId
+                        else -> devices[peerId]?.displayName?.ifBlank { peerId.take(8) } ?: peerId.take(8)
+                    }
+                    chats += ChatExportChat(peerId, title, kind)
+                    for (msg in store.messages(peerId)) {
+                        if (ChatExportRules.skipMessage(msg)) continue
+                        val local = if (ChatExportRules.mediaAllowed(msg.localPath, mediaRoot)) {
+                            val src = File(msg.localPath!!)
+                            val rel = ChatExportRules.mediaRelName(msg.id, src, used)
+                            media += rel to src
+                            rel
+                        } else {
+                            null
+                        }
+                        rows += ChatExportRules.rowJson(msg, local)
+                    }
+                }
+                val zip = File(dir, "inner.zip")
+                ChatExportRules.writeInnerZip(
+                    zip,
+                    ChatExportRules.manifest(System.currentTimeMillis(), rows.size, media.size, chats),
+                    rows,
+                    media,
+                )
+                val sealed = sealChatBackup(pass, zip.readBytes())
+                if (!ChatExportRules.hasMagic(sealed)) error("ожидался ROBK")
+                app.contentResolver.openOutputStream(uri)?.use { it.write(sealed) }
+                    ?: error("не удалось сохранить файл")
+                notice(ChatExportRules.DONE)
+            } catch (e: Exception) {
+                error(e)
+            } finally {
+                dir.deleteRecursively()
+                busy(false)
+            }
         }
     }
 

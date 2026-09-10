@@ -774,6 +774,10 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -841,6 +845,8 @@ internal interface UniffiLib : Library {
     ): Byte
     fun uniffi_rope_core_fn_func_object_hash_hex(`ciphertext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_func_open_chat_backup(`password`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_parse_envelope(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_parse_invite_url(`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -850,6 +856,8 @@ internal interface UniffiLib : Library {
     fun uniffi_rope_core_fn_func_public_identity(`identity`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_public_identity_from_blob(`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_rope_core_fn_func_seal_chat_backup(`password`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rope_core_fn_func_unix_timestamp(uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -989,6 +997,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_rope_core_checksum_func_object_hash_hex(
     ): Short
+    fun uniffi_rope_core_checksum_func_open_chat_backup(
+    ): Short
     fun uniffi_rope_core_checksum_func_parse_envelope(
     ): Short
     fun uniffi_rope_core_checksum_func_parse_invite_url(
@@ -998,6 +1008,8 @@ internal interface UniffiLib : Library {
     fun uniffi_rope_core_checksum_func_public_identity(
     ): Short
     fun uniffi_rope_core_checksum_func_public_identity_from_blob(
+    ): Short
+    fun uniffi_rope_core_checksum_func_seal_chat_backup(
     ): Short
     fun uniffi_rope_core_checksum_func_unix_timestamp(
     ): Short
@@ -1076,6 +1088,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_rope_core_checksum_func_object_hash_hex() != 10344.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_rope_core_checksum_func_open_chat_backup() != 29511.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_rope_core_checksum_func_parse_envelope() != 16652.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1089,6 +1104,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rope_core_checksum_func_public_identity_from_blob() != 60187.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_rope_core_checksum_func_seal_chat_backup() != 9305.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rope_core_checksum_func_unix_timestamp() != 329.toShort()) {
@@ -2419,6 +2437,16 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
     }
     
 
+    @Throws(RopeException::class) fun `openChatBackup`(`password`: kotlin.String, `blob`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(RopeException) { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_open_chat_backup(
+        FfiConverterString.lower(`password`),FfiConverterByteArray.lower(`blob`),_status)
+}
+    )
+    }
+    
+
     @Throws(RopeException::class) fun `parseEnvelope`(`bytes`: kotlin.ByteArray): EnvelopeMeta {
             return FfiConverterTypeEnvelopeMeta.lift(
     uniffiRustCallWithError(RopeException) { _status ->
@@ -2462,6 +2490,16 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
     uniffiRustCallWithError(RopeException) { _status ->
     UniffiLib.INSTANCE.uniffi_rope_core_fn_func_public_identity_from_blob(
         FfiConverterByteArray.lower(`blob`),_status)
+}
+    )
+    }
+    
+
+    @Throws(RopeException::class) fun `sealChatBackup`(`password`: kotlin.String, `plaintext`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(RopeException) { _status ->
+    UniffiLib.INSTANCE.uniffi_rope_core_fn_func_seal_chat_backup(
+        FfiConverterString.lower(`password`),FfiConverterByteArray.lower(`plaintext`),_status)
 }
     )
     }

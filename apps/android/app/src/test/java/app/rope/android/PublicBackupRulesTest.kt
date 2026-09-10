@@ -11,5 +11,6 @@ class PublicBackupRulesTest {
         assertFalse(PublicBackupRules.allowIdentityDump)
         assertFalse(PublicBackupRules.allowAutoRestore)
         assertTrue(PublicBackupRules.allowApkCopy)
+        assertFalse(PublicBackupRules.allowRobkDownloads)
     }
 }
