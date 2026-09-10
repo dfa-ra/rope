@@ -60,8 +60,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -156,6 +157,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.ViewerJumpRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
@@ -3052,6 +3054,7 @@ fun ImageViewer(
     onClose: () -> Unit,
     onShow: (ChatMessage) -> Unit = {},
     onEnsure: (ChatMessage) -> Unit = {},
+    onJump: (ChatMessage) -> Unit = {},
 ) {
     val album = siblings.ifEmpty { listOf(msg) }
     val start = album.indexOfFirst { it.id == msg.id }.coerceAtLeast(0)
@@ -3152,6 +3155,21 @@ fun ImageViewer(
                         }
                     }
                 }
+            }
+        }
+        val current = ViewerJumpRules.current(album, pagerState.currentPage, msg)
+        if (ViewerJumpRules.canJump(current)) {
+            IconButton(
+                onClick = { onJump(current) },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.Chat,
+                    contentDescription = ViewerJumpRules.ACTION,
+                    tint = Color.White,
+                )
             }
         }
         IconButton(
