@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.InAppSoundRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleNotifySound: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -98,6 +100,28 @@ fun SettingsPane(
                             if (checked != state.notificationsMuted) onToggleNotifications()
                         },
                         modifier = Modifier.semantics { contentDescription = "Без звука" },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Звук", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            InAppSoundRules.hint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.notifySound,
+                        onCheckedChange = { checked ->
+                            if (checked != state.notifySound) onToggleNotifySound()
+                        },
+                        modifier = Modifier.semantics { contentDescription = "Звук" },
                     )
                 }
                 Spacer(Modifier.height(12.dp))

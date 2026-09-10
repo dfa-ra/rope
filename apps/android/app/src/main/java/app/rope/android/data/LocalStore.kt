@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveNotifySound(enabled: Boolean) {
+        put("notify_sound", if (enabled) "1" else "0")
+    }
+
+    fun notifySound(): Boolean = InAppSoundRules.enabledFromKv(get("notify_sound"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

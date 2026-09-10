@@ -6,10 +6,15 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.InAppSoundRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -29,7 +34,13 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        sound: Boolean = false,
+        silent: Boolean = false,
+    ) {
         val intent = PendingIntent.getActivity(
             context,
             1,
@@ -42,8 +53,27 @@ class RopeNotifier(private val context: Context) {
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
+            .setSilent(silent)
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
+        if (sound) beep()
+    }
+
+    /**
+     * Settings toggle must work after the channel already exists.
+     * Recreating `rope-messages` does not change sound on API 26+.
+     */
+    private fun beep() {
+        runCatching {
+            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, InAppSoundRules.VOLUME)
+            tg.startTone(InAppSoundRules.TONE, InAppSoundRules.DURATION_MS)
+            Handler(Looper.getMainLooper()).postDelayed({
+                runCatching {
+                    tg.stopTone()
+                    tg.release()
+                }
+            }, InAppSoundRules.DURATION_MS + 40L)
+        }
     }
 
     fun incomingCall(name: String) {
