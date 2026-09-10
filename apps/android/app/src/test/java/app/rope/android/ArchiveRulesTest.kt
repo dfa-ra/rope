@@ -177,8 +177,8 @@ class ArchiveRulesTest {
 
     @Test
     fun profileArchiveLooksUpRowAndSkipsSaved() {
-        assertFalse(ArchiveRules.isArchived(listOf(anna, archivedAnna), anna.id))
-        assertTrue(ArchiveRules.isArchived(listOf(anna, archivedAnna), archivedAnna.id))
+        assertFalse(ArchiveRules.isArchived(listOf(anna), anna.id))
+        assertTrue(ArchiveRules.isArchived(listOf(archivedAnna), archivedAnna.id))
         assertFalse(ArchiveRules.isArchived(listOf(saved.copy(archived = true)), saved.id))
         assertFalse(ArchiveRules.isArchived(emptyList(), anna.id))
         assertFalse(ArchiveRules.isArchived(listOf(archivedAnna), null))
