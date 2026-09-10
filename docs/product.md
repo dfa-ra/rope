@@ -10,11 +10,11 @@ Stack (not negotiable without the user): **Kotlin UI → Rust UniFFI security co
 
 ## Canonical line (D-005 A)
 
-The product trunk is **`main`**, shipping **0.3.49**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, `v0.3.33`, `v0.3.34`, `v0.3.35`, `v0.3.36`, `v0.3.37`, `v0.3.38`, `v0.3.39`, `v0.3.40`, `v0.3.41`, `v0.3.42`, `v0.3.43`, `v0.3.44`, `v0.3.45`, `v0.3.46`, `v0.3.47`, and `v0.3.48` remain published history.
+The product trunk is **`main`**, shipping **0.3.50**. GitHub Releases `v0.2.15`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`, `v0.3.6`, `v0.3.7`, `v0.3.8`, `v0.3.9`, `v0.3.10`, `v0.3.11`, `v0.3.12`, `v0.3.13`, `v0.3.14`, `v0.3.15`, `v0.3.16`, `v0.3.17`, `v0.3.18`, `v0.3.19`, `v0.3.20`, `v0.3.21`, `v0.3.22`, `v0.3.23`, `v0.3.24`, `v0.3.25`, `v0.3.26`, `v0.3.27`, `v0.3.28`, `v0.3.29`, `v0.3.30`, `v0.3.31`, `v0.3.32`, `v0.3.33`, `v0.3.34`, `v0.3.35`, `v0.3.36`, `v0.3.37`, `v0.3.38`, `v0.3.39`, `v0.3.40`, `v0.3.41`, `v0.3.42`, `v0.3.43`, `v0.3.44`, `v0.3.45`, `v0.3.46`, `v0.3.47`, `v0.3.48`, and `v0.3.49` remain published history.
 
 | Line | What it is |
 | --- | --- |
-| **`main`** | Shipped tree: Android `versionName=0.3.49` / `versionCode=73`, plus CryptoGalera operating layer |
+| **`main`** | Shipped tree: Android `versionName=0.3.50` / `versionCode=74`, plus CryptoGalera operating layer |
 | **GitHub Release `v0.2.15`** | Previous line. Do not retag `v0.2.15`. |
 | **GitHub Release `v0.3.0`** | Previous line. Do not retag `v0.3.0`. |
 | **GitHub Release `v0.3.1`** | Previous line. Do not retag `v0.3.1`. |
@@ -64,7 +64,8 @@ The product trunk is **`main`**, shipping **0.3.49**. GitHub Releases `v0.2.15`,
 | **GitHub Release `v0.3.45`** | Previous line. Do not retag `v0.3.45`. |
 | **GitHub Release `v0.3.46`** | Previous line. Do not retag `v0.3.46`. |
 | **GitHub Release `v0.3.47`** | Previous line. Do not retag `v0.3.47`. |
-| **GitHub Release `v0.3.48`** | Previous Latest until `v0.3.49` publishes. Do not retag `v0.3.48`. |
+| **GitHub Release `v0.3.48`** | Previous line. Do not retag `v0.3.48`. |
+| **GitHub Release `v0.3.49`** | Previous Latest until `v0.3.50` publishes. Do not retag `v0.3.49`. |
 
 Older tags `v0.1.0`–`v0.2.14` remain published history. They are ancestors of `v0.2.15`.
 
@@ -74,7 +75,7 @@ Unique unshipped UI on `cursor/telegram-chrome-872f` (`039e381`) is **not** part
 
 The product succeeds when a non-developer organizer can:
 
-1. Install the Android app (this cycle ships `v0.3.49`).
+1. Install the Android app (this cycle ships `v0.3.50`).
 2. Provision (or point at) a VPS and complete owner bootstrap with `setup_token`.
 3. Invite others via QR / `rope://join?...` with TLS fingerprint binding.
 4. Exchange E2EE text (and the Stage-2 media/group/call features already in this tree).
@@ -111,6 +112,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 - **0.3.47 security:** unauthenticated public `GET /health` returns only `ok` plus `turn_running` / `turn_allocate_ok`; TURN relayed IP, ports, and `turn_error` stay on loopback for `install.sh`. Loopback vs public is `RemoteAddr` (not `X-Forwarded-For`). Authed admin status is unchanged.
 - **0.3.48 security:** unauthenticated `GET /v1/info` omits `public_ip`; join still gets `server_id` and TLS fingerprint. `public_ip` stays on the authenticated ICE response. 401 does not leak it.
 - **0.3.49 security:** `FLAG_SECURE` on Provision and Join so recents/screenshots cannot capture SSH passwords, PEMs, GitHub PATs, or a live invite token. Invite QR stays shareable. Not envelope crypto.
+- **0.3.50:** local Telegram-like chat archive on the chat list; object download failures are a uniform 404; invite TTL is capped at 24 hours; JSON API responses send `Cache-Control: no-store`; guest directory listings omit revoked members. Also: bootstrap does not echo invite/setup token status; group add/remove others is organizer/owner; WSS handshake failures do not echo reasons; incoming-call peer name is hidden on the lockscreen. Not envelope crypto.
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator
