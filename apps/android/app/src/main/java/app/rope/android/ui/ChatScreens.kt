@@ -152,6 +152,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.DeleteChatRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -207,6 +208,7 @@ fun ChatsPane(
     onMuteChat: (String) -> Unit = {},
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
+    onDeleteChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
@@ -313,6 +315,7 @@ fun ChatsPane(
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                    onDelete = if (isForwarding) null else ({ onDeleteChat(c.id) }),
                                 )
                             }
                         }
@@ -335,6 +338,7 @@ fun ChatsPane(
                                 query = state.chatQuery,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                onDelete = if (isForwarding) null else ({ onDeleteChat(c.id) }),
                             )
                         }
                     }
@@ -548,9 +552,11 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
-    BackHandler(enabled = menu) { menu = false }
+    var confirmDelete by remember(c.id) { mutableStateOf(false) }
+    BackHandler(enabled = menu) { menu = false; confirmDelete = false }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val bg by animateColorAsState(
@@ -585,7 +591,7 @@ internal fun ConversationRow(
                     interactionSource = interaction,
                     indication = LocalIndication.current,
                     onClick = onClick,
-                    onLongClick = { menu = !menu },
+                    onLongClick = { menu = !menu; confirmDelete = false },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -706,6 +712,29 @@ internal fun ConversationRow(
                 if (onArchive != null && ArchiveRules.canArchive(c.id)) {
                     TextButton(onClick = { onArchive(); menu = false }) {
                         Text(ArchiveRules.ARCHIVE)
+                    }
+                }
+            }
+            if (onDelete != null && DeleteChatRules.canDelete(c)) {
+                Row(
+                    Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = {
+                            if (confirmDelete) {
+                                onDelete()
+                                menu = false
+                            } else {
+                                confirmDelete = true
+                            }
+                        },
+                    ) {
+                        Text(
+                            if (confirmDelete) DeleteChatRules.CONFIRM else DeleteChatRules.ACTION,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }

@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.DeleteChatRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -762,6 +763,18 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         if (!cur.archived) return
         store.saveChatPrefs(id, ArchiveRules.unarchivePrefs(cur))
+        refreshConversations()
+    }
+
+    fun deleteChat(id: String) {
+        if (!DeleteChatRules.canDelete(id)) return
+        val leaving = DeleteChatRules.leaveOpenChat(openChatId(), id)
+        if (leaving) {
+            _state.value = _state.value.copy(draftText = "")
+        }
+        store.deleteChat(id)
+        store.saveChatPrefs(id, DeleteChatRules.clearedPrefs())
+        if (leaving) goBack()
         refreshConversations()
     }
 
@@ -2123,7 +2136,9 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun enterChat(chatId: String, peer: DirectoryDevice?, group: RopeGroup?) {
-        val prefs = store.chatPrefs(chatId)
+        val stored = store.chatPrefs(chatId)
+        val prefs = DeleteChatRules.restorePrefs(stored)
+        if (prefs != stored) store.saveChatPrefs(chatId, prefs)
         val messages = store.messages(chatId)
         val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
         val pending = if (MediaSendRules.keepPendingOnEnter(openChatId(), chatId)) {
@@ -2491,6 +2506,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                deleted = p.deleted,
             )
         }
         val gs = groups.map { g ->
@@ -2515,6 +2531,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                deleted = p.deleted,
             )
         }
         val leftover = lastBy.keys
@@ -2544,6 +2561,7 @@ class RopeRepository(private val app: Application) {
                     muted = p.muted,
                     unread = p.unread,
                     archived = p.archived,
+                    deleted = p.deleted,
                 )
             }
         val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])
@@ -2556,7 +2574,8 @@ class RopeRepository(private val app: Application) {
             identity?.deviceId().orEmpty(),
         )
         _state.value = _state.value.copy(
-            conversations = (listOf(saved) + dms + gs + leftover).sortedWith { a, b -> ChatListRules.compare(a, b) },
+            conversations = DeleteChatRules.visibleOf(listOf(saved) + dms + gs + leftover)
+                .sortedWith { a, b -> ChatListRules.compare(a, b) },
         )
     }
 
@@ -3401,9 +3420,13 @@ class RopeRepository(private val app: Application) {
         if (SavedMessagesRules.isSaved(chatId)) return
         val chatOpen = _state.value.screen == Screen.Chat && openChatId() == chatId
         val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        val cur = store.chatPrefs(chatId)
+        val stored = store.chatPrefs(chatId)
+        val cur = DeleteChatRules.restorePrefs(stored)
         if (!chatOpen || !appForeground) {
             store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
+            refreshConversations()
+        } else if (stored.deleted) {
+            store.saveChatPrefs(chatId, cur)
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {

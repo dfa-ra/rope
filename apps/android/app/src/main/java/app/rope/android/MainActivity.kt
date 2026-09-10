@@ -251,6 +251,7 @@ class MainActivity : AppCompatActivity() {
                     onMuteChat = repo::toggleMuteChat,
                     onArchiveChat = repo::archiveChat,
                     onUnarchiveChat = repo::unarchiveChat,
+                    onDeleteChat = repo::deleteChat,
                     onCopy = repo::copyMessage,
                     onPinMessage = repo::togglePinMessage,
                     onJump = repo::jumpToMessage,

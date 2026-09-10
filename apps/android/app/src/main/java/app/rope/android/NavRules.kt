@@ -1,6 +1,7 @@
 package app.rope.android
 
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.DeleteChatRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
@@ -141,10 +142,10 @@ object NavRules {
     }
 
     fun groupsOf(conversations: List<Conversation>): List<Conversation> =
-        conversations.filter { it.isGroup && !ArchiveRules.shouldHideFromMain(it) }
+        conversations.filter { it.isGroup && !ArchiveRules.shouldHideFromMain(it) && !DeleteChatRules.shouldHide(it) }
 
     fun callsOf(conversations: List<Conversation>): List<Conversation> =
-        conversations.filter { it.last?.kind == MessageKind.CALL && !ArchiveRules.shouldHideFromMain(it) }
+        conversations.filter { it.last?.kind == MessageKind.CALL && !ArchiveRules.shouldHideFromMain(it) && !DeleteChatRules.shouldHide(it) }
 
     fun peopleOf(devices: List<DirectoryDevice>, selfId: String?): List<DirectoryDevice> =
         devices.filter { it.deviceId != selfId }

@@ -171,6 +171,7 @@ fun RopeScaffold(
     onMuteChat: (String) -> Unit,
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
+    onDeleteChat: (String) -> Unit = {},
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
     onPinMessage: (app.rope.android.data.ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
@@ -300,6 +301,7 @@ fun RopeScaffold(
                             onMuteChat,
                             onArchiveChat,
                             onUnarchiveChat,
+                            onDeleteChat,
                             { onGo(Screen.Archive) },
                             listMode = NavRules.listMode(screen),
                         )
