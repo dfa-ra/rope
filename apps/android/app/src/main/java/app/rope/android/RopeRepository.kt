@@ -64,6 +64,7 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.OnlineAlertRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -768,6 +769,14 @@ class RopeRepository(private val app: Application) {
     fun toggleMuteChat(id: String) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
+        refreshConversations()
+    }
+
+    fun toggleOnlineAlert(id: String) {
+        val chatId = OnlineAlertRules.sanitizeId(id) ?: return
+        if (!OnlineAlertRules.canEnable(chatId)) return
+        val cur = store.chatPrefs(chatId)
+        store.saveChatPrefs(chatId, cur.copy(onlineAlert = !cur.onlineAlert))
         refreshConversations()
     }
 
@@ -2491,6 +2500,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                onlineAlert = p.onlineAlert,
             )
         }
         val gs = groups.map { g ->
@@ -2544,6 +2554,7 @@ class RopeRepository(private val app: Application) {
                     muted = p.muted,
                     unread = p.unread,
                     archived = p.archived,
+                    onlineAlert = p.onlineAlert,
                 )
             }
         val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])
@@ -3440,10 +3451,47 @@ class RopeRepository(private val app: Application) {
         if (arr != null) {
             for (i in 0 until arr.length()) ids += arr.getString(i)
         }
+        val prev = _state.value.onlineIds
+        fireOnlineAlerts(prev, ids)
         val devices = _state.value.devices.map { it.copy(online = it.deviceId in ids) }
         val peer = _state.value.peer?.let { it.copy(online = it.deviceId in ids) }
         _state.value = _state.value.copy(onlineIds = ids, devices = devices, peer = peer)
         refreshConversations()
+    }
+
+    private fun fireOnlineAlerts(prev: Set<String>, now: Set<String>) {
+        val prefs = store.allChatPrefs()
+        val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        val openId = openChatId()
+        val onThread = _state.value.screen == Screen.Chat || _state.value.screen == Screen.PeerProfile
+        for ((rawId, p) in prefs) {
+            val chatId = OnlineAlertRules.sanitizeId(rawId) ?: continue
+            val was = OnlineAlertRules.present(chatId, prev)
+            val isOn = OnlineAlertRules.present(chatId, now)
+            if (!OnlineAlertRules.shouldConsume(p.onlineAlert, was, isOn)) continue
+            val watching = OnlineAlertRules.watching(
+                appForeground,
+                onThread && PeerIds.same(openId, chatId),
+            )
+            if (OnlineAlertRules.shouldNotify(
+                    p.onlineAlert,
+                    was,
+                    isOn,
+                    _state.value.notificationsMuted,
+                    watching,
+                )
+            ) {
+                val name = _state.value.devices.find { PeerIds.same(it.deviceId, chatId) }?.displayName
+                    ?: _state.value.conversations.find { PeerIds.same(it.id, chatId) }?.title
+                    ?: OnlineAlertRules.title(null)
+                notifier.message(
+                    OnlineAlertRules.title(name),
+                    OnlineAlertRules.BODY,
+                    OnlineAlertRules.notifyId(chatId),
+                )
+            }
+            store.saveChatPrefs(chatId, OnlineAlertRules.consume(p))
+        }
     }
 
     private fun flushOutbox() {

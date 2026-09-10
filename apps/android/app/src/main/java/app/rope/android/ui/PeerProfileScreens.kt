@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
+import app.rope.android.data.OnlineAlertRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.media.ImageCodec
 
@@ -45,12 +47,15 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onToggleOnlineAlert: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val canAlert = OnlineAlertRules.canEnable(peer?.deviceId)
+    val armed = OnlineAlertRules.armedOf(state.conversations, peer?.deviceId)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +97,31 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (canAlert) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                Text(OnlineAlertRules.LABEL, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    OnlineAlertRules.HINT,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = armed,
+                                onCheckedChange = { checked ->
+                                    if (checked != armed) peer?.deviceId?.let(onToggleOnlineAlert)
+                                },
+                                modifier = Modifier.semantics { contentDescription = OnlineAlertRules.LABEL },
+                            )
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {

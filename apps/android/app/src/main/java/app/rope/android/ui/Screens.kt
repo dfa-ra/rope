@@ -165,10 +165,12 @@ fun RopeScaffold(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCancelForward: () -> Unit,
+    onCancelShare: () -> Unit = {},
     onChatQuery: (String) -> Unit,
     onMessageQuery: (String) -> Unit,
     onPinChat: (String) -> Unit,
     onMuteChat: (String) -> Unit,
+    onToggleOnlineAlert: (String) -> Unit = {},
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onCopy: (app.rope.android.data.ChatMessage) -> Unit,
@@ -295,6 +297,7 @@ fun RopeScaffold(
                             { onGo(Screen.NewGroup) },
                             onUpdateApp,
                             onCancelForward,
+                            onCancelShare,
                             onChatQuery,
                             onPinChat,
                             onMuteChat,
@@ -356,6 +359,7 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onToggleOnlineAlert = onToggleOnlineAlert,
                         )
                     }
                 }
