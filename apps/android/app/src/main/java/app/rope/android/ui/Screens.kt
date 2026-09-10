@@ -135,6 +135,7 @@ fun RopeScaffold(
     onGroupName: (String) -> Unit,
     onToggleMember: (String) -> Unit,
     onCreateGroup: () -> Unit,
+    onOpenGroup: (app.rope.android.data.RopeGroup) -> Unit = {},
     onAddMember: (String) -> Unit,
     onRemoveMember: (String) -> Unit,
     onLeaveGroup: () -> Unit = {},
@@ -356,6 +357,7 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onOpenGroup = onOpenGroup,
                         )
                     }
                 }

@@ -202,6 +202,7 @@ class MainActivity : AppCompatActivity() {
                     onGroupName = repo::setGroupName,
                     onToggleMember = repo::toggleMember,
                     onCreateGroup = repo::createGroup,
+                    onOpenGroup = repo::openGroup,
                     onAddMember = repo::addMemberToOpenGroup,
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,

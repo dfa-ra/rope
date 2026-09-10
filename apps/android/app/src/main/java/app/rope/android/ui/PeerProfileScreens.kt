@@ -35,8 +35,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.GroupsInCommonRules
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.RopeGroup
 import app.rope.android.media.ImageCodec
 
 @Composable
@@ -45,12 +47,14 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onOpenGroup: (RopeGroup) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val common = GroupsInCommonRules.of(state.groups, peer?.deviceId, state.profile?.deviceId)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +96,38 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+            if (common.isNotEmpty()) {
+                item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                    Text(
+                        GroupsInCommonRules.sectionLabel(common.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                items(
+                    common,
+                    key = { it.groupId },
+                    span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) },
+                ) { g ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenGroup(g) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .semantics { contentDescription = g.name },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        InitialsAvatar(g.name, group = true, online = false, size = 40.dp)
+                        Text(
+                            g.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
