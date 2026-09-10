@@ -25,9 +25,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.CopyIdRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.RoleRules
 
@@ -103,6 +106,7 @@ fun GroupInfoPane(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
+    onCopyText: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -136,6 +140,14 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        CopyIdRules.clip(g.groupId)?.let { id ->
+                            TextButton(
+                                onClick = { onCopyText(id) },
+                                modifier = Modifier.semantics { contentDescription = CopyIdRules.ACTION },
+                            ) {
+                                Text(CopyIdRules.ACTION)
+                            }
+                        }
                     }
                 }
             }

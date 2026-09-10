@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.CopyIdRules
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.media.ImageCodec
@@ -45,12 +47,15 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onCopyText: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val copyId = CopyIdRules.clip(peer?.deviceId)
+    val idPreview = CopyIdRules.preview(peer?.deviceId)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +97,19 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (copyId != null) {
+                        Text(
+                            idPreview,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(
+                            onClick = { onCopyText(copyId) },
+                            modifier = Modifier.semantics { contentDescription = CopyIdRules.ACTION },
+                        ) {
+                            Text(CopyIdRules.ACTION)
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
