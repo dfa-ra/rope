@@ -3084,12 +3084,7 @@ fun ImageViewer(
                 if (item.kind == MessageKind.VIDEO) {
                     val path = item.localPath
                     if (!path.isNullOrBlank()) {
-                        val payloadMs = runCatching { MediaPayload.parse(item.extra) }.getOrNull()?.durationMs ?: 0L
-                        VideoViewerSurface(
-                            path,
-                            Modifier.fillMaxWidth().padding(12.dp),
-                            payloadDurationMs = payloadMs,
-                        )
+                        VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
                     } else {
                         Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }

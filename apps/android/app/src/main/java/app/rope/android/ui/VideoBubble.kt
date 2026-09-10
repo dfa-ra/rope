@@ -51,7 +51,7 @@ import kotlinx.coroutines.delay
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
  * Tap/long-press on the bubble still opens the 0.3.2 menu; the play control
- * starts the in-thread player. While the player is up, a scrubber seeks.
+ * starts the in-thread player.
  */
 @Composable
 fun VideoMessageBubble(
@@ -63,36 +63,30 @@ fun VideoMessageBubble(
         onEnsure(m)
     }
     val extra = runCatching { MediaPayload.parse(m.extra) }.getOrNull()
-    val payloadDuration = extra?.durationMs ?: 0L
+    val duration = extra?.durationMs ?: 0L
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
-    var active by remember(m.id) { mutableStateOf(false) }
     var playing by remember(m.id) { mutableStateOf(false) }
-    var viewRef by remember { mutableStateOf<VideoView?>(null) }
+    var player by remember { mutableStateOf<VideoView?>(null) }
     var positionMs by remember(m.id) { mutableLongStateOf(0L) }
-    var playerDurationMs by remember(m.id) { mutableLongStateOf(0L) }
+    var durationMs by remember(m.id) { mutableLongStateOf(duration) }
     var scrubbing by remember { mutableStateOf(false) }
-    val durationMs = VideoSeekRules.resolvedDuration(playerDurationMs, payloadDuration)
+    LaunchedEffect(playing, player) {
+        while (playing) {
+            val view = player
+            if (view != null && !scrubbing) {
+                positionMs = view.currentPosition.toLong()
+                if (view.duration > 0) durationMs = view.duration.toLong()
+            }
+            delay(200)
+        }
+    }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
         PhotoLayout.Box(PhotoLayout.MAX_WIDTH_DP, PhotoLayout.MAX_WIDTH_DP * 9f / 16f)
     }
     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
-    LaunchedEffect(active, playing, viewRef, scrubbing) {
-        val view = viewRef ?: return@LaunchedEffect
-        if (!active) return@LaunchedEffect
-        while (active) {
-            if (!scrubbing) {
-                val d = view.duration
-                if (d > 0) playerDurationMs = d.toLong()
-                if (playing || positionMs > 0L) {
-                    positionMs = view.currentPosition.toLong().coerceAtLeast(0L)
-                }
-            }
-            delay(200)
-        }
-    }
     Box(
         modifier = Modifier
             .width(box.widthDp.dp)
@@ -100,7 +94,7 @@ fun VideoMessageBubble(
             .clip(RoundedCornerShape(RopeShapes.media))
             .background(Color.Black),
     ) {
-        if (active && !path.isNullOrBlank()) {
+        if (playing && !path.isNullOrBlank()) {
             AndroidView(
                 factory = { ctx ->
                     VideoView(ctx).apply {
@@ -108,33 +102,21 @@ fun VideoMessageBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        setOnCompletionListener {
-                            playing = false
-                            active = false
-                            positionMs = 0L
-                        }
-                        setOnPreparedListener { mp ->
-                            playerDurationMs = mp.duration.toLong().coerceAtLeast(0L)
-                        }
+                        setOnCompletionListener { playing = false }
                     }
                 },
                 update = { view ->
-                    viewRef = view
+                    player = view
                     if (view.tag != path) {
                         view.tag = path
                         view.setVideoPath(path)
+                        view.start()
                     }
-                    if (playing && !view.isPlaying) view.start()
-                    if (!playing && view.isPlaying) view.pause()
                 },
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose {
-                    playing = false
-                    active = false
-                    viewRef = null
-                }
+                onDispose { playing = false }
             }
         } else if (poster != null) {
             Image(
@@ -151,10 +133,7 @@ fun VideoMessageBubble(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(enabled = !path.isNullOrBlank()) {
-                        active = true
-                        playing = true
-                    },
+                    .clickable(enabled = !path.isNullOrBlank()) { playing = true },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -176,38 +155,35 @@ fun VideoMessageBubble(
             ) {
                 Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
             }
+            if (VideoSeekRules.canScrub(true, durationMs)) {
+                VideoScrubBar(
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    onSeek = { ms ->
+                        positionMs = ms
+                        player?.seekTo(ms.toInt())
+                    },
+                    onScrubbing = { scrubbing = it },
+                )
+            }
         }
-        if (VideoSeekRules.showsScrubber(active, durationMs)) {
-            VideoScrubber(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                onScrubStart = { scrubbing = true },
-                onScrub = { ms ->
-                    positionMs = ms
-                    viewRef?.seekTo(ms.toInt())
-                },
-                onScrubEnd = { scrubbing = false },
-            )
-        }
+        if (!playing) {
         Text(
-            when {
-                active && durationMs > 0L -> VideoSeekRules.clock(positionMs, durationMs)
-                payloadDuration > 0L -> MediaPayload.formatDuration(payloadDuration)
-                else -> "видео"
-            },
+            if (duration > 0L) MediaPayload.formatDuration(duration) else "видео",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 6.dp, bottom = if (VideoSeekRules.showsScrubber(active, durationMs)) 18.dp else 6.dp)
+                .padding(6.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
+        }
         if (overlayMeta && meta.isNotBlank()) {
             Text(
                 meta,
@@ -215,7 +191,7 @@ fun VideoMessageBubble(
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(start = 6.dp, end = 6.dp, bottom = if (VideoSeekRules.showsScrubber(active, durationMs)) 18.dp else 6.dp)
+                    .padding(6.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black.copy(alpha = 0.45f))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -235,108 +211,37 @@ fun VideoMessageBubble(
 }
 
 @Composable
-fun VideoViewerSurface(path: String, modifier: Modifier = Modifier, payloadDurationMs: Long = 0L) {
-    var viewRef by remember { mutableStateOf<VideoView?>(null) }
-    var positionMs by remember { mutableLongStateOf(0L) }
-    var playerDurationMs by remember { mutableLongStateOf(0L) }
-    var scrubbing by remember { mutableStateOf(false) }
-    val durationMs = VideoSeekRules.resolvedDuration(playerDurationMs, payloadDurationMs)
-    LaunchedEffect(viewRef, scrubbing) {
-        val view = viewRef ?: return@LaunchedEffect
-        while (true) {
-            if (!scrubbing) {
-                val d = view.duration
-                if (d > 0) playerDurationMs = d.toLong()
-                positionMs = view.currentPosition.toLong().coerceAtLeast(0L)
-            }
-            delay(200)
-        }
-    }
-    Box(modifier) {
-        AndroidView(
-            factory = { ctx ->
-                VideoView(ctx).apply {
-                    setVideoPath(path)
-                    setOnPreparedListener { mp ->
-                        mp.isLooping = false
-                        playerDurationMs = mp.duration.toLong().coerceAtLeast(0L)
-                        start()
-                    }
-                    setOnCompletionListener {
-                        positionMs = duration.toLong().coerceAtLeast(0L)
-                    }
-                }
-            },
-            update = { view -> viewRef = view },
-            modifier = Modifier.fillMaxSize(),
-        )
-        if (VideoSeekRules.showsScrubber(true, durationMs)) {
-            VideoScrubber(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                onScrubStart = { scrubbing = true },
-                onScrub = { ms ->
-                    positionMs = ms
-                    viewRef?.seekTo(ms.toInt())
-                },
-                onScrubEnd = { scrubbing = false },
-            )
-        }
-        if (durationMs > 0L) {
-            Text(
-                VideoSeekRules.clock(positionMs, durationMs),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, bottom = 26.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun VideoScrubber(
+private fun VideoScrubBar(
     positionMs: Long,
     durationMs: Long,
     modifier: Modifier = Modifier,
-    onScrubStart: () -> Unit,
-    onScrub: (Long) -> Unit,
-    onScrubEnd: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onScrubbing: (Boolean) -> Unit,
 ) {
-    val fraction = VideoSeekRules.fraction(positionMs, durationMs)
+    val fraction = VideoSeekRules.progress(positionMs, durationMs)
     Box(
         modifier
-            .height(16.dp)
+            .height(18.dp)
             .pointerInput(durationMs) {
-                fun at(x: Float): Long {
-                    val w = size.width.toFloat().coerceAtLeast(1f)
-                    return VideoSeekRules.seekMsAt(x, w, durationMs)
+                fun seek(x: Float) {
+                    onSeek(VideoSeekRules.fromPointerX(x, size.width.toFloat(), durationMs))
                 }
-                detectTapGestures { offset -> onScrub(at(offset.x)) }
+                detectTapGestures { offset -> seek(offset.x) }
             }
             .pointerInput(durationMs) {
-                fun at(x: Float): Long {
-                    val w = size.width.toFloat().coerceAtLeast(1f)
-                    return VideoSeekRules.seekMsAt(x, w, durationMs)
+                fun seek(x: Float) {
+                    onSeek(VideoSeekRules.fromPointerX(x, size.width.toFloat(), durationMs))
                 }
                 detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        onScrubStart()
-                        onScrub(at(offset.x))
+                    onDragStart = {
+                        onScrubbing(true)
+                        seek(it.x)
                     },
-                    onDragEnd = { onScrubEnd() },
-                    onDragCancel = { onScrubEnd() },
+                    onDragEnd = { onScrubbing(false) },
+                    onDragCancel = { onScrubbing(false) },
                     onHorizontalDrag = { change, _ ->
                         change.consume()
-                        onScrub(at(change.position.x))
+                        seek(change.position.x)
                     },
                 )
             },
@@ -357,4 +262,20 @@ private fun VideoScrubber(
                 .background(Color.White),
         )
     }
+}
+
+@Composable
+fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
+    AndroidView(
+        factory = { ctx ->
+            VideoView(ctx).apply {
+                setVideoPath(path)
+                setOnPreparedListener { mp ->
+                    mp.isLooping = false
+                    start()
+                }
+            }
+        },
+        modifier = modifier,
+    )
 }
