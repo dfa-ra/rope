@@ -52,9 +52,12 @@ class NotifyRulesTest {
     fun openIsOnlyForLiveImages() {
         val text = ChatMessage("1", "p", false, "hi", MessageStatus.DELIVERED_TO_DEVICE, 1L)
         val photo = text.copy(id = "2", kind = MessageKind.IMAGE)
+        val file = text.copy(id = "3", kind = MessageKind.FILE)
         val gone = photo.copy(deleted = true)
         assertFalse(ChatActions.canOpen(text))
         assertTrue(ChatActions.canOpen(photo))
+        assertTrue(ChatActions.canOpen(file))
         assertFalse(ChatActions.canOpen(gone))
+        assertFalse(ChatActions.canOpen(file.copy(deleted = true)))
     }
 }

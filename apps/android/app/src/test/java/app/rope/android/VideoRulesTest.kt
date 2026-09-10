@@ -63,7 +63,7 @@ class VideoRulesTest {
         )
         assertTrue(ChatActions.canOpen(clip))
         assertFalse(ChatActions.canOpen(clip.copy(deleted = true)))
-        assertFalse(ChatActions.canOpen(clip.copy(kind = MessageKind.FILE)))
+        assertTrue(ChatActions.canOpen(clip.copy(kind = MessageKind.FILE)))
         assertEquals("Видео", VideoRules.preview(0))
         assertTrue(VideoRules.videoBitrateBps(10_000) in 250_000..2_500_000)
     }

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -31,6 +32,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
+import app.rope.android.data.FileOpenRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupTextPayload
@@ -96,6 +98,7 @@ import app.rope.android.update.AppRelease
 import app.rope.android.update.AppUpdater
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -805,8 +808,37 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openImage(msg: ChatMessage) {
-        if ((msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VIDEO) || msg.deleted) return
+        if (msg.deleted) return
+        if (msg.kind == MessageKind.FILE) {
+            openDocument(msg)
+            return
+        }
+        if (msg.kind != MessageKind.IMAGE && msg.kind != MessageKind.VIDEO) return
         _state.value = _state.value.copy(viewingImage = msg)
+    }
+
+    private fun openDocument(msg: ChatMessage) {
+        val mediaDir = File(app.filesDir, FileOpenRules.FILES_DIR)
+        val target = FileOpenRules.target(msg, mediaDir)
+        if (target == null) {
+            ensureMedia(msg)
+            notice("Файл ещё качается")
+            return
+        }
+        val uri = FileProvider.getUriForFile(app, "${app.packageName}.files", File(target.path))
+        val view = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, target.mime)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType(target.mime)
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        val chooser = Intent.createChooser(view, FileOpenRules.CHOOSER).apply {
+            putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf<android.os.Parcelable>(send))
+            clipData = ClipData.newUri(app.contentResolver, target.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { app.startActivity(chooser) }.onFailure { notice("нечем открыть") }
     }
 
     fun closeImage() {

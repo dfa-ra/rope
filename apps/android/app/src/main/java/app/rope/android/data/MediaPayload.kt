@@ -400,7 +400,11 @@ object ChatActions {
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
 
     fun canOpen(msg: ChatMessage): Boolean =
-        !msg.deleted && (msg.kind == MessageKind.IMAGE || msg.kind == MessageKind.VIDEO)
+        !msg.deleted && (
+            msg.kind == MessageKind.IMAGE ||
+                msg.kind == MessageKind.VIDEO ||
+                msg.kind == MessageKind.FILE
+            )
 }
 
 data class ChatPrefs(

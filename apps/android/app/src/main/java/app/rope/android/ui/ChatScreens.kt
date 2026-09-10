@@ -152,6 +152,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.FileOpenRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -1003,6 +1004,7 @@ fun ChatPane(
                                             reactionExpanded = false
                                         }
                                     },
+                                    onOpen = onOpenImage,
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
@@ -1370,6 +1372,7 @@ private fun MessageBubble(
     onToggleSelect: () -> Unit = {},
     onEnterSelect: () -> Unit = {},
     onTap: () -> Unit = {},
+    onOpen: (ChatMessage) -> Unit = {},
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
@@ -1464,6 +1467,7 @@ private fun MessageBubble(
                     onClick = {
                         when {
                             selecting -> onToggleSelect()
+                            FileOpenRules.canOpen(m) -> onOpen(m)
                             !m.deleted -> onTap()
                         }
                     },
@@ -1553,7 +1557,7 @@ private fun MessageBubble(
                                 onCycleSpeed = onCycleVoiceSpeed,
                             )
                             MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
-                            MessageKind.FILE -> FileBubble(m)
+                            MessageKind.FILE -> FileBubble(m, onEnsureMedia)
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                             else -> {
@@ -2218,10 +2222,11 @@ private fun MediaCaptionLine(caption: String?) {
 }
 
 @Composable
-private fun FileBubble(m: ChatMessage) {
+private fun FileBubble(m: ChatMessage, onEnsure: (ChatMessage) -> Unit) {
+    LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
-        Text(m.text, style = MaterialTheme.typography.bodyMedium)
+        Text(FileOpenRules.displayName(m), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
