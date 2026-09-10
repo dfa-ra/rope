@@ -76,6 +76,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.net.Uri
+import app.rope.android.data.InviteCopyRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
@@ -337,7 +338,7 @@ fun RopeScaffold(
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
-                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }, { onTab(Screen.Home) }, onCopyText)
                         } else {
                             HomePane(state, onGo, onStatus, onInvite)
                         }
@@ -802,7 +803,12 @@ private fun JoinPane(
 }
 
 @Composable
-private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
+private fun InvitePane(
+    url: String,
+    onBack: () -> Unit,
+    onHome: () -> Unit = onBack,
+    onCopy: (String) -> Unit = {},
+) {
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -834,6 +840,15 @@ private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onB
                         )
                         Text(url, style = MaterialTheme.typography.bodySmall)
                     }
+                }
+                val copy = InviteCopyRules.accept(url)
+                FadeIn(280) {
+                    QuietButton(
+                        InviteCopyRules.LABEL,
+                        { copy?.let(onCopy) },
+                        Modifier.fillMaxWidth(),
+                        enabled = copy != null,
+                    )
                 }
             } else {
                 RopeEmptyState(
