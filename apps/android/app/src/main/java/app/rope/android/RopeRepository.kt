@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SendFileRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -185,6 +186,8 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val sendAsFile: Boolean = false,
+    val nextAttachAsFile: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -633,16 +636,19 @@ class RopeRepository(private val app: Application) {
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
             val destGroup = _state.value.group
+            val asFile = _state.value.sendAsFile
             _state.value = _state.value.copy(
                 draftText = "",
                 pendingAttachments = emptyList(),
+                sendAsFile = false,
+                nextAttachAsFile = false,
                 replyTo = null,
                 replySpan = null,
                 composerPreview = null,
                 composerPreviewDismissedUrl = null,
             )
             persistOpenDraft()
-            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
+            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup, asFile = asFile)
             return
         }
         val text = _state.value.draftText
@@ -702,6 +708,8 @@ class RopeRepository(private val app: Application) {
             replySpan = null,
             draftText = msg.text,
             pendingAttachments = emptyList(),
+            sendAsFile = false,
+            nextAttachAsFile = false,
         )
     }
 
@@ -714,7 +722,25 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelPendingMedia() {
-        _state.value = _state.value.copy(pendingAttachments = emptyList())
+        _state.value = _state.value.copy(
+            pendingAttachments = emptyList(),
+            sendAsFile = false,
+            nextAttachAsFile = false,
+        )
+    }
+
+    fun toggleSendAsFile() {
+        if (_state.value.pendingAttachments.isEmpty()) return
+        _state.value = _state.value.copy(sendAsFile = !_state.value.sendAsFile)
+    }
+
+    fun armSendAsFile() {
+        _state.value = _state.value.copy(nextAttachAsFile = true)
+    }
+
+    fun sendAttachmentsAsFile(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        sendAttachments(uris, asFile = true)
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -844,18 +870,22 @@ class RopeRepository(private val app: Application) {
     }
 
     fun sendAttachment(uri: Uri, forcedMime: String? = null) {
-        if (forcedMime == null && looksLikeVisual(uri, null)) {
+        val asFile = _state.value.nextAttachAsFile
+        if (asFile) {
+            _state.value = _state.value.copy(nextAttachAsFile = false)
+        }
+        if (!asFile && forcedMime == null && looksLikeVisual(uri, null)) {
             stageAttachments(listOf(uri))
             return
         }
-        sendAttachments(listOf(uri), forcedMime)
+        sendAttachments(listOf(uri), forcedMime, asFile = asFile)
     }
 
     fun stageAttachments(uris: List<Uri>) {
         if (_state.value.editTarget != null) return
         val merged = (_state.value.pendingAttachments + uris).distinct().take(AlbumRules.MAX_PHOTOS)
         if (merged.isEmpty()) return
-        _state.value = _state.value.copy(pendingAttachments = merged)
+        _state.value = _state.value.copy(pendingAttachments = merged, nextAttachAsFile = false)
     }
 
     private fun sendAttachments(
@@ -865,6 +895,7 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = ReplyPack(),
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
+        asFile: Boolean = false,
     ) {
         val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
         if (pack.id == null && resolved.id != null) {
@@ -873,11 +904,11 @@ class RopeRepository(private val app: Application) {
         scope.launch {
             try {
                 val prepared = uris.take(AlbumRules.MAX_PHOTOS).mapNotNull { uri ->
-                    prepareOutgoingMedia(uri, forcedMime)
+                    prepareOutgoingMedia(uri, forcedMime, asFile)
                 }
                 if (prepared.isEmpty()) return@launch
-                val images = prepared.filter { VideoRules.albumEligible(it.kind) }
-                val rest = prepared.filter { !VideoRules.albumEligible(it.kind) }
+                val images = prepared.filter { SendFileRules.albumEligible(it.kind, asFile) }
+                val rest = prepared.filter { !SendFileRules.albumEligible(it.kind, asFile) }
                 val slots = AlbumRules.slots(images.size)
                 val cap = MediaSendRules.normalize(caption)
                 images.zip(slots).forEach { (item, slot) ->
@@ -922,10 +953,18 @@ class RopeRepository(private val app: Application) {
         val durationMs: Long = 0,
     )
 
-    private fun prepareOutgoingMedia(uri: Uri, forcedMime: String?): OutgoingMedia? {
+    private fun prepareOutgoingMedia(uri: Uri, forcedMime: String?, asFile: Boolean = false): OutgoingMedia? {
         val cr = app.contentResolver
         var mime = forcedMime ?: cr.getType(uri) ?: "application/octet-stream"
         val name = attachmentName(uri, mime)
+        if (SendFileRules.skipVisualPrep(asFile)) {
+            val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("не удалось прочитать файл")
+            if (bytes.size > VideoRules.MAX_OBJECT_BYTES) {
+                notice(UserFacing.FILE_TOO_BIG)
+                return null
+            }
+            return OutgoingMedia(bytes, mime, name, SendFileRules.kind(mime, name, asFile = true))
+        }
         if (VideoRules.looksLikeVideo(name, mime)) {
             val compressed = VideoCodec.normalizeForSend(
                 app,
@@ -2145,6 +2184,8 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            sendAsFile = pending.isNotEmpty() && _state.value.sendAsFile,
+            nextAttachAsFile = false,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
         )

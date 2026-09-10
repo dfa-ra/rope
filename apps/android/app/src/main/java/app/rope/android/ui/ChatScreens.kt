@@ -126,6 +126,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -178,6 +180,7 @@ import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.SendFileRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
@@ -749,6 +752,9 @@ fun ChatPane(
     onAttachFile: () -> Unit = onAttach,
     onAttachUri: (Uri) -> Unit = {},
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
+    onAttachAsFileUris: (List<Uri>) -> Unit = {},
+    onToggleSendAsFile: () -> Unit = {},
+    onArmSendAsFile: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
@@ -1111,6 +1117,7 @@ fun ChatPane(
                 onCancelComposer = onCancelComposer,
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
+                onToggleSendAsFile = onToggleSendAsFile,
                 onReplySpan = onReplySpan,
             )
         }
@@ -1156,6 +1163,7 @@ fun ChatPane(
             },
             onFile = {
                 showAttach = false
+                onArmSendAsFile()
                 onAttachFile()
             },
             onUri = { uri ->
@@ -1165,6 +1173,10 @@ fun ChatPane(
             onUris = { uris ->
                 showAttach = false
                 onAttachUris(uris)
+            },
+            onUrisAsFile = { uris ->
+                showAttach = false
+                onAttachAsFileUris(uris)
             },
             onVideoNote = {
                 showAttach = false
@@ -2236,6 +2248,7 @@ private fun ComposerBar(
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
+    onToggleSendAsFile: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
@@ -2318,9 +2331,26 @@ private fun ComposerBar(
                     )
                 }
                 ComposerHint(
-                    copy = MediaSendRules.hint(state.pendingAttachments.size, videos),
+                    copy = if (state.sendAsFile) {
+                        SendFileRules.hint(state.pendingAttachments.size)
+                    } else {
+                        MediaSendRules.hint(state.pendingAttachments.size, videos)
+                    },
                     onCancel = onCancelPendingMedia,
                 )
+                TextButton(
+                    onClick = onToggleSendAsFile,
+                    modifier = Modifier.semantics { contentDescription = SendFileRules.ACTION },
+                ) {
+                    Text(
+                        SendFileRules.ACTION,
+                        color = if (state.sendAsFile) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
             state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
                 ComposerLinkPreview(
@@ -2769,6 +2799,7 @@ private fun AttachSheet(
     onFile: () -> Unit,
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
+    onUrisAsFile: (List<Uri>) -> Unit = {},
     onVideoNote: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -2864,6 +2895,16 @@ private fun AttachSheet(
                         if (selected.size == 1) "Отправить" else "Отправить ${selected.size}",
                         modifier = Modifier.weight(1f),
                     )
+                }
+                TextButton(
+                    onClick = { onUrisAsFile(selected) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = SendFileRules.ACTION },
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(SendFileRules.ACTION, modifier = Modifier.weight(1f))
                 }
             }
             TextButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
