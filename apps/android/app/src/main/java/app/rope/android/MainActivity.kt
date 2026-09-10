@@ -247,6 +247,7 @@ class MainActivity : AppCompatActivity() {
                     onCancelForward = repo::cancelForward,
                     onChatQuery = repo::setChatQuery,
                     onMessageQuery = repo::setMessageQuery,
+                    onSetSavedVoice = repo::setSavedVoice,
                     onPinChat = repo::togglePinChat,
                     onMuteChat = repo::toggleMuteChat,
                     onArchiveChat = repo::archiveChat,
