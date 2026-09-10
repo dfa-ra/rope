@@ -60,6 +60,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Reply
@@ -181,6 +182,7 @@ import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
+import app.rope.android.data.ReplyInDmRules
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -732,6 +734,7 @@ fun ChatPane(
     onPeerProfile: () -> Unit = {},
     onBack: () -> Unit = {},
     onReply: (ChatMessage) -> Unit = {},
+    onReplyInDm: (ChatMessage) -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
     onEdit: (ChatMessage) -> Unit = {},
     onDelete: (ChatMessage) -> Unit = {},
@@ -1131,6 +1134,15 @@ fun ChatPane(
                 reactionExpanded = false
             },
             onReply = { onReply(target); menuMessage = null },
+            onReplyInDm = {
+                onReplyInDm(target)
+                menuMessage = null
+            },
+            showReplyInDm = ReplyInDmRules.canShow(
+                isGroup = state.group != null,
+                msg = target,
+                myDeviceId = state.profile?.deviceId,
+            ),
             onCopy = { onCopy(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
@@ -1833,6 +1845,8 @@ private fun MessageTapOverlay(
     onDismiss: () -> Unit,
     onReact: (String) -> Unit,
     onReply: () -> Unit,
+    showReplyInDm: Boolean = false,
+    onReplyInDm: () -> Unit = {},
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
@@ -1873,6 +1887,8 @@ private fun MessageTapOverlay(
                 m = message,
                 pinned = pinned,
                 onReply = onReply,
+                showReplyInDm = showReplyInDm,
+                onReplyInDm = onReplyInDm,
                 onCopy = onCopy,
                 onForward = onForward,
                 onPin = onPin,
@@ -1888,6 +1904,8 @@ private fun MessageActionMenu(
     m: ChatMessage,
     pinned: Boolean,
     onReply: () -> Unit,
+    showReplyInDm: Boolean = false,
+    onReplyInDm: () -> Unit = {},
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
@@ -1904,6 +1922,9 @@ private fun MessageActionMenu(
         Column(Modifier.padding(vertical = 4.dp)) {
             if (ChatActions.canReply(m)) {
                 MessageMenuRow(Icons.AutoMirrored.Outlined.Reply, "Ответить", onReply)
+            }
+            if (showReplyInDm) {
+                MessageMenuRow(Icons.AutoMirrored.Outlined.Chat, ReplyInDmRules.LABEL, onReplyInDm)
             }
             if (ChatActions.canCopy(m)) {
                 MessageMenuRow(Icons.Outlined.ContentCopy, "Копировать", onCopy)

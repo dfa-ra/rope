@@ -237,6 +237,7 @@ class MainActivity : AppCompatActivity() {
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
+                    onReplyInDm = repo::replyInDm,
                     onReplySpan = repo::setReplySpan,
                     onEdit = repo::startEdit,
                     onDelete = repo::deleteMessage,

@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ReplyInDmRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -684,6 +685,31 @@ class RopeRepository(private val app: Application) {
             editTarget = null,
             replySpan = QuoteSpanRules.packed(msg.preview(), span)?.span(),
         )
+    }
+
+    fun replyInDm(msg: ChatMessage) {
+        val myId = identity?.deviceId() ?: _state.value.profile?.deviceId
+        if (!ReplyInDmRules.canShow(_state.value.group != null, msg, myId)) return
+        val sender = ReplyInDmRules.senderId(msg)
+        if (sender.isBlank()) return
+        val existing = ReplyInDmRules.existingDm(_state.value.conversations, sender)
+        val devices = _state.value.devices
+        val online = _state.value.onlineIds
+        val local = ReplyInDmRules.peerFor(msg, _state.value.conversations, devices, online)
+        val peer = when {
+            local != null && local.publicIdentity.isNotEmpty() -> local
+            else -> findSender(existing?.id ?: sender)
+                ?: findSender(sender)
+                ?: local
+                ?: ReplyInDmRules.stubPeer(
+                    existing?.id ?: sender,
+                    existing?.title?.ifBlank { msg.senderName } ?: msg.senderName,
+                    existing?.online == true,
+                )
+        }
+        persistOpenDraft()
+        enterChat(ReplyInDmRules.chatId(existing, peer), peer, null)
+        if (ReplyInDmRules.attachReply(msg)) startReply(msg)
     }
 
     fun setReplySpan(span: QuoteSpan?) {
