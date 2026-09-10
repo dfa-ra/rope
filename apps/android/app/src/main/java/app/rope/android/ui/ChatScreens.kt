@@ -148,6 +148,7 @@ import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
+import app.rope.android.data.ChatThumbRules
 import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
@@ -656,6 +657,28 @@ internal fun ConversationRow(
                         },
                         modifier = Modifier.weight(1f),
                     )
+                    val lastMedia = c.last
+                    if (ChatThumbRules.shows(lastMedia) && lastMedia != null) {
+                        val bmp = remember(lastMedia.id, lastMedia.localPath) {
+                            val path = lastMedia.localPath ?: return@remember null
+                            if (ChatThumbRules.isVideo(lastMedia.kind)) {
+                                VideoCodec.poster(path)
+                            } else {
+                                runCatching { ImageCodec.decodePreview(path) }.getOrNull()
+                            }
+                        }
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "Вложение",
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .size(ChatThumbRules.SIZE_DP.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                    }
                     val badge = UnreadBadgeRules.kind(c.unread, c.muted)
                     if (badge != UnreadBadgeKind.NONE) {
                         val badgeBg = when (badge) {
