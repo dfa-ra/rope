@@ -69,6 +69,7 @@ import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
+import app.rope.android.data.VoiceEarRules
 import app.rope.android.data.VoicePlayback
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val voiceEarpiece: Boolean = false,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    voiceEarpiece = store.voiceEarpieceEnabled(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -584,6 +587,13 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleVoiceEarpiece() {
+        val next = !_state.value.voiceEarpiece
+        store.saveVoiceEarpiece(next)
+        voicePlayer.earpiece = VoiceEarRules.useEarpiece(next, _state.value.call != null)
+        _state.value = _state.value.copy(voiceEarpiece = next)
     }
 
     fun toggleLinkPreviews() {
@@ -1103,6 +1113,7 @@ class RopeRepository(private val app: Application) {
             retryMedia(msg)
             return
         }
+        voicePlayer.earpiece = VoiceEarRules.useEarpiece(_state.value.voiceEarpiece, _state.value.call != null)
         voicePlayer.toggle(msg.id, path)
         publishVoiceProgress()
         voiceProgressJob?.cancel()
@@ -1123,6 +1134,7 @@ class RopeRepository(private val app: Application) {
             retryMedia(msg)
             return
         }
+        voicePlayer.earpiece = VoiceEarRules.useEarpiece(_state.value.voiceEarpiece, _state.value.call != null)
         voicePlayer.seek(msg.id, path, positionMs)
         publishVoiceProgress()
         voiceProgressJob?.cancel()

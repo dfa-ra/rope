@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.media.PlaybackParams
@@ -112,6 +113,7 @@ class VoicePlayer {
         private set
     var speed: Float = VoicePlayback.SPEED_1X
         private set
+    var earpiece: Boolean = false
 
     /** Playing now, or paused with a kept position. */
     val activeId: String? get() = playingId ?: loadedId.takeIf { player != null }
@@ -183,6 +185,17 @@ class VoicePlayer {
     private fun prepare(id: String, path: String, start: Boolean) {
         stop()
         val p = MediaPlayer()
+        val usage = if (earpiece) {
+            AudioAttributes.USAGE_VOICE_COMMUNICATION
+        } else {
+            AudioAttributes.USAGE_MEDIA
+        }
+        p.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(usage)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
         p.setDataSource(path)
         p.setOnCompletionListener { stop() }
         p.prepare()
