@@ -218,7 +218,7 @@ fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
     LaunchedEffect(muted) {
         player[0]?.let { applyVideoMute(it, muted) }
     }
-    Box(modifier) {
+    Box {
         AndroidView(
             factory = { ctx ->
                 VideoView(ctx).apply {
@@ -231,7 +231,7 @@ fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
                     }
                 }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = modifier,
         )
         Box(
             Modifier
