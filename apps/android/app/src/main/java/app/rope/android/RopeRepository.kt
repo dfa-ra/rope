@@ -38,6 +38,7 @@ import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.TextLimitRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
@@ -376,10 +377,11 @@ class RopeRepository(private val app: Application) {
     }
 
     fun setDraft(text: String) {
-        _state.value = _state.value.copy(draftText = text)
+        val next = TextLimitRules.forComposer(text, _state.value.pendingAttachments.isNotEmpty())
+        _state.value = _state.value.copy(draftText = next)
         persistOpenDraft()
-        maybeSendTyping(text)
-        scheduleUnfurl(text)
+        maybeSendTyping(next)
+        scheduleUnfurl(next)
     }
 
     fun setChatQuery(query: String) {
@@ -620,7 +622,7 @@ class RopeRepository(private val app: Application) {
     fun sendDraft() {
         val edit = _state.value.editTarget
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
-            val text = _state.value.draftText
+            val text = TextLimitRules.limit(_state.value.draftText)
             if (text.isBlank()) return
             _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null, composerPreview = null, composerPreviewDismissedUrl = null)
             persistOpenDraft()
@@ -629,7 +631,7 @@ class RopeRepository(private val app: Application) {
         }
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
-            val caption = _state.value.draftText
+            val caption = TextLimitRules.forComposer(_state.value.draftText, pendingMedia = true)
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
             val destGroup = _state.value.group
@@ -645,7 +647,7 @@ class RopeRepository(private val app: Application) {
             sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
             return
         }
-        val text = _state.value.draftText
+        val text = TextLimitRules.limit(_state.value.draftText)
         if (text.isBlank() || _state.value.recording) return
         val reply = _state.value.replyTo
         val pack = replyPack(reply)
@@ -700,7 +702,7 @@ class RopeRepository(private val app: Application) {
             editTarget = msg,
             replyTo = null,
             replySpan = null,
-            draftText = msg.text,
+            draftText = TextLimitRules.limit(msg.text),
             pendingAttachments = emptyList(),
         )
     }
@@ -2136,7 +2138,7 @@ class RopeRepository(private val app: Application) {
             peer = peer,
             group = group,
             messages = messages,
-            draftText = prefs.draft,
+            draftText = TextLimitRules.forComposer(prefs.draft, pending.isNotEmpty()),
             replyTo = null,
             replySpan = null,
             editTarget = null,

@@ -175,6 +175,7 @@ import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
+import app.rope.android.data.TextLimitRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -2331,8 +2332,12 @@ private fun ComposerBar(
             if (showEmoji && !state.recording) {
                 EmojiPickerPanel(
                     onPick = {
-                        localText += it
-                        persistDraft(localText)
+                        val next = TextLimitRules.forComposer(
+                            localText + it,
+                            state.pendingAttachments.isNotEmpty(),
+                        )
+                        localText = next
+                        persistDraft(next)
                     },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
@@ -2384,8 +2389,12 @@ private fun ComposerBar(
                             BasicTextField(
                                 value = localText,
                                 onValueChange = {
-                                    localText = it
-                                    persistDraft(it)
+                                    val next = TextLimitRules.forComposer(
+                                        it,
+                                        state.pendingAttachments.isNotEmpty(),
+                                    )
+                                    localText = next
+                                    persistDraft(next)
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -2467,6 +2476,20 @@ private fun ComposerBar(
                         )
                     }
                 }
+            }
+            if (TextLimitRules.showCounter(localText, state.pendingAttachments.isNotEmpty()) && !state.recording) {
+                Text(
+                    TextLimitRules.counter(localText),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (TextLimitRules.atLimit(localText)) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(end = 16.dp, bottom = 8.dp),
+                )
             }
         }
     }
