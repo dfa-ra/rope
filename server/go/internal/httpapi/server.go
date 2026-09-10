@@ -746,7 +746,8 @@ type pendingCall struct {
 }
 
 func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
-	if in.CallID == "" || strings.TrimSpace(in.To) == "" {
+	id, ok := validCallID(in.CallID)
+	if !ok || strings.TrimSpace(in.To) == "" {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "call fields"})
 		return
 	}
@@ -770,11 +771,11 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 	target := s.resolveCallTarget(in.To)
 	if dest, ok := s.Hub.Get(target); ok {
 		if isCallTerminal(in.Event) {
-			s.dropPendingCall(in.CallID)
+			s.dropPendingCall(id)
 		}
 		_ = dest.write(ctx, wsOut{
 			Type:    "call",
-			CallID:  in.CallID,
+			CallID:  id,
 			From:    from.id,
 			Event:   in.Event,
 			Payload: payload,
@@ -786,7 +787,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		return
 	}
 	if !s.storePendingCall(pendingCall{
-		callID:  in.CallID,
+		callID:  id,
 		from:    from.id,
 		to:      target,
 		event:   in.Event,
@@ -796,7 +797,7 @@ func (s *Server) handleCall(ctx context.Context, from *clientConn, in wsIn) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "rate_limited", Message: "call pending full"})
 		return
 	}
-	_ = from.write(ctx, wsOut{Type: "queued", CallID: in.CallID})
+	_ = from.write(ctx, wsOut{Type: "queued", CallID: id})
 }
 
 func isCallTerminal(event string) bool {
