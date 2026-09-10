@@ -46,12 +46,33 @@ class PeerProfileRulesTest {
         assertEquals(3, PeerProfileRules.GRID_COLUMNS)
     }
 
+    @Test
+    fun voicesAreNewestFirstSkipDeletedAndNonVoice() {
+        val older = img("a", 10L, kind = MessageKind.VOICE, extra = """{"duration_ms":4000}""")
+        val newer = img("b", 20L, kind = MessageKind.VOICE, extra = """{"duration_ms":65000}""")
+        val photo = img("p", 30L)
+        val deleted = img("d", 40L, kind = MessageKind.VOICE, deleted = true)
+        val note = img("n", 50L, kind = MessageKind.VIDEO_NOTE)
+        val blank = img("c", 15L, kind = MessageKind.VOICE)
+        val voices = PeerProfileRules.voices(listOf(older, newer, photo, deleted, note, blank))
+        assertEquals(listOf("b", "c", "a"), voices.map { it.id })
+        assertFalse(voices.any { it.deleted })
+        assertTrue(voices.all { it.kind == MessageKind.VOICE })
+        assertEquals("Голосовое · 1:05", PeerProfileRules.voiceTitle(newer))
+        assertEquals("Голосовое", PeerProfileRules.voiceTitle(blank))
+        assertEquals("Голосовые", PeerProfileRules.voicesSectionLabel(0))
+        assertEquals("Голосовые · 2", PeerProfileRules.voicesSectionLabel(2))
+        assertTrue(PeerProfileRules.showPhotoEmpty(0, 0))
+        assertFalse(PeerProfileRules.showPhotoEmpty(0, 1))
+    }
+
     private fun img(
         id: String,
         ts: Long,
         kind: MessageKind = MessageKind.IMAGE,
         deleted: Boolean = false,
         localPath: String? = "/x.jpg",
+        extra: String = "",
     ) = ChatMessage(
         id = id,
         peerDeviceId = "peer",
@@ -60,6 +81,7 @@ class PeerProfileRulesTest {
         status = MessageStatus.DELIVERED_TO_DEVICE,
         timestampMs = ts,
         kind = kind,
+        extra = extra,
         localPath = localPath,
         deleted = deleted,
     )
