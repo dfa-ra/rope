@@ -90,19 +90,62 @@ class ForwardRulesTest {
         assertNull(plain.forwardedFrom)
     }
 
+    @Test
+    fun originNameOmitsOwnOriginalsAndKeepsChain() {
+        assertNull(
+            ForwardRules.originName(
+                msg(outgoing = true, senderName = "Я"),
+                "Я",
+            ),
+        )
+        assertEquals(
+            "Анна",
+            ForwardRules.originName(
+                msg(outgoing = false, senderName = "Анна"),
+                "Я",
+            ),
+        )
+        assertEquals(
+            "Анна",
+            ForwardRules.originName(
+                msg(outgoing = true, senderName = "Я", forwardedFrom = "Анна"),
+                "Я",
+            ),
+        )
+        assertEquals(
+            "сообщение",
+            ForwardRules.originName(
+                msg(outgoing = false, senderName = ""),
+                "",
+            ),
+        )
+    }
+
+    @Test
+    fun showsHeaderHidesOwnStampOnOutgoing() {
+        assertFalse(ForwardRules.showsHeader("Я", "Я", outgoing = true))
+        assertFalse(ForwardRules.showsHeader("я", "Я", outgoing = true))
+        assertTrue(ForwardRules.showsHeader("Анна", "Я", outgoing = true))
+        assertTrue(ForwardRules.showsHeader("Я", "Я", outgoing = false))
+        assertTrue(ForwardRules.showsHeader("Я", "", outgoing = true))
+    }
+
     private fun msg(
         forwardedFrom: String? = null,
         replyToId: String? = null,
         replyName: String = "",
         replyPreview: String = "",
+        outgoing: Boolean = false,
+        senderName: String = "",
     ) = ChatMessage(
         id = "m",
         peerDeviceId = "p",
-        outgoing = false,
+        outgoing = outgoing,
         text = "hi",
         status = MessageStatus.DELIVERED_TO_DEVICE,
         timestampMs = 1,
         kind = MessageKind.TEXT,
+        senderName = senderName,
         replyToId = replyToId,
         replyPreview = replyPreview,
         replyName = replyName,

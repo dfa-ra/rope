@@ -106,7 +106,7 @@ class SavedMessagesRulesTest {
             "Я",
         )
         assertEquals("Анна", from)
-        assertEquals("Переслано от Анна", ForwardRules.headerLabel(from))
+        assertEquals("Переслано от Анна", ForwardRules.headerLabel(requireNotNull(from)))
     }
 
     @Test

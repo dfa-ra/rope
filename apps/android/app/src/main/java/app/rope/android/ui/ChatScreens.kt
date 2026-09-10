@@ -1488,6 +1488,7 @@ private fun MessageBubble(
                             msg = m,
                             accent = senderColor,
                             onJump = onJump,
+                            myDisplayName = state.profile?.displayName.orEmpty(),
                         )
                         if (m.kind == MessageKind.VIDEO) {
                             VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
@@ -1532,6 +1533,7 @@ private fun MessageBubble(
                         msg = m,
                         accent = if (mine) outFg else senderColor,
                         onJump = onJump,
+                        myDisplayName = state.profile?.displayName.orEmpty(),
                     )
                     if (m.deleted) {
                         Text(
@@ -1605,9 +1607,14 @@ private fun MessageBubble(
 }
 
 @Composable
-private fun AttributionChrome(msg: ChatMessage, accent: Color, onJump: (String) -> Unit) {
+private fun AttributionChrome(
+    msg: ChatMessage,
+    accent: Color,
+    onJump: (String) -> Unit,
+    myDisplayName: String = "",
+) {
     val from = ForwardRules.attributedName(msg)
-    if (from != null) {
+    if (from != null && ForwardRules.showsHeader(from, myDisplayName, msg.outgoing)) {
         ForwardedHeader(from)
     }
     val replyId = msg.replyToId
@@ -2042,6 +2049,7 @@ private fun AlbumBubble(
             msg = first,
             accent = senderColor,
             onJump = onJump,
+            myDisplayName = state.profile?.displayName.orEmpty(),
         )
         Box(
             Modifier

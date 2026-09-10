@@ -2375,7 +2375,7 @@ class RopeRepository(private val app: Application) {
 
     private fun attributedMediaPayload(
         src: ChatMessage,
-        forwardedFrom: String,
+        forwardedFrom: String?,
         groupId: String?,
         upload: Boolean = true,
     ): MediaPayload? {
