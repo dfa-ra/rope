@@ -359,7 +359,7 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
-                            onMute = { id -> onMuteChat(id) },
+                            onMute = onMuteChat,
                             onSearch = onSearchFromProfile,
                         )
                     }
