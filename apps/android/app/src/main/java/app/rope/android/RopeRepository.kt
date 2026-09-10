@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
+import app.rope.android.data.DiceRules
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -616,6 +617,34 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", value))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun sendDice(emoji: String) {
+        val kind = DiceRules.kind(emoji) ?: return
+        if (_state.value.recording || _state.value.recordingVideoNote) return
+        val face = kotlin.random.Random.nextInt(1, kind.faces + 1)
+        val text = DiceRules.text(kind, face) ?: return
+        val reply = _state.value.replyTo
+        val pack = replyPack(reply)
+        _state.value = _state.value.copy(replyTo = null, replySpan = null)
+        persistOpenDraft()
+        val group = _state.value.group
+        val peer = _state.value.peer
+        val saved = SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(peer?.deviceId)
+        scope.launch {
+            try {
+                when {
+                    group != null -> sendGroupText(group, text, reply, pack)
+                    saved -> saveLocalText(text, reply, pack = pack)
+                    else -> {
+                        val dest = peer ?: return@launch
+                        sendPeerText(dest, text, pack, null)
+                    }
+                }
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
     }
 
     fun sendDraft() {

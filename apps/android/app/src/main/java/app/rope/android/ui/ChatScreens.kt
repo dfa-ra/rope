@@ -84,6 +84,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -152,6 +153,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.DiceRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -755,6 +757,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onAttachDice: (String) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -791,6 +794,7 @@ fun ChatPane(
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
+    var showDice by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
@@ -1170,7 +1174,20 @@ fun ChatPane(
                 showAttach = false
                 onVideoNoteStart()
             },
+            onDice = {
+                showAttach = false
+                showDice = true
+            },
             onDismiss = { showAttach = false },
+        )
+    }
+    if (showDice) {
+        DiceKindSheet(
+            onPick = { emoji ->
+                showDice = false
+                onAttachDice(emoji)
+            },
+            onDismiss = { showDice = false },
         )
     }
 }
@@ -2770,6 +2787,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onDice: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2880,6 +2898,42 @@ private fun AttachSheet(
                 Icon(Icons.Outlined.Videocam, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Видеосообщение", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onDice, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Casino, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text(DiceRules.LABEL, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DiceKindSheet(
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(DiceRules.LABEL, style = MaterialTheme.typography.titleMedium)
+            DiceRules.KINDS.forEach { kind ->
+                TextButton(
+                    onClick = { onPick(kind.emoji) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("${kind.emoji} ${kind.label}", modifier = Modifier.weight(1f))
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
