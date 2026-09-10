@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -49,6 +50,7 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.ShareInviteRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -777,6 +779,18 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun shareInvite(url: String) {
+        val accepted = ShareInviteRules.accept(url) ?: return
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = ShareInviteRules.MIME
+            putExtra(Intent.EXTRA_TEXT, accepted)
+        }
+        val chooser = Intent.createChooser(send, ShareInviteRules.CHOOSER).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { app.startActivity(chooser) }
     }
 
     fun togglePinMessage(msg: ChatMessage) {

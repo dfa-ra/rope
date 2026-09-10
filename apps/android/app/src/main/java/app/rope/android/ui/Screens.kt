@@ -77,6 +77,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.net.Uri
 import app.rope.android.data.RoleRules
+import app.rope.android.data.ShareInviteRules
 import app.rope.android.data.ThemeMode
 import app.rope.android.RopeShapes
 import app.rope.android.provision.ProvisionForm
@@ -156,6 +157,7 @@ fun RopeScaffold(
     onSetTheme: (app.rope.android.data.ThemeMode) -> Unit = {},
     onToggleNotifications: () -> Unit = {},
     onToggleLinkPreviews: () -> Unit = {},
+    onShareInvite: (String) -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onReply: (app.rope.android.data.ChatMessage) -> Unit,
     onReplySpan: (app.rope.android.data.QuoteSpan?) -> Unit = {},
@@ -338,7 +340,12 @@ fun RopeScaffold(
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
-                            InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }
+                            InvitePane(
+                                state.inviteUrl.orEmpty(),
+                                { onBack() },
+                                { onTab(Screen.Home) },
+                                onShareInvite,
+                            )
                         } else {
                             HomePane(state, onGo, onStatus, onInvite)
                         }
@@ -803,7 +810,12 @@ private fun JoinPane(
 }
 
 @Composable
-private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onBack) {
+private fun InvitePane(
+    url: String,
+    onBack: () -> Unit,
+    onHome: () -> Unit = onBack,
+    onShare: (String) -> Unit = {},
+) {
     Box(Modifier.fillMaxSize()) {
         BrandBackdrop()
         Column(
@@ -835,6 +847,15 @@ private fun InvitePane(url: String, onBack: () -> Unit, onHome: () -> Unit = onB
                         )
                         Text(url, style = MaterialTheme.typography.bodySmall)
                     }
+                }
+                val share = ShareInviteRules.accept(url)
+                FadeIn(280) {
+                    QuietButton(
+                        ShareInviteRules.LABEL,
+                        { share?.let(onShare) },
+                        Modifier.fillMaxWidth().semantics { contentDescription = ShareInviteRules.LABEL },
+                        enabled = share != null,
+                    )
                 }
             } else {
                 RopeEmptyState(
