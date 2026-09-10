@@ -49,6 +49,21 @@ object VideoCodec {
         }
     }
 
+    fun durationMs(context: Context, uri: Uri): Long {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?.coerceAtLeast(0L)
+                ?: 0L
+        } catch (_: Exception) {
+            0L
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
     fun poster(path: String): Bitmap? {
         val file = File(path)
         if (!file.isFile || file.length() < 8) return null

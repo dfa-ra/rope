@@ -64,6 +64,7 @@ import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.NoteGalleryRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
@@ -186,6 +187,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val sendPendingAsNote: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -631,19 +633,28 @@ class RopeRepository(private val app: Application) {
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
             val caption = _state.value.draftText
+            val asNote = _state.value.sendPendingAsNote
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
             val destGroup = _state.value.group
             _state.value = _state.value.copy(
                 draftText = "",
                 pendingAttachments = emptyList(),
+                sendPendingAsNote = false,
                 replyTo = null,
                 replySpan = null,
                 composerPreview = null,
                 composerPreviewDismissedUrl = null,
             )
             persistOpenDraft()
-            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
+            sendAttachments(
+                pending,
+                caption = caption,
+                pack = pack,
+                destPeer = destPeer,
+                destGroup = destGroup,
+                asNote = asNote,
+            )
             return
         }
         val text = _state.value.draftText
@@ -703,6 +714,7 @@ class RopeRepository(private val app: Application) {
             replySpan = null,
             draftText = msg.text,
             pendingAttachments = emptyList(),
+            sendPendingAsNote = false,
         )
     }
 
@@ -715,7 +727,16 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelPendingMedia() {
-        _state.value = _state.value.copy(pendingAttachments = emptyList())
+        _state.value = _state.value.copy(pendingAttachments = emptyList(), sendPendingAsNote = false)
+    }
+
+    fun toggleSendPendingAsNote() {
+        _state.value = _state.value.copy(sendPendingAsNote = !_state.value.sendPendingAsNote)
+    }
+
+    fun stageAsVideoNote(uri: Uri) {
+        if (_state.value.editTarget != null) return
+        _state.value = _state.value.copy(pendingAttachments = listOf(uri), sendPendingAsNote = true)
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -856,7 +877,10 @@ class RopeRepository(private val app: Application) {
         if (_state.value.editTarget != null) return
         val merged = (_state.value.pendingAttachments + uris).distinct().take(AlbumRules.MAX_PHOTOS)
         if (merged.isEmpty()) return
-        _state.value = _state.value.copy(pendingAttachments = merged)
+        _state.value = _state.value.copy(
+            pendingAttachments = merged,
+            sendPendingAsNote = NoteGalleryRules.keepToggle(_state.value.sendPendingAsNote, merged.size),
+        )
     }
 
     private fun sendAttachments(
@@ -866,6 +890,7 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = ReplyPack(),
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
+        asNote: Boolean = false,
     ) {
         val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
         if (pack.id == null && resolved.id != null) {
@@ -877,10 +902,21 @@ class RopeRepository(private val app: Application) {
                     prepareOutgoingMedia(uri, forcedMime)
                 }
                 if (prepared.isEmpty()) return@launch
-                val images = prepared.filter { VideoRules.albumEligible(it.kind) }
-                val rest = prepared.filter { !VideoRules.albumEligible(it.kind) }
+                val single = prepared.singleOrNull()
+                val note = asNote &&
+                    single != null &&
+                    single.kind == "video" &&
+                    NoteGalleryRules.durationOk(single.durationMs)
+                if (asNote && !note) notice(NoteGalleryRules.TOO_LONG)
+                val items = if (note) {
+                    listOf(single.copy(kind = NoteGalleryRules.kind(true)))
+                } else {
+                    prepared
+                }
+                val images = items.filter { VideoRules.albumEligible(it.kind) }
+                val rest = items.filter { !VideoRules.albumEligible(it.kind) }
                 val slots = AlbumRules.slots(images.size)
-                val cap = MediaSendRules.normalize(caption)
+                val cap = NoteGalleryRules.caption(note, MediaSendRules.normalize(caption))
                 images.zip(slots).forEach { (item, slot) ->
                     sendMediaBytes(
                         item.bytes,
@@ -2153,6 +2189,7 @@ class RopeRepository(private val app: Application) {
         } else {
             emptyList()
         }
+        val asNote = pending.isNotEmpty() && _state.value.sendPendingAsNote
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
@@ -2167,6 +2204,7 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            sendPendingAsNote = asNote,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
         )

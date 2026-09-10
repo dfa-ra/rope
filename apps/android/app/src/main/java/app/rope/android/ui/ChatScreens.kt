@@ -178,6 +178,7 @@ import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.NoteGalleryRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
@@ -739,6 +740,8 @@ fun ChatPane(
     onCancelComposer: () -> Unit = {},
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
+    onToggleSendAsNote: () -> Unit = {},
+    onStageAsVideoNote: (Uri) -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
@@ -1111,6 +1114,7 @@ fun ChatPane(
                 onCancelComposer = onCancelComposer,
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
+                onToggleSendAsNote = onToggleSendAsNote,
                 onReplySpan = onReplySpan,
             )
         }
@@ -1165,6 +1169,10 @@ fun ChatPane(
             onUris = { uris ->
                 showAttach = false
                 onAttachUris(uris)
+            },
+            onVideoNoteUri = { uri ->
+                showAttach = false
+                onStageAsVideoNote(uri)
             },
             onVideoNote = {
                 showAttach = false
@@ -2236,6 +2244,7 @@ private fun ComposerBar(
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
+    onToggleSendAsNote: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
@@ -2317,10 +2326,30 @@ private fun ComposerBar(
                         state.pendingAttachments.map { it.lastPathSegment.orEmpty() },
                     )
                 }
+                val durationMs = remember(state.pendingAttachments) {
+                    val uri = state.pendingAttachments.singleOrNull() ?: return@remember 0L
+                    VideoCodec.durationMs(context, uri)
+                }
+                val asNote = NoteGalleryRules.sendAsNote(
+                    state.sendPendingAsNote,
+                    state.pendingAttachments.size,
+                    videos,
+                    durationMs,
+                )
                 ComposerHint(
-                    copy = MediaSendRules.hint(state.pendingAttachments.size, videos),
+                    copy = NoteGalleryRules.hint(asNote, state.pendingAttachments.size, videos),
                     onCancel = onCancelPendingMedia,
                 )
+                if (NoteGalleryRules.shows(state.pendingAttachments.size, videos, durationMs)) {
+                    FilterChip(
+                        selected = asNote,
+                        onClick = onToggleSendAsNote,
+                        label = { Text(NoteGalleryRules.ACTION) },
+                        modifier = Modifier
+                            .padding(start = 12.dp, bottom = 4.dp)
+                            .semantics { contentDescription = NoteGalleryRules.ACTION },
+                    )
+                }
             }
             state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
                 ComposerLinkPreview(
@@ -2400,7 +2429,11 @@ private fun ComposerBar(
                                         if (localText.isEmpty()) {
                                             Text(
                                                 if (state.pendingAttachments.isNotEmpty()) {
-                                                    MediaSendRules.PLACEHOLDER
+                                                    if (state.sendPendingAsNote) {
+                                                        NoteGalleryRules.TITLE
+                                                    } else {
+                                                        MediaSendRules.PLACEHOLDER
+                                                    }
                                                 } else {
                                                     "Сообщение"
                                                 },
@@ -2770,6 +2803,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onVideoNoteUri: (Uri) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2864,6 +2898,17 @@ private fun AttachSheet(
                         if (selected.size == 1) "Отправить" else "Отправить ${selected.size}",
                         modifier = Modifier.weight(1f),
                     )
+                }
+                val picked = selected.singleOrNull()?.let { uri -> recents.find { it.uri == uri } }
+                if (picked != null && NoteGalleryRules.shows(1, if (picked.video) 1 else 0, picked.durationMs)) {
+                    TextButton(
+                        onClick = { onVideoNoteUri(picked.uri) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.Videocam, contentDescription = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(NoteGalleryRules.ACTION, modifier = Modifier.weight(1f))
+                    }
                 }
             }
             TextButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
