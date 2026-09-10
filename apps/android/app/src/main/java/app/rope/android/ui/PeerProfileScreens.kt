@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,12 +46,14 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onOpenFile: (ChatMessage) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val files = PeerProfileRules.files(state.messages)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -101,7 +104,7 @@ fun PeerProfilePane(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            if (photos.isEmpty()) {
+            if (PeerProfileRules.showPhotoEmpty(photos.size, files.size)) {
                 item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
                     Column(
                         Modifier
@@ -123,6 +126,57 @@ fun PeerProfilePane(
                     SharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
                 }
             }
+            if (files.isNotEmpty()) {
+                item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
+                    Text(
+                        PeerProfileRules.filesSectionLabel(files.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .semantics { contentDescription = PeerProfileRules.FILES },
+                    )
+                }
+                items(files, key = { "file-${it.id}" }, span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) { m ->
+                    SharedFileRow(m) { onOpenFile(m) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharedFileRow(
+    m: ChatMessage,
+    onClick: () -> Unit,
+) {
+    val name = PeerProfileRules.fileTitle(m)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics { contentDescription = name },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.AutoMirrored.Outlined.InsertDriveFile,
+            contentDescription = null,
+            modifier = Modifier.size(28.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                name,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                MessageTime.label(m.timestampMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -356,6 +356,10 @@ fun RopeScaffold(
                             onBack = { onBack() },
                             onOpenImage = onOpenImage,
                             onEnsureMedia = onEnsureMedia,
+                            onOpenFile = { m ->
+                                onJump(m.id)
+                                onBack()
+                            },
                         )
                     }
                 }

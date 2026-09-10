@@ -46,17 +46,39 @@ class PeerProfileRulesTest {
         assertEquals(3, PeerProfileRules.GRID_COLUMNS)
     }
 
+    @Test
+    fun filesAreNewestFirstSkipDeletedAndNonFiles() {
+        val older = img("a", 10L, kind = MessageKind.FILE, text = "a.pdf")
+        val newer = img("b", 20L, kind = MessageKind.FILE, text = "b.zip")
+        val photo = img("p", 30L)
+        val deleted = img("d", 40L, kind = MessageKind.FILE, deleted = true, text = "gone.doc")
+        val voice = img("v", 50L, kind = MessageKind.VOICE)
+        val blankName = img("c", 15L, kind = MessageKind.FILE, text = "  ")
+        val files = PeerProfileRules.files(listOf(older, newer, photo, deleted, voice, blankName))
+        assertEquals(listOf("b", "c", "a"), files.map { it.id })
+        assertFalse(files.any { it.deleted })
+        assertTrue(files.all { it.kind == MessageKind.FILE })
+        assertEquals("b.zip", PeerProfileRules.fileTitle(newer))
+        assertEquals("Файл", PeerProfileRules.fileTitle(blankName))
+        assertEquals("Файлы", PeerProfileRules.filesSectionLabel(0))
+        assertEquals("Файлы · 2", PeerProfileRules.filesSectionLabel(2))
+        assertTrue(PeerProfileRules.showPhotoEmpty(0, 0))
+        assertFalse(PeerProfileRules.showPhotoEmpty(0, 1))
+        assertFalse(PeerProfileRules.showPhotoEmpty(1, 0))
+    }
+
     private fun img(
         id: String,
         ts: Long,
         kind: MessageKind = MessageKind.IMAGE,
         deleted: Boolean = false,
         localPath: String? = "/x.jpg",
+        text: String = "фото",
     ) = ChatMessage(
         id = id,
         peerDeviceId = "peer",
         outgoing = false,
-        text = "фото",
+        text = text,
         status = MessageStatus.DELIVERED_TO_DEVICE,
         timestampMs = ts,
         kind = kind,
