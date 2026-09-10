@@ -88,6 +88,7 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -102,7 +103,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -153,6 +156,8 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.LinkOpenRules
+import app.rope.android.data.LinkOpenRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
@@ -194,6 +199,7 @@ private val OutBubbleDark = Color(0xFF3F3F46)
 private val InBubbleLight = Color(0xFFF4F4F5)
 private val InBubbleDark = Color(0xFF27272A)
 private val RecRed = Color(0xFFE53935)
+private val LocalOpenHttps = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Composable
 fun ChatsPane(
@@ -793,6 +799,8 @@ fun ChatPane(
     var showAttach by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
+    var pendingHttps by remember { mutableStateOf<String?>(null) }
+    val linkContext = LocalContext.current
     val selecting = selectedIds.isNotEmpty()
     val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
     val singleSelected = selectedMsgs.singleOrNull()
@@ -819,6 +827,11 @@ fun ChatPane(
         if (flashId == id) flashId = null
     }
     val pinned = state.messages.find { it.id == state.pinnedMessageId && !it.deleted }
+    CompositionLocalProvider(
+        LocalOpenHttps provides { url ->
+            LinkOpenRules.accept(url)?.let { pendingHttps = it }
+        },
+    ) {
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
@@ -1146,6 +1159,25 @@ fun ChatPane(
             onSend = { onVideoNoteFinish(true) },
             onCancel = { onVideoNoteFinish(false) },
         )
+    }
+    pendingHttps?.let { url ->
+        AlertDialog(
+            onDismissRequest = { pendingHttps = null },
+            title = { Text(LinkOpenRules.TITLE) },
+            text = { Text(LinkOpenRules.body(url)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingHttps = null
+                        openHttps(linkContext, url)
+                    },
+                ) { Text(LinkOpenRules.CONFIRM) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingHttps = null }) { Text(LinkOpenRules.CANCEL) }
+            },
+        )
+    }
     }
     }
     if (showAttach) {
@@ -1557,7 +1589,7 @@ private fun MessageBubble(
                             MessageKind.CALL -> Text("📞 ${m.text}", style = MaterialTheme.typography.bodyMedium)
                             MessageKind.UNKNOWN -> Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFFC107))
                             else -> {
-                                val context = LocalContext.current
+                                val openLink = LocalOpenHttps.current
                                 MentionText(
                                     m.text,
                                     mentionNames,
@@ -1572,7 +1604,7 @@ private fun MessageBubble(
                                     }
                                     LinkPreviewCard(
                                         preview = preview,
-                                        onOpen = { openHttps(context, it) },
+                                        onOpen = { openLink(it) },
                                     )
                                 }
                             }
@@ -1666,7 +1698,7 @@ private fun MentionText(
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
     val links = remember(text) { LinkPreviewRules.spans(text) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
-    val context = LocalContext.current
+    val openLink = LocalOpenHttps.current
     val linkColor = MaterialTheme.colorScheme.primary
     if (spans.isEmpty() && links.isEmpty()) {
         Text(text, style = style)
@@ -1695,7 +1727,7 @@ private fun MentionText(
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
-            if (url != null) openHttps(context, url) else onPlainTap()
+            if (url != null) openLink(url) else onPlainTap()
         },
     )
 }
