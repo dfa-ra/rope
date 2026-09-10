@@ -751,6 +751,7 @@ fun ChatPane(
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onToggleVoiceSpeaker: () -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
@@ -1006,6 +1007,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onToggleVoiceSpeaker = onToggleVoiceSpeaker,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1373,6 +1375,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onToggleVoiceSpeaker: () -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1551,6 +1554,8 @@ private fun MessageBubble(
                                 onPlay = onPlay,
                                 onSeek = onSeekVoice,
                                 onCycleSpeed = onCycleVoiceSpeed,
+                                speakerOn = state.voiceSpeakerOn,
+                                onToggleSpeaker = onToggleVoiceSpeaker,
                             )
                             MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
                             MessageKind.FILE -> FileBubble(m)

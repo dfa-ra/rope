@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceSpeakerRules
 
 /**
  * Telegram-like voice bubble: play/pause, seekable waveform, 1x/1.5x/2x.
@@ -51,6 +54,8 @@ fun VoiceMessageBubble(
     onPlay: (ChatMessage) -> Unit,
     onSeek: (ChatMessage, Long) -> Unit,
     onCycleSpeed: () -> Unit,
+    speakerOn: Boolean = VoiceSpeakerRules.DEFAULT_SPEAKER,
+    onToggleSpeaker: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val extra = runCatching { MediaPayload.parse(message.extra) }.getOrNull()
@@ -113,15 +118,28 @@ fun VoiceMessageBubble(
                     style = MaterialTheme.typography.labelSmall,
                 )
                 if (extra != null && !downloading) {
-                    Text(
-                        VoicePlayback.speedLabel(speed),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onCycleSpeed)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            if (speakerOn) Icons.Outlined.VolumeUp else Icons.Outlined.Phone,
+                            contentDescription = VoiceSpeakerRules.contentDescription(speakerOn),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable(onClick = onToggleSpeaker),
+                        )
+                        Text(
+                            VoicePlayback.speedLabel(speed),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onCycleSpeed)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                 }
             }
         }

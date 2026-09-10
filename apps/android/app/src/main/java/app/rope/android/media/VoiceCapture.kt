@@ -1,6 +1,7 @@
 package app.rope.android.media
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -9,6 +10,7 @@ import android.media.MediaRecorder
 import android.media.PlaybackParams
 import android.os.Build
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceSpeakerRules
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -106,6 +108,8 @@ class VoiceRecorder(private val context: Context) {
 
 class VoicePlayer {
     private var player: MediaPlayer? = null
+    private var currentPath: String? = null
+    private var speakerOn: Boolean = VoiceSpeakerRules.DEFAULT_SPEAKER
     var playingId: String? = null
         private set
     var loadedId: String? = null
@@ -180,15 +184,46 @@ class VoicePlayer {
         return speed
     }
 
-    private fun prepare(id: String, path: String, start: Boolean) {
+    fun setSpeakerOn(on: Boolean) {
+        speakerOn = on
+        val id = loadedId ?: return
+        val path = currentPath ?: return
+        val pos = positionMs()
+        val resume = isPlayingNow()
+        prepare(id, path, start = resume, seekMs = pos)
+    }
+
+    private fun applyRoute(p: MediaPlayer) {
+        val usage = if (speakerOn) {
+            AudioAttributes.USAGE_MEDIA
+        } else {
+            AudioAttributes.USAGE_VOICE_COMMUNICATION
+        }
+        p.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(usage)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
+    }
+
+    private fun prepare(id: String, path: String, start: Boolean, seekMs: Long = 0L) {
         stop()
         val p = MediaPlayer()
+        applyRoute(p)
         p.setDataSource(path)
         p.setOnCompletionListener { stop() }
         p.prepare()
         player = p
         loadedId = id
+        currentPath = path
         applySpeed()
+        if (seekMs > 0L) {
+            try {
+                p.seekTo(seekMs.toInt())
+            } catch (_: Exception) {
+            }
+        }
         if (start) {
             p.start()
             playingId = id
@@ -220,6 +255,7 @@ class VoicePlayer {
         player = null
         playingId = null
         loadedId = null
+        currentPath = null
     }
 }
 

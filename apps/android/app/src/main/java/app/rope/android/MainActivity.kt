@@ -190,6 +190,7 @@ class MainActivity : AppCompatActivity() {
                     onVoiceFinish = repo::finishVoice,
                     onSeekVoice = repo::seekVoice,
                     onCycleVoiceSpeed = repo::cycleVoiceSpeed,
+                    onToggleVoiceSpeaker = repo::toggleVoiceSpeaker,
                     onVideoNoteStart = { withNoteMedia { repo.startVideoNote() } },
                     onVideoNoteFinish = repo::finishVideoNote,
                     onVideoNotePreview = repo::bindVideoNotePreview,

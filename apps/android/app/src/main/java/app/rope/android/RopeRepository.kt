@@ -70,6 +70,7 @@ import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
 import app.rope.android.data.VoicePlayback
+import app.rope.android.data.VoiceSpeakerRules
 import app.rope.android.media.CallAudio
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
@@ -155,6 +156,7 @@ data class UiState(
     val voicePositionMs: Long = 0,
     val voiceDurationMs: Long = 0,
     val voiceSpeed: Float = VoicePlayback.SPEED_1X,
+    val voiceSpeakerOn: Boolean = VoiceSpeakerRules.DEFAULT_SPEAKER,
     val call: CallInfo? = null,
     val callMicMuted: Boolean = false,
     val callSpeakerOn: Boolean = false,
@@ -1140,6 +1142,12 @@ class RopeRepository(private val app: Application) {
     fun cycleVoiceSpeed() {
         voicePlayer.cycleSpeed()
         publishVoiceProgress()
+    }
+
+    fun toggleVoiceSpeaker() {
+        val next = VoiceSpeakerRules.toggle(_state.value.voiceSpeakerOn)
+        voicePlayer.setSpeakerOn(next)
+        _state.value = _state.value.copy(voiceSpeakerOn = next)
     }
 
     private fun publishVoiceProgress() {
