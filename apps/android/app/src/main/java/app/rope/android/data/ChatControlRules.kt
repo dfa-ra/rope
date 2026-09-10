@@ -45,6 +45,7 @@ object ChatControlRules {
     fun typingChatId(actorId: String?, targetId: String?, knownGroupIds: Collection<String>): String? {
         val actor = PeerIds.normalize(actorId)
         if (actor.isBlank()) return null
+        if (hasControl(targetId)) return null
         val target = JsonIds.optional(targetId) ?: return actor
         if (ChatIds.isGroup(target)) {
             val gid = ChatIds.rawGroupId(target)
@@ -63,5 +64,20 @@ object ChatControlRules {
         val b = PeerIds.normalize(incomingSender)
         if (a.isBlank() || b.isBlank()) return true
         return a == b
+    }
+
+    /**
+     * RECEIPT target / emoji. Fail closed on CR/LF/NUL before trim so a
+     * newline prefix cannot become a live message id or reaction.
+     * Spaces still trim. JSON "null" stays missing, same as [JsonIds.optional].
+     */
+    fun parseWire(raw: String?): String? {
+        if (hasControl(raw)) return null
+        return JsonIds.optional(raw)
+    }
+
+    fun hasControl(raw: String?): Boolean {
+        if (raw == null) return false
+        return raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0
     }
 }

@@ -303,11 +303,17 @@ data class ChatControl(
             }
             val kind = o.optString("kind")
             if (kind !in kinds) return null
-            val target = JsonIds.optional(o.optString("target")) ?: if (kind == TYPING) "typing" else return null
+            val rawTarget = o.optString("target")
+            val rawEmoji = o.optString("emoji")
+            if (ChatControlRules.hasControl(rawTarget) || ChatControlRules.hasControl(rawEmoji)) {
+                return null
+            }
+            val target = ChatControlRules.parseWire(rawTarget)
+                ?: if (kind == TYPING) "typing" else return null
             return ChatControl(
                 kind = kind,
                 targetId = target,
-                emoji = o.optString("emoji").trim(),
+                emoji = ChatControlRules.parseWire(rawEmoji).orEmpty(),
                 op = o.optString("op").ifBlank { ReactionPayload.SET },
                 text = o.optString("text"),
             )
@@ -673,9 +679,8 @@ data class ReactionPayload(
         fun parse(raw: String): ReactionPayload? {
             val o = JSONObject(raw)
             if (o.optString("kind") != "reaction") return null
-            val target = JsonIds.optional(o.optString("target")) ?: return null
-            val emoji = o.optString("emoji").trim()
-            if (emoji.isEmpty()) return null
+            val target = ChatControlRules.parseWire(o.optString("target")) ?: return null
+            val emoji = ChatControlRules.parseWire(o.optString("emoji")) ?: return null
             val op = o.optString("op").ifBlank { SET }
             return ReactionPayload(target, emoji, op)
         }

@@ -1,10 +1,12 @@
 package app.rope.android
 
+import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
+import app.rope.android.data.ReactionPayload
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -79,6 +81,38 @@ class ChatControlRulesTest {
         assertEquals(ChatIds.group(gid), ChatControlRules.typingChatId(alice, ChatIds.group(gid), listOf(gid)))
         assertNull(ChatControlRules.typingChatId(alice, ChatIds.group(gid), emptyList()))
         assertNull(ChatControlRules.typingChatId("", bob, emptyList()))
+        assertNull(ChatControlRules.typingChatId(alice, "g:$gid\n", listOf(gid)))
+        assertNull(ChatControlRules.typingChatId(alice, "$gid\r", listOf(gid)))
+    }
+
+    @Test
+    fun parseWireRejectsControlChars() {
+        assertEquals("m1", ChatControlRules.parseWire("  m1  "))
+        assertNull(ChatControlRules.parseWire("m1\n"))
+        assertNull(ChatControlRules.parseWire("\n❤️"))
+        assertNull(ChatControlRules.parseWire("👍\r"))
+        assertNull(ChatControlRules.parseWire("m1\u0000"))
+        assertNull(ChatControlRules.parseWire("null"))
+        assertNull(ChatControlRules.parseWire(""))
+    }
+
+    @Test
+    fun receiptTargetAndEmojiRejectControlChars() {
+        val typing = ChatControl.parse("""{"kind":"typing"}""")!!
+        assertEquals(ChatControl.TYPING, typing.kind)
+        assertEquals("typing", typing.targetId)
+        assertNull(ChatControl.parse("""{"kind":"typing","target":"g:abc\n"}"""))
+        assertNull(ChatControl.parse("""{"kind":"reaction","target":"m1\n","emoji":"👍"}"""))
+        assertNull(ChatControl.parse("""{"kind":"reaction","target":"m1","emoji":"👍\n"}"""))
+        assertNull(ChatControl.parse("""{"kind":"edit","target":"m1\n","text":"hi"}"""))
+        val edit = ChatControl.parse("""{"kind":"edit","target":"m1","text":"line1\nline2"}""")!!
+        assertEquals("m1", edit.targetId)
+        assertEquals("line1\nline2", edit.text)
+        val reaction = ReactionPayload.parse("""{"kind":"reaction","target":"m1","emoji":"👍"}""")!!
+        assertEquals("m1", reaction.targetId)
+        assertEquals("👍", reaction.emoji)
+        assertNull(ReactionPayload.parse("""{"kind":"reaction","target":"m1\n","emoji":"👍"}"""))
+        assertNull(ReactionPayload.parse("""{"kind":"reaction","target":"m1","emoji":"\n❤️"}"""))
     }
 
     @Test
