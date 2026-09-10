@@ -58,6 +58,7 @@ object SavedMessagesRules {
             muted = prefs.muted,
             unread = 0,
             archived = prefs.archived,
+            draft = prefs.draft,
         )
     }
 }

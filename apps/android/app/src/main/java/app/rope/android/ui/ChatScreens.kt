@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -152,6 +155,7 @@ import app.rope.android.data.ChatListMode
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
+import app.rope.android.data.DraftFilterRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
@@ -208,6 +212,7 @@ fun ChatsPane(
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
+    onSetDraftsFilter: (Boolean) -> Unit = {},
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -270,19 +275,45 @@ fun ChatsPane(
                 ChatListMode.ALL -> "Поиск"
             },
         )
+        if (DraftFilterRules.showsChips(listMode)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !state.chatsDraftsOnly,
+                    onClick = { onSetDraftsFilter(false) },
+                    label = { Text(DraftFilterRules.CHIP_ALL) },
+                    modifier = Modifier.semantics { contentDescription = DraftFilterRules.CHIP_ALL },
+                )
+                FilterChip(
+                    selected = state.chatsDraftsOnly,
+                    onClick = { onSetDraftsFilter(true) },
+                    label = { Text(DraftFilterRules.CHIP) },
+                    modifier = Modifier.semantics { contentDescription = DraftFilterRules.CHIP },
+                )
+            }
+        }
         val isForwarding = state.forwarding != null
         val archived = ArchiveRules.archivedOf(state.conversations)
-        val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
+        val source = DraftFilterRules.apply(
+            ArchiveRules.sourceForList(state.conversations, listMode, isForwarding),
+            draftsOnly = state.chatsDraftsOnly && DraftFilterRules.showsChips(listMode),
+        )
         val rows = ChatListRules.rows(source, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
-        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
+        val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding) &&
+            !DraftFilterRules.hideArchiveRow(state.chatsDraftsOnly)
         val inArchive = listMode == ChatListMode.ARCHIVE
-        val empty = ChatListEmptyRules.copy(
-            listMode,
-            state.chatQuery,
-            isForwarding,
-            state.profile?.role,
+        val empty = DraftFilterRules.emptyCopy(
+            draftsOnly = state.chatsDraftsOnly && DraftFilterRules.showsChips(listMode),
+            mode = listMode,
+            query = state.chatQuery,
+            forwarding = isForwarding,
+            role = state.profile?.role,
         )
         Box(Modifier.weight(1f).fillMaxSize()) {
             if (rows.isEmpty() && !showArchiveRow) {
@@ -350,7 +381,12 @@ fun ChatsPane(
                     }
                 }
             }
-            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, state.forwarding != null)) {
+            if (DraftFilterRules.showFab(
+                    state.chatsDraftsOnly && DraftFilterRules.showsChips(listMode),
+                    listMode,
+                    state.chatQuery,
+                    state.forwarding != null,
+                )) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier

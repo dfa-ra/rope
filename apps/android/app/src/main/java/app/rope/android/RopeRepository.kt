@@ -185,6 +185,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val chatsDraftsOnly: Boolean = false,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -256,6 +257,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    chatsDraftsOnly = store.chatsDraftsOnly(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -769,6 +771,12 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun setChatsDraftsOnly(draftsOnly: Boolean) {
+        if (_state.value.chatsDraftsOnly == draftsOnly) return
+        store.saveChatsDraftsOnly(draftsOnly)
+        _state.value = _state.value.copy(chatsDraftsOnly = draftsOnly)
     }
 
     fun copyMessage(msg: ChatMessage) {
@@ -2491,6 +2499,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                draft = p.draft,
             )
         }
         val gs = groups.map { g ->
@@ -2515,6 +2524,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                draft = p.draft,
             )
         }
         val leftover = lastBy.keys
@@ -2544,6 +2554,7 @@ class RopeRepository(private val app: Application) {
                     muted = p.muted,
                     unread = p.unread,
                     archived = p.archived,
+                    draft = p.draft,
                 )
             }
         val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])
