@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveKeepArchived(enabled: Boolean) {
+        put("keep_arch", KeepArchRules.persist(enabled))
+    }
+
+    fun keepArchived(): Boolean = KeepArchRules.enabledFromKv(get("keep_arch"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

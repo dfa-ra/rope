@@ -62,6 +62,7 @@ import app.rope.android.data.SshTarget
 import app.rope.android.data.ThemeMode
 import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
+import app.rope.android.data.KeepArchRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val keepArchived: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    keepArchived = store.keepArchived(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -584,6 +587,12 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleKeepArchived() {
+        val next = !_state.value.keepArchived
+        store.saveKeepArchived(next)
+        _state.value = _state.value.copy(keepArchived = next)
     }
 
     fun toggleLinkPreviews() {
@@ -3403,7 +3412,7 @@ class RopeRepository(private val app: Application) {
         val appForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val cur = store.chatPrefs(chatId)
         if (!chatOpen || !appForeground) {
-            store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
+            store.saveChatPrefs(chatId, KeepArchRules.nextPrefs(cur, _state.value.keepArchived))
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
