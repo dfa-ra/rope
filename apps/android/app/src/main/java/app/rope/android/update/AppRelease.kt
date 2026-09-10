@@ -3,8 +3,13 @@ package app.rope.android.update
 object AppRelease {
     private val apkName = Regex("""^rope-(\d+\.\d+\.\d+)(?:-debug)?\.apk$""")
 
-    fun parseApkVersion(fileName: String): String? =
-        apkName.matchEntire(fileName.trim())?.groupValues?.get(1)
+    fun parseApkVersion(fileName: String): String? {
+        if (fileName.indexOf('\n') >= 0 || fileName.indexOf('\r') >= 0 || fileName.indexOf('\u0000') >= 0) {
+            return null
+        }
+        if (fileName != fileName.trim()) return null
+        return apkName.matchEntire(fileName)?.groupValues?.get(1)
+    }
 
     fun stripBuildSuffix(versionName: String): String =
         versionName.substringBefore("-")

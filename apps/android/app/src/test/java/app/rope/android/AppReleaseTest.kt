@@ -26,4 +26,20 @@ class AppReleaseTest {
         val names = listOf("rope-server-linux-amd64", "rope-0.1.5-debug.apk", "SHA256SUMS")
         assertEquals("rope-0.1.5-debug.apk", AppRelease.pickApkAsset(names, preferDebug = true))
     }
+
+    @Test
+    fun parseApkVersionRejectsCrLf() {
+        assertEquals(null, AppRelease.parseApkVersion("rope-0.1.5.apk\n"))
+        assertEquals(null, AppRelease.parseApkVersion("rope-0.1.5.apk\r"))
+        assertEquals(null, AppRelease.parseApkVersion("rope-0.1.5.apk\u0000"))
+        assertEquals(null, AppRelease.parseApkVersion(" rope-0.1.5.apk"))
+        assertEquals(
+            null,
+            AppRelease.pickApkAsset(listOf("rope-0.1.5.apk\n", "rope-0.1.5-debug.apk\r"), preferDebug = true),
+        )
+        assertEquals(
+            "rope-0.1.5.apk",
+            AppRelease.pickApkAsset(listOf("rope-0.1.5.apk\n", "rope-0.1.5.apk"), preferDebug = false),
+        )
+    }
 }
