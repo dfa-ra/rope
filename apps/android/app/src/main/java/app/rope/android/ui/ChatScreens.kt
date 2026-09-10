@@ -2273,6 +2273,9 @@ private fun ComposerBar(
             showEmoji = false
         }
     }
+    LaunchedEffect(state.raiseSpeakRecording) {
+        if (state.raiseSpeakRecording) recordingLocked = true
+    }
     val showSend = ComposerRules.showSendButton(
         localText,
         state.recording,

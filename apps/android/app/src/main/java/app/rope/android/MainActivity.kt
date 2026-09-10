@@ -137,6 +137,10 @@ class MainActivity : AppCompatActivity() {
                 repo.resume()
                 if (canInstallPackages() && startedInstallFor == null) tryInstallPending()
             }
+
+            override fun onStop(owner: LifecycleOwner) {
+                repo.onRaiseSpeakHidden()
+            }
         })
         setContent {
             val state by repo.state.collectAsState()
@@ -235,6 +239,7 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onToggleRaiseSpeak = repo::toggleRaiseSpeak,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,

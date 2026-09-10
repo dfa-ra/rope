@@ -1,9 +1,11 @@
 package app.rope.android
 
+import android.Manifest
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -28,6 +30,7 @@ import app.rope.android.data.CallEffect
 import app.rope.android.data.CallMachine
 import app.rope.android.data.CallSignal
 import app.rope.android.data.CallToneRules
+import app.rope.android.data.RaiseSpeakAction
 import app.rope.android.data.RaiseSpeakRules
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
@@ -172,6 +175,8 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val raiseSpeak: Boolean = true,
+    val raiseSpeakRecording: Boolean = false,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -242,13 +247,29 @@ class RopeRepository(private val app: Application) {
     private var boundRemote: VideoSink? = null
     private var boundLocal: VideoSink? = null
     private var iceCachedAtMs: Long = 0L
-    private var proximityRegistered = false
-    private var proximityNear = false
-    private val proximityListener = object : SensorEventListener {
+    private var raiseSpeakBound = false
+    private var raiseNear = false
+    private var raiseRaised: Boolean? = null
+    private var raiseSawAway = false
+    @Volatile private var raiseSession = false
+    private val raiseSpeakListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
-            val max = event.sensor.maximumRange
-            val distance = event.values.firstOrNull() ?: max
-            onProximity(RaiseSpeakRules.isNear(distance, max))
+            when (event.sensor.type) {
+                Sensor.TYPE_PROXIMITY -> {
+                    val distance = event.values.firstOrNull() ?: return
+                    raiseNear = RaiseSpeakRules.isNear(distance, event.sensor.maximumRange)
+                    applyRaiseSpeak()
+                }
+                Sensor.TYPE_GRAVITY, Sensor.TYPE_ACCELEROMETER -> {
+                    if (event.values.size < 3) return
+                    raiseRaised = RaiseSpeakRules.isRaisedPose(
+                        event.values[0],
+                        event.values[1],
+                        event.values[2],
+                    )
+                    applyRaiseSpeak()
+                }
+            }
         }
 
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -272,6 +293,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    raiseSpeak = store.raiseSpeakEnabled(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -313,6 +335,7 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(groupNameDraft = "", pickedMembers = emptySet())
         }
         if (screen == Screen.Status) loadStatusSnapshot()
+        syncRaiseSpeak()
     }
 
     /** @return true if the back event was consumed; false if the Activity should finish. */
@@ -369,6 +392,7 @@ class RopeRepository(private val app: Application) {
                     },
                 )
                 if (NavRules.refreshesLists(next.last())) refreshConversations()
+                syncRaiseSpeak()
                 true
             }
             BackLayer.CloseEmoji,
@@ -600,6 +624,13 @@ class RopeRepository(private val app: Application) {
         val next = !_state.value.notificationsMuted
         store.saveNotificationsMuted(next)
         _state.value = _state.value.copy(notificationsMuted = next)
+    }
+
+    fun toggleRaiseSpeak() {
+        val next = !_state.value.raiseSpeak
+        store.saveRaiseSpeak(next)
+        _state.value = _state.value.copy(raiseSpeak = next)
+        syncRaiseSpeak()
     }
 
     fun toggleLinkPreviews() {
@@ -1008,7 +1039,9 @@ class RopeRepository(private val app: Application) {
             null
         }
         recordJob?.cancel()
-        _state.value = _state.value.copy(recording = false, recordMs = 0)
+        raiseSession = false
+        raiseSawAway = false
+        _state.value = _state.value.copy(recording = false, recordMs = 0, raiseSpeakRecording = false)
         if (!send || take == null || take.durationMs < VoiceRecorder.MIN_MS) {
             take?.file?.delete()
             return
@@ -1337,7 +1370,8 @@ class RopeRepository(private val app: Application) {
     fun toggleCallSpeaker() {
         val next = !_state.value.callSpeakerOn
         _state.value = _state.value.copy(callSpeakerOn = next)
-        applyRaiseSpeakRoute()
+        CallAudio.setSpeaker(app, next)
+        syncRaiseSpeak()
     }
 
     fun toggleCallCamera() {
@@ -1590,6 +1624,11 @@ class RopeRepository(private val app: Application) {
 
     fun resume() {
         store.profile()?.let { connectSocket(it) }
+        syncRaiseSpeak()
+    }
+
+    fun onRaiseSpeakHidden() {
+        syncRaiseSpeak(foreground = false)
     }
 
     private fun sendMediaBytes(
@@ -2168,6 +2207,7 @@ class RopeRepository(private val app: Application) {
         prefetchMedia(_state.value.messages)
         refreshConversations()
         scheduleUnfurl(prefs.draft)
+        syncRaiseSpeak()
     }
 
     private fun persistOpenDraft() {
@@ -2979,7 +3019,7 @@ class RopeRepository(private val app: Application) {
         if (info != null) {
             _state.value = _state.value.copy(call = info)
         }
-        syncProximitySensor()
+        syncRaiseSpeak()
     }
 
     private fun dispatchCall(callId: String, peerId: String, event: String, payload: String): Boolean {
@@ -3378,7 +3418,7 @@ class RopeRepository(private val app: Application) {
             callNotice = null,
             callRtcReady = false,
         )
-        syncProximitySensor()
+        syncRaiseSpeak()
     }
 
     private fun startTone(outgoing: Boolean) {
@@ -3413,39 +3453,79 @@ class RopeRepository(private val app: Application) {
 
     private fun audioMode(on: Boolean) {
         CallAudio.apply(app, on)
-        if (on) applyRaiseSpeakRoute()
     }
 
-    private fun onProximity(near: Boolean) {
-        if (proximityNear == near) return
-        proximityNear = near
-        applyRaiseSpeakRoute()
-    }
+    private fun uiForeground(): Boolean =
+        ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
 
-    private fun applyRaiseSpeakRoute() {
-        val listening = RaiseSpeakRules.listen(_state.value.call)
-        if (!listening && !proximityNear) return
-        val speaker = RaiseSpeakRules.speakerOn(
-            userSpeakerOn = _state.value.callSpeakerOn,
-            proximityNear = proximityNear,
-            listening = listening,
+    private fun hasMicPermission(): Boolean =
+        app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun syncRaiseSpeak(foreground: Boolean = uiForeground()) {
+        val want = RaiseSpeakRules.shouldListen(
+            enabled = _state.value.raiseSpeak,
+            inChat = _state.value.screen == Screen.Chat && openChatId() != null,
+            liveCall = _state.value.call != null,
+            foreground = foreground,
         )
-        CallAudio.setSpeaker(app, speaker)
+        bindRaiseSpeak(want)
+        applyRaiseSpeak(foreground)
     }
 
-    private fun syncProximitySensor() {
-        val want = RaiseSpeakRules.listen(_state.value.call)
-        val sm = app.getSystemService(SensorManager::class.java)
-        if (want && !proximityRegistered) {
-            val sensor = sm?.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-            if (sensor != null) {
-                sm.registerListener(proximityListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-                proximityRegistered = true
+    private fun bindRaiseSpeak(on: Boolean) {
+        val sm = app.getSystemService(SensorManager::class.java) ?: return
+        if (on) {
+            if (raiseSpeakBound) return
+            val proximity = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY) ?: return
+            sm.registerListener(raiseSpeakListener, proximity, SensorManager.SENSOR_DELAY_NORMAL, mainHandler)
+            val pose = sm.getDefaultSensor(Sensor.TYPE_GRAVITY)
+                ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            if (pose != null) {
+                sm.registerListener(raiseSpeakListener, pose, SensorManager.SENSOR_DELAY_UI, mainHandler)
             }
-        } else if (!want && proximityRegistered) {
-            sm?.unregisterListener(proximityListener)
-            proximityRegistered = false
-            proximityNear = false
+            raiseSpeakBound = true
+        } else if (raiseSpeakBound) {
+            sm.unregisterListener(raiseSpeakListener)
+            raiseSpeakBound = false
+            raiseNear = false
+            raiseRaised = null
+            raiseSawAway = false
+        }
+    }
+
+    private fun applyRaiseSpeak(foreground: Boolean = uiForeground()) {
+        onMain {
+            if (!raiseNear) raiseSawAway = true
+            val atEar = RaiseSpeakRules.atEar(raiseNear, raiseRaised)
+            when (
+                RaiseSpeakRules.action(
+                    enabled = _state.value.raiseSpeak,
+                    inChat = _state.value.screen == Screen.Chat && openChatId() != null,
+                    foreground = foreground,
+                    recording = _state.value.recording,
+                    raiseSession = raiseSession,
+                    recordingVideoNote = _state.value.recordingVideoNote,
+                    liveCall = _state.value.call != null,
+                    atEar = atEar,
+                    sawAway = raiseSawAway,
+                    hasMic = hasMicPermission(),
+                )
+            ) {
+                RaiseSpeakAction.START -> {
+                    voicePlayer.stop()
+                    raiseSession = true
+                    startVoice()
+                    if (_state.value.recording) {
+                        _state.value = _state.value.copy(raiseSpeakRecording = true)
+                    } else {
+                        raiseSession = false
+                    }
+                }
+                RaiseSpeakAction.SEND -> finishVoice(true)
+                RaiseSpeakAction.CANCEL -> finishVoice(false)
+                RaiseSpeakAction.NONE -> Unit
+            }
         }
     }
 
