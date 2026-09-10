@@ -31,6 +31,8 @@ object SettingsRules {
     fun appearanceHint(): String =
         "Тёмная или светлая. Цвета логотипа не меняются."
 
+    fun captionAboveHint(): String = CaptionAboveRules.hint()
+
     fun serverPinHint(useTls: Boolean): String =
         if (useTls) {
             "Отпечаток TLS привязан к этому телефону. Сервер не видит переписку."

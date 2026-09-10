@@ -1489,12 +1489,14 @@ private fun MessageBubble(
                             accent = senderColor,
                             onJump = onJump,
                         )
+                        val caption = MediaSendRules.captionOf(m)
+                        if (state.captionAbove) MediaCaptionLine(caption)
                         if (m.kind == MessageKind.VIDEO) {
                             VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
                         } else {
                             ImageBubble(m, onEnsureMedia, overlayMeta = true)
                         }
-                        MediaCaptionLine(MediaSendRules.captionOf(m))
+                        if (!state.captionAbove) MediaCaptionLine(caption)
                     }
                     Box(
                         Modifier
@@ -2043,6 +2045,8 @@ private fun AlbumBubble(
             accent = senderColor,
             onJump = onJump,
         )
+        val albumCaption = MediaSendRules.albumCaption(members)
+        if (state.captionAbove) MediaCaptionLine(albumCaption)
         Box(
             Modifier
                 .width(PhotoLayout.MOSAIC_WIDTH_DP.dp)
@@ -2079,7 +2083,7 @@ private fun AlbumBubble(
                 )
             }
         }
-        MediaCaptionLine(MediaSendRules.albumCaption(members))
+        if (!state.captionAbove) MediaCaptionLine(albumCaption)
         if (last.reactions.isNotEmpty()) {
             ReactionRow(last, state.profile?.deviceId.orEmpty(), mine, onReact)
         }
