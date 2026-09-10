@@ -77,6 +77,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
@@ -165,6 +166,7 @@ import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
 import app.rope.android.data.UnreadSeparatorRules
+import app.rope.android.data.MentionJumpRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerHintCopy
@@ -1075,27 +1077,60 @@ fun ChatPane(
                     }
                 }
                 val fabKind = UnreadSeparatorRules.fab(atBottom, unreadVisible, unreadIdx >= 0, unreadAbove)
-                if (fabKind != null) {
-                    FloatingActionButton(
-                        onClick = {
-                            jumpScope.launch {
-                                val target = if (fabKind == UnreadFab.UP) {
-                                    unreadIdx
-                                } else {
-                                    threadItems.lastIndex
-                                }
-                                if (target >= 0) list.animateScrollToItem(target)
-                            }
-                        },
+                val mentionIds = remember(visible, state.profile?.displayName, state.unreadAnchorId, state.group) {
+                    MentionJumpRules.unreadIds(
+                        messages = visible,
+                        myName = state.profile?.displayName.orEmpty(),
+                        unreadAnchorId = state.unreadAnchorId,
+                        isGroup = state.group != null,
+                    )
+                }
+                var mentionCursor by remember(state.unreadAnchorId, state.group?.groupId, state.peer?.deviceId) {
+                    mutableStateOf<String?>(null)
+                }
+                if (fabKind != null || MentionJumpRules.showFab(mentionIds)) {
+                    Column(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 12.dp, bottom = 12.dp),
-                        shape = CircleShape,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.End,
                     ) {
-                        Icon(
-                            if (fabKind == UnreadFab.UP) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                            contentDescription = if (fabKind == UnreadFab.UP) "К непрочитанным" else "К последним",
-                        )
+                        if (MentionJumpRules.showFab(mentionIds)) {
+                            FloatingActionButton(
+                                onClick = {
+                                    val next = MentionJumpRules.nextId(mentionIds, mentionCursor)
+                                    mentionCursor = next
+                                    if (next != null) onJump(next)
+                                },
+                                shape = CircleShape,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.AlternateEmail,
+                                    contentDescription = MentionJumpRules.LABEL,
+                                )
+                            }
+                        }
+                        if (fabKind != null) {
+                            FloatingActionButton(
+                                onClick = {
+                                    jumpScope.launch {
+                                        val target = if (fabKind == UnreadFab.UP) {
+                                            unreadIdx
+                                        } else {
+                                            threadItems.lastIndex
+                                        }
+                                        if (target >= 0) list.animateScrollToItem(target)
+                                    }
+                                },
+                                shape = CircleShape,
+                            ) {
+                                Icon(
+                                    if (fabKind == UnreadFab.UP) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = if (fabKind == UnreadFab.UP) "К непрочитанным" else "К последним",
+                                )
+                            }
+                        }
                     }
                 }
             }
