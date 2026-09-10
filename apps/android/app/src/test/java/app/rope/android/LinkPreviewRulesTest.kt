@@ -69,6 +69,10 @@ class LinkPreviewRulesTest {
         assertNull(LinkPreviewRules.parse("https://[::1]/"))
         assertNull(LinkPreviewRules.parse("https://exa..mple.com"))
         assertNull(LinkPreviewRules.parse("https://evil.local/x"))
+        assertNull(LinkPreviewRules.parse("https://example.com/a\nhttp://evil"))
+        assertNull(LinkPreviewRules.parse("https://example.com/a\r\nX: y"))
+        assertNull(LinkPreviewRules.parse("https://example.com/a http://evil"))
+        assertNotNull(LinkPreviewRules.parse("https://example.com/a?q=1"))
     }
 
     @Test

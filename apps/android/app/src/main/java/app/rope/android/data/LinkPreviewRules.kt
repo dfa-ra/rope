@@ -97,6 +97,7 @@ object LinkPreviewRules {
     fun parse(raw: String): PackedLinkPreview? {
         val cut = trimJunk(raw).trim()
         if (cut.length < 10 || cut.length > URL_MAX) return null
+        if (cut.any { it.isWhitespace() || it.isISOControl() }) return null
         val uri = runCatching { URI(cut) }.getOrNull() ?: return null
         if (uri.scheme?.lowercase() != "https") return null
         val hostRaw = uri.host?.trim()?.trim('.')?.lowercase() ?: return null
