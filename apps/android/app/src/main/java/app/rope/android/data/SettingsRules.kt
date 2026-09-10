@@ -28,6 +28,9 @@ object SettingsRules {
     fun linkPreviewsHint(): String =
         "Карточка собирается на этом телефоне. Сервер ссылку не видит. Сайт видит ваш IP, как в браузере."
 
+    fun chatSecureHint(): String =
+        "Скриншоты и недавние не показывают открытую переписку."
+
     fun appearanceHint(): String =
         "Тёмная или светлая. Цвета логотипа не меняются."
 

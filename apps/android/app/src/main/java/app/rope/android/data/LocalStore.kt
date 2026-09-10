@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveHideChatRecents(hide: Boolean) {
+        put("chat_secure", if (hide) "1" else "0")
+    }
+
+    fun hideChatRecents(): Boolean = get("chat_secure") == "1"
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

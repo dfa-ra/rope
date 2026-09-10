@@ -145,8 +145,8 @@ class MainActivity : AppCompatActivity() {
                 startedInstallFor = null
                 if (state.pendingApkPath != null) tryInstallPending()
             }
-            LaunchedEffect(state.screen) {
-                if (SecureDisplayRules.lockRecents(state.screen)) {
+            LaunchedEffect(state.screen, state.hideChatRecents) {
+                if (SecureDisplayRules.lockRecents(state.screen, state.hideChatRecents)) {
                     window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -235,6 +235,7 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onToggleHideChatRecents = repo::toggleHideChatRecents,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,

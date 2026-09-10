@@ -41,6 +41,7 @@ class SettingsRulesTest {
         assertTrue(hint.contains("звонок"))
         assertFalse(SettingsRules.aboutBody().contains("FCM"))
         assertTrue(SettingsRules.appearanceHint().contains("логотип"))
+        assertTrue(SettingsRules.chatSecureHint().contains("переписку"))
         assertTrue(SettingsRules.serverPinHint(true).contains("не видит"))
         assertTrue(SettingsRules.serverPinHint(false).contains("HTTP"))
     }
