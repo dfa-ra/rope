@@ -5,6 +5,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.ComposerHintKind
 import app.rope.android.data.ComposerRules
+import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
 import app.rope.android.data.MessageKind
@@ -36,6 +37,22 @@ class MediaSendRulesTest {
         assertNull(MediaSendRules.onFirstOnly(1, "hi"))
         assertNull(MediaSendRules.normalize("  \n"))
         assertEquals("я".repeat(MediaSendRules.CAPTION_MAX), MediaSendRules.normalize("я".repeat(MediaSendRules.CAPTION_MAX + 8)))
+    }
+
+    @Test
+    fun captionCounterIsNOverMax() {
+        assertEquals(6, LocalStore.VERSION)
+        assertEquals(1024, MediaSendRules.CAPTION_MAX)
+        assertEquals("0 / 1024", MediaSendRules.counter(""))
+        assertEquals("5 / 1024", MediaSendRules.counter("hello"))
+        assertTrue(MediaSendRules.showCounter(pendingMedia = true))
+        assertFalse(MediaSendRules.showCounter(pendingMedia = false))
+        val over = "я".repeat(MediaSendRules.CAPTION_MAX + 8)
+        assertEquals("${MediaSendRules.CAPTION_MAX} / 1024", MediaSendRules.counter(over))
+        assertEquals("я".repeat(MediaSendRules.CAPTION_MAX), MediaSendRules.limit(over))
+        assertTrue(MediaSendRules.atLimit(over))
+        assertFalse(MediaSendRules.atLimit("hi"))
+        assertEquals("hi", MediaSendRules.limit("hi"))
     }
 
     @Test

@@ -13,8 +13,19 @@ object MediaSendRules {
     fun normalize(raw: String?): String? {
         val v = raw?.trim().orEmpty()
         if (v.isEmpty()) return null
-        return if (v.length <= CAPTION_MAX) v else v.take(CAPTION_MAX)
+        return limit(v)
     }
+
+    fun limit(raw: String): String =
+        if (raw.length <= CAPTION_MAX) raw else raw.take(CAPTION_MAX)
+
+    fun countedLength(raw: String): Int = raw.length.coerceIn(0, CAPTION_MAX)
+
+    fun counter(raw: String): String = "${countedLength(raw)} / $CAPTION_MAX"
+
+    fun showCounter(pendingMedia: Boolean): Boolean = pendingMedia
+
+    fun atLimit(raw: String): Boolean = countedLength(raw) >= CAPTION_MAX
 
     /** Caption rides the first album member (or the single photo/video). */
     fun onFirstOnly(index: Int, caption: String?): String? =

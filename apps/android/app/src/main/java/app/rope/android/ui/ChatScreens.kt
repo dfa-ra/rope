@@ -2384,8 +2384,13 @@ private fun ComposerBar(
                             BasicTextField(
                                 value = localText,
                                 onValueChange = {
-                                    localText = it
-                                    persistDraft(it)
+                                    val next = if (state.pendingAttachments.isNotEmpty()) {
+                                        MediaSendRules.limit(it)
+                                    } else {
+                                        it
+                                    }
+                                    localText = next
+                                    persistDraft(next)
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -2467,6 +2472,20 @@ private fun ComposerBar(
                         )
                     }
                 }
+            }
+            if (MediaSendRules.showCounter(state.pendingAttachments.isNotEmpty()) && !state.recording) {
+                Text(
+                    MediaSendRules.counter(localText),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (MediaSendRules.atLimit(localText)) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(end = 16.dp, bottom = 8.dp),
+                )
             }
         }
     }
