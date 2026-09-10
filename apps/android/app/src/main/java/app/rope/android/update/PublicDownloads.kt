@@ -8,7 +8,19 @@ import android.provider.MediaStore
 import java.io.File
 
 object PublicDownloads {
+    /**
+     * Shared Downloads filenames must be a single path segment. `File(dir, name)`
+     * on API 28 and MediaStore DISPLAY_NAME must not see `/`, `\`, or CR/LF.
+     * APK copies from [AppRelease] already match `rope-x.y.z.apk`.
+     */
+    fun safeName(name: String): Boolean {
+        val t = name.trim()
+        if (t.isEmpty() || t == "." || t == ".." || t.length > 128) return false
+        return t.none { it == '/' || it == '\\' || it.isWhitespace() || it.isISOControl() }
+    }
+
     fun write(context: Context, name: String, mime: String, bytes: ByteArray) {
+        if (!safeName(name)) error("bad download name")
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = context.contentResolver
             resolver.delete(
@@ -40,6 +52,7 @@ object PublicDownloads {
     }
 
     fun read(context: Context, name: String): ByteArray? {
+        if (!safeName(name)) return null
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = context.contentResolver
             resolver.query(
