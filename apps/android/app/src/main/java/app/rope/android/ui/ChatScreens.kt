@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -172,6 +175,7 @@ import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
+import app.rope.android.data.MessageSearchSenderRules
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
@@ -774,15 +778,24 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = remember(state.messages, state.messageQuery) {
-        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val myId = state.profile?.deviceId.orEmpty()
+    var searchSenderId by remember { mutableStateOf<String?>(null) }
+    val senderFilter = if (state.group == null) null else searchSenderId
+    val senders = remember(state.messages, myId, state.group) {
+        if (state.group == null) emptyList() else MessageSearchSenderRules.chips(state.messages, myId)
+    }
+    val visible = remember(state.messages, state.messageQuery, senderFilter, myId) {
+        state.messages.filter {
+            MessageSearch.matches(it, state.messageQuery) &&
+                MessageSearchSenderRules.matches(it, senderFilter, myId)
+        }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
-    val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
+    val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery, senderFilter) {
         UnreadSeparatorRules.insert(
             AlbumRules.collapse(DateSeparatorRules.items(visible)),
             state.unreadAnchorId,
-            searching = state.messageQuery.isNotBlank(),
+            searching = MessageSearchSenderRules.searching(state.messageQuery, senderFilter),
         )
     }
     val list = rememberLazyListState()
@@ -796,11 +809,13 @@ fun ChatPane(
     val selecting = selectedIds.isNotEmpty()
     val selectedMsgs = remember(selectedIds, visible) { visible.filter { it.id in selectedIds } }
     val singleSelected = selectedMsgs.singleOrNull()
+    LaunchedEffect(state.group?.groupId) { searchSenderId = null }
     BackHandler(enabled = menuMessage != null) {
         if (reactionExpanded) reactionExpanded = false else menuMessage = null
     }
     BackHandler(enabled = showSearch && menuMessage == null) {
         showSearch = false
+        searchSenderId = null
         onMessageQuery("")
     }
     BackHandler(enabled = selecting && menuMessage == null) { selectedIds = emptySet() }
@@ -896,7 +911,13 @@ fun ChatPane(
                         color = if (!state.typingName.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
+                IconButton(onClick = {
+                    showSearch = !showSearch
+                    if (!showSearch) {
+                        searchSenderId = null
+                        onMessageQuery("")
+                    }
+                }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
                 if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
@@ -924,6 +945,25 @@ fun ChatPane(
                 ),
                 shape = RoundedCornerShape(RopeShapes.search),
             )
+            if (state.group != null && senders.size >= 2) {
+                LazyRow(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(senders, key = { it.id }) { sender ->
+                        FilterChip(
+                            selected = searchSenderId == sender.id,
+                            onClick = { searchSenderId = MessageSearchSenderRules.toggle(searchSenderId, sender.id) },
+                            label = { Text(sender.label) },
+                            modifier = Modifier.semantics {
+                                contentDescription = "${MessageSearchSenderRules.CHIP}: ${sender.label}"
+                            },
+                        )
+                    }
+                }
+            }
         }
         pinned?.let { pin ->
             Surface(
@@ -948,7 +988,12 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
-                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                val empty = ThreadEmptyRules.copy(
+                    state.messageQuery,
+                    saved = saved,
+                    senderId = senderFilter,
+                    senderLabel = senders.firstOrNull { it.id == senderFilter }?.label.orEmpty(),
+                )
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
