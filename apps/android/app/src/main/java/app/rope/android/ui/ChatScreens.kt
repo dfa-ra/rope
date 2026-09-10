@@ -59,6 +59,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -171,6 +172,7 @@ import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.IncognitoKbRules
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
@@ -269,6 +271,7 @@ fun ChatsPane(
                 ChatListMode.ARCHIVE -> ArchiveRules.SEARCH_PLACEHOLDER
                 ChatListMode.ALL -> "Поиск"
             },
+            incognito = state.incognitoKeyboard,
         )
         val isForwarding = state.forwarding != null
         val archived = ArchiveRules.archivedOf(state.conversations)
@@ -370,6 +373,7 @@ private fun ChatListSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
+    incognito: Boolean = false,
 ) {
     val style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
     BasicTextField(
@@ -378,6 +382,7 @@ private fun ChatListSearchField(
         singleLine = true,
         textStyle = style,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        keyboardOptions = KeyboardOptions(autoCorrect = IncognitoKbRules.autoCorrect(incognito)),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -918,6 +923,9 @@ fun ChatPane(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 placeholder = { Text("Найти в чате") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    autoCorrect = IncognitoKbRules.autoCorrect(state.incognitoKeyboard),
+                ),
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
@@ -2394,6 +2402,9 @@ private fun ComposerBar(
                                     color = MaterialTheme.colorScheme.onSurface,
                                 ),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                keyboardOptions = KeyboardOptions(
+                                    autoCorrect = IncognitoKbRules.autoCorrect(state.incognitoKeyboard),
+                                ),
                                 maxLines = 5,
                                 decorationBox = { inner ->
                                     Box {

@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveIncognitoKeyboard(enabled: Boolean) {
+        put("incognito_kb", if (enabled) "1" else "0")
+    }
+
+    fun incognitoKeyboard(): Boolean = IncognitoKbRules.enabledFromKv(get("incognito_kb"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
