@@ -44,6 +44,7 @@ import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
+import app.rope.android.data.ChatSoundRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
@@ -182,6 +183,7 @@ data class UiState(
     val scrollToMessageId: String? = null,
     val notice: String? = null,
     val pinnedMessageId: String? = null,
+    val chatSound: String = "",
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
@@ -769,6 +771,16 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun setChatSound(id: String) {
+        val chatId = openChatId() ?: return
+        if (SavedMessagesRules.isSaved(chatId)) return
+        val next = ChatSoundRules.normalize(id)
+        val cur = store.chatPrefs(chatId)
+        if (cur.sound == next) return
+        store.saveChatPrefs(chatId, cur.copy(sound = next))
+        _state.value = _state.value.copy(chatSound = next)
     }
 
     fun copyMessage(msg: ChatMessage) {
@@ -2142,6 +2154,7 @@ class RopeRepository(private val app: Application) {
             editTarget = null,
             messageQuery = "",
             pinnedMessageId = prefs.pinnedMessageId,
+            chatSound = ChatSoundRules.normalize(prefs.sound),
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
@@ -3407,7 +3420,7 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            notifier.message(title, body, AlbumRules.notifyId(body, albumId), cur.sound)
         }
     }
 

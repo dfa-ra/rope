@@ -19,6 +19,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,8 +39,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ChatSoundRules
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.SavedMessagesRules
 import app.rope.android.media.ImageCodec
 
 @Composable
@@ -45,6 +51,7 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onSetChatSound: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
@@ -92,6 +99,9 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (ChatSoundRules.showsPicker(SavedMessagesRules.isSaved(peer?.deviceId))) {
+                        ChatSoundPicker(state.chatSound, onSetChatSound)
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {
@@ -122,6 +132,35 @@ fun PeerProfilePane(
                 items(photos, key = { it.id }) { m ->
                     SharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun ChatSoundPicker(selected: String, onPick: (String) -> Unit) {
+    val current = ChatSoundRules.normalize(selected)
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        Text(
+            ChatSoundRules.TITLE,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.semantics { contentDescription = ChatSoundRules.TITLE },
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            ChatSoundRules.OPTIONS.forEach { opt ->
+                FilterChip(
+                    selected = current == opt.id,
+                    onClick = { onPick(opt.id) },
+                    label = { Text(opt.label) },
+                )
             }
         }
     }

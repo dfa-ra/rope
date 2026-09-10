@@ -104,6 +104,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onBack: () -> Unit,
+    onSetChatSound: (String) -> Unit = {},
 ) {
     val g = state.group
     if (g == null) {
@@ -136,6 +137,7 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        ChatSoundPicker(state.chatSound, onSetChatSound)
                     }
                 }
             }

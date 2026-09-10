@@ -7,9 +7,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
+import app.rope.android.data.ChatSoundRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -29,21 +34,44 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        sound: String = ChatSoundRules.DEFAULT,
+    ) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val key = ChatSoundRules.normalize(sound)
         val n = NotificationCompat.Builder(context, MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
+            .setSilent(ChatSoundRules.suppressChannel(key))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
+        if (ChatSoundRules.playsTone(key)) {
+            playTone(ChatSoundRules.tone(key))
+        }
+    }
+
+    private fun playTone(tone: Int) {
+        runCatching {
+            val gen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, ChatSoundRules.VOLUME)
+            gen.startTone(tone, ChatSoundRules.DURATION_MS)
+            Handler(Looper.getMainLooper()).postDelayed({
+                runCatching {
+                    gen.stopTone()
+                    gen.release()
+                }
+            }, ChatSoundRules.DURATION_MS.toLong() + 40L)
+        }
     }
 
     fun incomingCall(name: String) {
