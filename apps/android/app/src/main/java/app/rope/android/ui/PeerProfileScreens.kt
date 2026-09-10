@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MessageTime
+import app.rope.android.data.NewGroupWithRules
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.media.ImageCodec
 
@@ -45,12 +47,15 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onNewGroupWith: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val peerId = peer?.deviceId
+    val canNewGroup = NewGroupWithRules.canStart(peerId, state.profile?.deviceId)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -92,6 +97,14 @@ fun PeerProfilePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (canNewGroup && peerId != null) {
+                        TextButton(
+                            onClick = { onNewGroupWith(peerId) },
+                            modifier = Modifier.semantics { contentDescription = NewGroupWithRules.ACTION },
+                        ) {
+                            Text(NewGroupWithRules.ACTION)
+                        }
+                    }
                 }
             }
             item(span = { GridItemSpan(PeerProfileRules.GRID_COLUMNS) }) {

@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.NewGroupWithRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -1207,6 +1208,13 @@ class RopeRepository(private val app: Application) {
                 error(e)
             }
         }
+    }
+
+    fun startNewGroupWith(deviceId: String) {
+        val self = _state.value.profile?.deviceId
+        if (!NewGroupWithRules.canStart(deviceId, self)) return
+        go(Screen.NewGroup)
+        _state.value = _state.value.copy(pickedMembers = NewGroupWithRules.picks(deviceId))
     }
 
     fun addMemberToOpenGroup(deviceId: String) {
