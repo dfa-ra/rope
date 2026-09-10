@@ -48,7 +48,7 @@ class ChatStorageRulesTest {
         val others = listOf("/shared.jpg", "/other.jpg")
         assertEquals(listOf("/only-here.jpg"), ChatStorageRules.filesSafeToDelete(chat, others))
         assertEquals(emptyList<String>(), ChatStorageRules.filesSafeToDelete(listOf("/shared.jpg"), others))
-        assertEquals(listOf("/only-here.jpg"), ChatStorageRules.filesSafeToDelete(chat, emptyList()))
+        assertEquals(listOf("/shared.jpg", "/only-here.jpg"), ChatStorageRules.filesSafeToDelete(chat, emptyList()))
     }
 
     @Test
