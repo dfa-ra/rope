@@ -83,6 +83,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
@@ -145,6 +146,7 @@ import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
+import app.rope.android.data.MuteSwipeRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -313,6 +315,7 @@ fun ChatsPane(
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                    muteSwipe = !isForwarding,
                                 )
                             }
                         }
@@ -335,6 +338,7 @@ fun ChatsPane(
                                 query = state.chatQuery,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                muteSwipe = !isForwarding,
                             )
                         }
                     }
@@ -548,6 +552,7 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    muteSwipe: Boolean = false,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -565,10 +570,14 @@ internal fun ConversationRow(
     val scale by animateFloatAsState(if (pressed) 0.985f else 1f, tween(120), label = "chatRowS")
     val swipeAction = onUnarchive ?: onArchive
     val swipeEnabled = swipeAction != null && ArchiveSwipeRules.canSwipe(c.id, header = false)
+    val muteEnabled = muteSwipe && MuteSwipeRules.canSwipe(c.id, header = false)
     SwipeArchiveRow(
         enabled = swipeEnabled,
         unarchive = onUnarchive != null,
+        muteEnabled = muteEnabled,
+        muted = c.muted,
         onCommit = { swipeAction?.invoke(); menu = false },
+        onMute = { onMute(); menu = false },
     ) {
     Column(
         Modifier
@@ -1179,7 +1188,10 @@ fun ChatPane(
 private fun SwipeArchiveRow(
     enabled: Boolean,
     unarchive: Boolean,
+    muteEnabled: Boolean = false,
+    muted: Boolean = false,
     onCommit: () -> Unit,
+    onMute: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     var dragging by remember { mutableStateOf(false) }
@@ -1190,18 +1202,20 @@ private fun SwipeArchiveRow(
         label = "swipeArchiveSettle",
     )
     val offsetDp = if (dragging) liveOffset else settle
-    val progress = ArchiveSwipeRules.progress(offsetDp)
+    val archiveProgress = ArchiveSwipeRules.progress(offsetDp.coerceAtMost(0f))
+    val muteProgress = MuteSwipeRules.progress(offsetDp.coerceAtLeast(0f))
     val density = LocalDensity.current
     val view = LocalView.current
     Box(
         Modifier
             .fillMaxWidth()
-            .pointerInput(enabled, unarchive) {
-                if (!enabled) return@pointerInput
+            .pointerInput(enabled, unarchive, muteEnabled) {
+                if (!enabled && !muteEnabled) return@pointerInput
                 val pxPerDp = density.density
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     var locked = false
+                    var muteLock = false
                     var prev = 0f
                     liveOffset = 0f
                     dragging = false
@@ -1211,25 +1225,41 @@ private fun SwipeArchiveRow(
                         val dxDp = (change.position.x - down.position.x) / pxPerDp
                         val dyDp = (change.position.y - down.position.y) / pxPerDp
                         if (!change.pressed) {
-                            val commit = locked && ArchiveSwipeRules.shouldCommit(liveOffset)
+                            val archiveCommit = locked && !muteLock && ArchiveSwipeRules.shouldCommit(liveOffset)
+                            val muteCommit = locked && muteLock && MuteSwipeRules.shouldCommit(liveOffset)
                             dragging = false
                             liveOffset = 0f
-                            if (commit) onCommit()
+                            if (archiveCommit) onCommit()
+                            if (muteCommit) onMute()
                             break
                         }
                         if (!locked) {
                             when {
-                                ArchiveSwipeRules.shouldAbort(dxDp, dyDp) -> break
-                                ArchiveSwipeRules.shouldLock(dxDp, dyDp) -> {
+                                enabled && ArchiveSwipeRules.shouldLock(dxDp, dyDp) -> {
                                     locked = true
+                                    muteLock = false
                                     dragging = true
                                 }
+                                muteEnabled && MuteSwipeRules.shouldLock(dxDp, dyDp) -> {
+                                    locked = true
+                                    muteLock = true
+                                    dragging = true
+                                }
+                                ArchiveSwipeRules.stillSettled(dxDp, dyDp) -> continue
+                                kotlin.math.abs(dyDp) > kotlin.math.abs(dxDp) -> break
+                                !muteEnabled && dxDp > ArchiveSwipeRules.SLOP_DP -> break
+                                !enabled && dxDp < -MuteSwipeRules.SLOP_DP -> break
                                 else -> continue
                             }
                         }
                         event.changes.forEach { it.consume() }
-                        val now = ArchiveSwipeRules.offset(dxDp)
-                        if (ArchiveSwipeRules.crossedCommit(prev, now)) {
+                        val now = if (muteLock) MuteSwipeRules.offset(dxDp) else ArchiveSwipeRules.offset(dxDp)
+                        val crossed = if (muteLock) {
+                            MuteSwipeRules.crossedCommit(prev, now)
+                        } else {
+                            ArchiveSwipeRules.crossedCommit(prev, now)
+                        }
+                        if (crossed) {
                             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                         }
                         prev = now
@@ -1241,6 +1271,20 @@ private fun SwipeArchiveRow(
             },
     ) {
         Icon(
+            if (muted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 10.dp)
+                .graphicsLayer {
+                    alpha = MuteSwipeRules.iconAlpha(muteProgress)
+                    val s = MuteSwipeRules.iconScale(muteProgress)
+                    scaleX = s
+                    scaleY = s
+                },
+        )
+        Icon(
             if (unarchive) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
@@ -1248,8 +1292,8 @@ private fun SwipeArchiveRow(
                 .align(Alignment.CenterEnd)
                 .padding(end = 10.dp)
                 .graphicsLayer {
-                    alpha = ArchiveSwipeRules.iconAlpha(progress)
-                    val s = ArchiveSwipeRules.iconScale(progress)
+                    alpha = ArchiveSwipeRules.iconAlpha(archiveProgress)
+                    val s = ArchiveSwipeRules.iconScale(archiveProgress)
                     scaleX = s
                     scaleY = s
                 },
