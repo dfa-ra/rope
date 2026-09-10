@@ -78,5 +78,10 @@ class VoiceEmojiTest {
         assertEquals(EmojiPack.all, EmojiPack.search("   "))
         assertTrue(EmojiPack.search("🍕").contains("🍕"))
         assertTrue(EmojiPack.search("неттакогоxyz").isEmpty())
+        assertTrue(EmojiPack.search("  еда  ").contains("🍕"))
+        assertTrue(EmojiPack.search("\nеда").isEmpty())
+        assertTrue(EmojiPack.search("еда\n").isEmpty())
+        assertTrue(EmojiPack.search("еда\r").isEmpty())
+        assertTrue(EmojiPack.search("еда\u0000").isEmpty())
     }
 }

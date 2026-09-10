@@ -116,6 +116,9 @@ object EmojiPack {
     fun category(id: String): EmojiCategory? = categories.find { it.id == id }
 
     fun search(query: String): List<String> {
+        if (query.indexOf('\n') >= 0 || query.indexOf('\r') >= 0 || query.indexOf('\u0000') >= 0) {
+            return emptyList()
+        }
         val q = query.trim().lowercase()
         if (q.isEmpty()) return all
         val aliasId = searchAliases.entries.firstOrNull { q.contains(it.key) }?.value
@@ -125,6 +128,6 @@ object EmojiPack {
             .flatMap { it.emojis }
         val hits = (fromAlias + fromLabel).distinct()
         if (hits.isNotEmpty()) return hits
-        return all.filter { it.contains(query.trim()) }
+        return all.filter { it.contains(q) }
     }
 }
