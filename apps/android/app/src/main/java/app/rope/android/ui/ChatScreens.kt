@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -84,6 +85,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -143,6 +145,7 @@ import app.rope.android.RopeDarkBg
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
+import app.rope.android.data.AttachContactRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
 import app.rope.android.data.ChatActions
@@ -167,6 +170,7 @@ import app.rope.android.data.UnreadFab
 import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
+import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
@@ -755,6 +759,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onAttachContact: (String) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -791,6 +796,7 @@ fun ChatPane(
     var flashId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var showAttach by remember { mutableStateOf(false) }
+    var showContactPicker by remember { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var reactionExpanded by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
@@ -1170,7 +1176,21 @@ fun ChatPane(
                 showAttach = false
                 onVideoNoteStart()
             },
+            onContact = {
+                showAttach = false
+                showContactPicker = true
+            },
             onDismiss = { showAttach = false },
+        )
+    }
+    if (showContactPicker) {
+        ContactPickSheet(
+            people = AttachContactRules.candidates(state.devices, state.profile?.deviceId),
+            onPick = { id ->
+                showContactPicker = false
+                onAttachContact(id)
+            },
+            onDismiss = { showContactPicker = false },
         )
     }
 }
@@ -2770,6 +2790,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onContact: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2880,6 +2901,75 @@ private fun AttachSheet(
                 Icon(Icons.Outlined.Videocam, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Видеосообщение", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onContact, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Person, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text(AttachContactRules.LABEL, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun ContactPickSheet(
+    people: List<DirectoryDevice>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = RopeShapes.card, topEnd = RopeShapes.card),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(AttachContactRules.TITLE, style = MaterialTheme.typography.titleMedium)
+            if (people.isEmpty()) {
+                Text(
+                    AttachContactRules.EMPTY,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    AttachContactRules.EMPTY_BODY,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyColumn(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(people, key = { it.deviceId }) { d ->
+                        val label = AttachContactRules.displayName(d.displayName).let { name ->
+                            if (name == AttachContactRules.FALLBACK_NAME) {
+                                d.deviceId.take(8).ifBlank { name }
+                            } else {
+                                name
+                            }
+                        }
+                        TextButton(
+                            onClick = { onPick(d.deviceId) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            InitialsAvatar(
+                                d.displayName.ifBlank { "?" },
+                                group = false,
+                                online = d.online,
+                                size = 36.dp,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(label, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(16.dp))
         }

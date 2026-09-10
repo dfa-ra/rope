@@ -15,6 +15,7 @@ import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
+import app.rope.android.data.AttachContactRules
 import app.rope.android.data.CallInfo
 import app.rope.android.data.CallLink
 import app.rope.android.data.CallLinkState
@@ -616,6 +617,38 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", value))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun sendAttachedContact(deviceId: String) {
+        val s = _state.value
+        if (s.recording || s.recordingVideoNote) return
+        val picked = AttachContactRules.pick(s.devices, deviceId, s.profile?.deviceId)
+        val body = picked?.let { AttachContactRules.body(it.displayName, it.deviceId) }
+        if (picked == null || body == null || !AttachContactRules.canSendInto(s.peer?.deviceId, s.group?.groupId)) {
+            notice(AttachContactRules.REJECT)
+            return
+        }
+        val reply = s.replyTo
+        val pack = replyPack(reply)
+        _state.value = s.copy(replyTo = null, replySpan = null)
+        persistOpenDraft()
+        val group = s.group
+        val peer = s.peer
+        val saved = SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(peer?.deviceId)
+        scope.launch {
+            try {
+                when {
+                    group != null -> sendGroupText(group, body, reply, pack)
+                    saved -> saveLocalText(body, reply, pack = pack)
+                    else -> {
+                        val dest = peer ?: return@launch
+                        sendPeerText(dest, body, pack, null)
+                    }
+                }
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
     }
 
     fun sendDraft() {
