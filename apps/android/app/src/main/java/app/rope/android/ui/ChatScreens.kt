@@ -153,6 +153,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
+import app.rope.android.data.FullDateRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
@@ -1382,6 +1383,7 @@ private fun MessageBubble(
     val me = state.profile?.deviceId.orEmpty()
     val marked = selected || highlighted
     var appeared by remember(m.id) { mutableStateOf(false) }
+    var fullDate by remember(m.id) { mutableStateOf(false) }
     LaunchedEffect(m.id) { appeared = true }
     val appear by animateFloatAsState(
         targetValue = if (appeared) 1f else 0f,
@@ -1578,12 +1580,13 @@ private fun MessageBubble(
                             }
                         }
                     }
-                    val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted)
+                    val meta = FullDateRules.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited && !m.deleted, full = fullDate)
                     if (meta.isNotBlank()) {
                         Text(
                             meta,
                             style = MaterialTheme.typography.labelSmall,
                             color = if (mine) outFg.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable(enabled = m.timestampMs > 0L) { fullDate = !fullDate },
                         )
                     }
                 }
