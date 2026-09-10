@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 class ReleaseFetcher(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .followRedirects(true)
-        .followSslRedirects(true)
+        .followSslRedirects(false)
         .callTimeout(120, TimeUnit.SECONDS)
         .build(),
 ) {
@@ -32,6 +32,7 @@ class ReleaseFetcher(
     }
 
     private fun tryDirect(url: String, dest: File, token: String?): Boolean {
+        if (!isHttpsUrl(url)) return false
         val req = Request.Builder().url(url).apply {
             GitHubAuth.bearerFor(url, token)?.let { header("Authorization", "Bearer $it") }
         }.build()
@@ -81,5 +82,19 @@ class ReleaseFetcher(
             dest.outputStream().use { out -> body.byteStream().copyTo(out) }
         }
         if (dest.length() < 64) error("скачанный бинарник слишком маленький")
+    }
+
+    companion object {
+        /**
+         * Direct fetch must stay on HTTPS. Interior whitespace/CRLF would let
+         * OkHttp see a second URL. Client followSslRedirects is false so a
+         * 302 cannot downgrade to http. GitHub asset redirects stay on HTTPS.
+         */
+        fun isHttpsUrl(url: String): Boolean {
+            val t = url.trim()
+            if (t.isEmpty()) return false
+            if (t.any { it.isWhitespace() || it.isISOControl() }) return false
+            return t.startsWith("https://", ignoreCase = true)
+        }
     }
 }
