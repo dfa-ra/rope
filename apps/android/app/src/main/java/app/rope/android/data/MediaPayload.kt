@@ -573,7 +573,12 @@ object UnreadBadgeRules {
 }
 
 object MessageSearch {
-    fun matches(msg: ChatMessage, query: String): Boolean {
+    fun matches(
+        msg: ChatMessage,
+        query: String,
+        kind: MessageSearchKind = MessageSearchKind.ALL,
+    ): Boolean {
+        if (!MessageSearchKindRules.hits(msg, kind)) return false
         if (query.isBlank()) return true
         val q = query.trim().lowercase()
         return msg.text.lowercase().contains(q) ||

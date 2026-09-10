@@ -45,6 +45,13 @@ class ThreadEmptyRulesTest {
     }
 
     @Test
+    fun kindChipWithoutQueryIsStillAMiss() {
+        val copy = ThreadEmptyRules.copy("", kind = app.rope.android.data.MessageSearchKind.PHOTO)
+        assertEquals("Ничего не найдено", copy.title)
+        assertEquals("Нет фото в этом чате.", copy.body)
+    }
+
+    @Test
     fun searchTitleNeverUsesColloquialNashli() {
         val copy = ThreadEmptyRules.copy("фото")
         assertEquals("Ничего не найдено", copy.title)
