@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupDeleteRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.RoleRules
 
@@ -105,6 +106,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onRename: (String) -> Unit = {},
+    onDeleteGroup: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -122,7 +124,9 @@ fun GroupInfoPane(
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canRename = RoleRules.canRenameGroup(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
+    val canDelete = GroupDeleteRules.canDelete(isMember, me, organizer, state.profile?.role)
     var confirmLeave by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var renameDraft by remember(g.groupId, g.name) { mutableStateOf(g.name) }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -223,6 +227,16 @@ fun GroupInfoPane(
                     }
                 } else {
                     QuietButton("Выйти из группы", { confirmLeave = true }, Modifier.fillMaxWidth())
+                }
+            }
+            if (canDelete) {
+                if (confirmDelete) {
+                    GlowButton(GroupDeleteRules.CONFIRM, onDeleteGroup, Modifier.fillMaxWidth())
+                    TextButton(onClick = { confirmDelete = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text(GroupDeleteRules.CANCEL)
+                    }
+                } else {
+                    QuietButton(GroupDeleteRules.LABEL, { confirmDelete = true }, Modifier.fillMaxWidth())
                 }
             }
         }

@@ -205,6 +205,7 @@ class MainActivity : AppCompatActivity() {
                     onAddMember = repo::addMemberToOpenGroup,
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,
+                    onDeleteGroup = repo::deleteOpenGroup,
                     onRenameGroup = repo::renameOpenGroup,
                     onRevokeMember = repo::revokeMember,
                     onAcceptCall = {

@@ -33,6 +33,7 @@ import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupDeleteRules
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
@@ -1286,6 +1287,24 @@ class RopeRepository(private val app: Application) {
                 error(e)
             }
         }
+    }
+
+    fun deleteOpenGroup() {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId ?: return
+        val organizer = GroupChatUx.organizerId(g)
+        if (!GroupDeleteRules.canDelete(me in g.members, me, organizer, _state.value.profile?.role)) return
+        store.deleteGroup(g.groupId)
+        _state.value = applyNav(Screen.Groups, NavMode.SwitchTab).copy(
+            group = null,
+            groups = store.groups(),
+            messages = emptyList(),
+            replyTo = null,
+            replySpan = null,
+            editTarget = null,
+            notice = GroupDeleteRules.notice(g.name),
+        )
+        refreshConversations()
     }
 
     fun startCall() {
