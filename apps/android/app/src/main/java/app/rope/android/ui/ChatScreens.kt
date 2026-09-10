@@ -175,6 +175,7 @@ import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
+import app.rope.android.data.ReadMoreRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -1663,41 +1664,53 @@ private fun MentionText(
     styleLarge: Boolean,
     onPlainTap: () -> Unit = {},
 ) {
-    val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
-    val links = remember(text) { LinkPreviewRules.spans(text) }
+    var expanded by remember(text) { mutableStateOf(false) }
+    val shown = remember(text, expanded) { ReadMoreRules.shown(text, expanded) }
+    val spans = remember(shown, names) { GroupChatUx.mentionSpans(shown, names) }
+    val links = remember(shown) { LinkPreviewRules.spans(shown) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
-    if (spans.isEmpty() && links.isEmpty()) {
-        Text(text, style = style)
-        return
-    }
-    val annotated = buildAnnotatedString {
-        append(text)
-        spans.forEach { range ->
-            addStyle(
-                SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold),
-                range.first,
-                range.last + 1,
+    Column {
+        if (spans.isEmpty() && links.isEmpty()) {
+            Text(shown, style = style)
+        } else {
+            val annotated = buildAnnotatedString {
+                append(shown)
+                spans.forEach { range ->
+                    addStyle(
+                        SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold),
+                        range.first,
+                        range.last + 1,
+                    )
+                }
+                links.forEach { link ->
+                    addStyle(
+                        SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                        link.start,
+                        link.endExclusive,
+                    )
+                    addStringAnnotation("URL", link.url, link.start, link.endExclusive)
+                }
+            }
+            ClickableText(
+                text = annotated,
+                style = style.copy(color = LocalContentColor.current),
+                onClick = { offset ->
+                    val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
+                    if (url != null) openHttps(context, url) else onPlainTap()
+                },
             )
         }
-        links.forEach { link ->
-            addStyle(
-                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
-                link.start,
-                link.endExclusive,
+        if (ReadMoreRules.showLabel(text, expanded)) {
+            Text(
+                ReadMoreRules.LABEL,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.clickable { expanded = true },
             )
-            addStringAnnotation("URL", link.url, link.start, link.endExclusive)
         }
     }
-    ClickableText(
-        text = annotated,
-        style = style.copy(color = LocalContentColor.current),
-        onClick = { offset ->
-            val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
-            if (url != null) openHttps(context, url) else onPlainTap()
-        },
-    )
 }
 
 @Composable
@@ -2208,13 +2221,23 @@ private fun ImageBubble(
 private fun MediaCaptionLine(caption: String?) {
     val text = caption?.trim().orEmpty()
     if (text.isEmpty()) return
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
+    var expanded by remember(text) { mutableStateOf(false) }
+    val shown = remember(text, expanded) { ReadMoreRules.shown(text, expanded) }
+    Column(
         modifier = Modifier
             .widthIn(max = PhotoLayout.MAX_WIDTH_DP.dp)
             .padding(start = 4.dp, end = 4.dp, top = 4.dp),
-    )
+    ) {
+        Text(shown, style = MaterialTheme.typography.bodyMedium)
+        if (ReadMoreRules.showLabel(text, expanded)) {
+            Text(
+                ReadMoreRules.LABEL,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.clickable { expanded = true },
+            )
+        }
+    }
 }
 
 @Composable
