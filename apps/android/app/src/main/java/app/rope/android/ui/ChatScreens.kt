@@ -2912,6 +2912,7 @@ private fun AttachSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ContactPickSheet(
     people: List<DirectoryDevice>,
