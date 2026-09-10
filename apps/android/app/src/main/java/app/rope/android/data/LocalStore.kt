@@ -388,6 +388,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
 
+    fun saveNotifyVibrate(enabled: Boolean) {
+        put(NotifyVibRules.KEY, if (enabled) "1" else "0")
+    }
+
+    fun notifyVibrate(): Boolean = NotifyVibRules.enabledFromKv(get(NotifyVibRules.KEY))
+
     fun saveLinkPreviews(enabled: Boolean) {
         put("link_previews", if (enabled) "1" else "0")
     }

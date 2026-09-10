@@ -11,16 +11,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.rope.android.MainActivity
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.NotifyVibRules
 
 class RopeNotifier(private val context: Context) {
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             val mgr = context.getSystemService(NotificationManager::class.java)
-            mgr.createNotificationChannel(
-                NotificationChannel(MSG, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                },
-            )
+            ensureMessageChannel(true)
             mgr.createNotificationChannel(
                 NotificationChannel(CALL, "Звонки", NotificationManager.IMPORTANCE_HIGH).apply {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
@@ -29,14 +26,21 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        vibrate: Boolean = true,
+    ) {
+        val channel = NotifyVibRules.channelId(vibrate)
+        ensureMessageChannel(vibrate)
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, MSG)
+        val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
@@ -83,8 +87,22 @@ class RopeNotifier(private val context: Context) {
         NotificationManagerCompat.from(context).cancel(CALL_ID)
     }
 
+    private fun ensureMessageChannel(vibrate: Boolean) {
+        if (Build.VERSION.SDK_INT < 26) return
+        val mgr = context.getSystemService(NotificationManager::class.java) ?: return
+        val id = NotifyVibRules.channelId(vibrate)
+        if (mgr.getNotificationChannel(id) != null) return
+        val ch = NotificationChannel(id, "Сообщения", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            if (!vibrate) {
+                enableVibration(false)
+                vibrationPattern = null
+            }
+        }
+        mgr.createNotificationChannel(ch)
+    }
+
     companion object {
-        private const val MSG = "rope-messages"
         private const val CALL = "rope-calls"
         private const val CALL_ID = 7102
     }
