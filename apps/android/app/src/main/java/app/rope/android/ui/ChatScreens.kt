@@ -87,6 +87,7 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -161,6 +162,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.ViewerShareRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -3052,6 +3054,7 @@ fun ImageViewer(
     onClose: () -> Unit,
     onShow: (ChatMessage) -> Unit = {},
     onEnsure: (ChatMessage) -> Unit = {},
+    onShare: (ChatMessage) -> Unit = {},
 ) {
     val album = siblings.ifEmpty { listOf(msg) }
     val start = album.indexOfFirst { it.id == msg.id }.coerceAtLeast(0)
@@ -3152,6 +3155,21 @@ fun ImageViewer(
                         }
                     }
                 }
+            }
+        }
+        val current = ViewerShareRules.current(album, pagerState.currentPage, msg)
+        if (ViewerShareRules.canShare(current)) {
+            IconButton(
+                onClick = { onShare(current) },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Share,
+                    contentDescription = ViewerShareRules.ACTION,
+                    tint = Color.White,
+                )
             }
         }
         IconButton(

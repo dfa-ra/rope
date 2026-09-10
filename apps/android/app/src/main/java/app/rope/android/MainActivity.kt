@@ -257,6 +257,7 @@ class MainActivity : AppCompatActivity() {
                     onJump = repo::jumpToMessage,
                     onOpenImage = repo::openImage,
                     onCloseImage = repo::closeImage,
+                    onShareViewer = repo::shareViewerMedia,
                     onConsumedScroll = repo::consumeScrollTo,
                     onDismissNotice = repo::dismissNotice,
                     onBack = repo::goBack,

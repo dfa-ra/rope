@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -13,6 +14,7 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.CallInfo
@@ -55,6 +57,7 @@ import app.rope.android.data.TextBody
 import app.rope.android.data.TypingRules
 import app.rope.android.data.UnreadSeparatorRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.ViewerShareRules
 import app.rope.android.data.VideoRules
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.RopeGroup
@@ -777,6 +780,23 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun shareViewerMedia(msg: ChatMessage) {
+        val media = File(app.filesDir, ViewerShareRules.MEDIA_DIR)
+        val file = ViewerShareRules.shareFile(msg, media) ?: return
+        val uri = FileProvider.getUriForFile(app, ViewerShareRules.authority(app.packageName), file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = ViewerShareRules.mimeFor(file)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri("", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, ViewerShareRules.CHOOSER).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { app.startActivity(chooser) }
     }
 
     fun togglePinMessage(msg: ChatMessage) {

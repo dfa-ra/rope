@@ -177,6 +177,7 @@ fun RopeScaffold(
     onJump: (String?) -> Unit,
     onOpenImage: (app.rope.android.data.ChatMessage) -> Unit,
     onCloseImage: () -> Unit,
+    onShareViewer: (app.rope.android.data.ChatMessage) -> Unit = {},
     onConsumedScroll: () -> Unit,
     onDismissNotice: () -> Unit,
     onBack: () -> Boolean = { false },
@@ -375,6 +376,7 @@ fun RopeScaffold(
             onClose = onCloseImage,
             onShow = onOpenImage,
             onEnsure = onEnsureMedia,
+            onShare = onShareViewer,
         )
     }
     state.call?.let { call ->
