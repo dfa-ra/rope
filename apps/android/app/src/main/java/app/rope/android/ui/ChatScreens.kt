@@ -126,6 +126,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -161,6 +163,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.VideoLoopRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -3083,8 +3086,22 @@ fun ImageViewer(
             ) {
                 if (item.kind == MessageKind.VIDEO) {
                     val path = item.localPath
+                    var looping by remember(item.id) { mutableStateOf(false) }
                     if (!path.isNullOrBlank()) {
-                        VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
+                        VideoViewerSurface(path, looping = looping, modifier = Modifier.fillMaxWidth().padding(12.dp))
+                        Text(
+                            VideoLoopRules.label(looping),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(16.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .semantics { contentDescription = VideoLoopRules.contentDescription(looping) }
+                                .clickable { looping = VideoLoopRules.toggle(looping) }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
                     } else {
                         Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }

@@ -1,5 +1,6 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -32,6 +33,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.RopeShapes
@@ -39,12 +42,13 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.VideoLoopRules
 import app.rope.android.media.VideoCodec
 
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
  * Tap/long-press on the bubble still opens the 0.3.2 menu; the play control
- * starts the in-thread player.
+ * starts the in-thread player. Loop chip is independent of video notes.
  */
 @Composable
 fun VideoMessageBubble(
@@ -60,6 +64,13 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var looping by remember(m.id) { mutableStateOf(false) }
+    var prepared by remember(m.id) { mutableStateOf<MediaPlayer?>(null) }
+    val loopingState = remember(m.id) { mutableStateOf(false) }
+    loopingState.value = looping
+    LaunchedEffect(looping) {
+        prepared?.isLooping = looping
+    }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
@@ -81,7 +92,13 @@ fun VideoMessageBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        setOnCompletionListener { playing = false }
+                        setOnPreparedListener { mp ->
+                            prepared = mp
+                            mp.isLooping = loopingState.value
+                        }
+                        setOnCompletionListener {
+                            if (!loopingState.value) playing = false
+                        }
                     }
                 },
                 update = { view ->
@@ -96,7 +113,10 @@ fun VideoMessageBubble(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    prepared = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -147,6 +167,19 @@ fun VideoMessageBubble(
                 .background(Color.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
+        Text(
+            VideoLoopRules.label(looping),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
+                .semantics { contentDescription = VideoLoopRules.contentDescription(looping) }
+                .clickable { looping = VideoLoopRules.toggle(looping) }
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
         if (overlayMeta && meta.isNotBlank()) {
             Text(
                 meta,
@@ -174,13 +207,20 @@ fun VideoMessageBubble(
 }
 
 @Composable
-fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
+fun VideoViewerSurface(path: String, looping: Boolean = false, modifier: Modifier = Modifier) {
+    var prepared by remember(path) { mutableStateOf<MediaPlayer?>(null) }
+    val loopingState = remember(path) { mutableStateOf(false) }
+    loopingState.value = looping
+    LaunchedEffect(looping) {
+        prepared?.isLooping = looping
+    }
     AndroidView(
         factory = { ctx ->
             VideoView(ctx).apply {
                 setVideoPath(path)
                 setOnPreparedListener { mp ->
-                    mp.isLooping = false
+                    prepared = mp
+                    mp.isLooping = loopingState.value
                     start()
                 }
             }
