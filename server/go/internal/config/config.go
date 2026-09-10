@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -78,6 +79,9 @@ func LoadOrInit(path string, init bool, allowHTTP bool, listen string, dataDir s
 		if allowHTTP {
 			cfg.AllowHTTP = true
 		}
+		if err := cfg.validateHosts(); err != nil {
+			return cfg, err
+		}
 		return cfg, nil
 	}
 	if !init {
@@ -101,7 +105,35 @@ func LoadOrInit(path string, init bool, allowHTTP bool, listen string, dataDir s
 	if err := os.WriteFile(path, raw, 0o640); err != nil {
 		return cfg, err
 	}
+	if err := cfg.validateHosts(); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
+}
+
+func fieldHasControl(v string) bool {
+	return strings.ContainsAny(v, "\r\n\x00")
+}
+
+// validateHosts rejects CR/LF in fields interpolated into ICE URLs, bind
+// addresses, and TLS SNI. IceHost only trims space.
+func (c Config) validateHosts() error {
+	fields := []struct {
+		name, v string
+	}{
+		{"listen", c.Listen},
+		{"data_dir", c.DataDir},
+		{"public_host", c.PublicHost},
+		{"public_ip", c.PublicIP},
+		{"tls_hostname", c.TLSHostname},
+		{"fingerprint", c.FingerprintOverride},
+	}
+	for _, f := range fields {
+		if fieldHasControl(f.v) {
+			return fmt.Errorf("%s contains CR/LF", f.name)
+		}
+	}
+	return nil
 }
 
 func (c Config) DBPath() string {
