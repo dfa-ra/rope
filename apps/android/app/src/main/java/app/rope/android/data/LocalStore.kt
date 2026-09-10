@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveCallsIncomingOnly(incomingOnly: Boolean) {
+        put("calls_incoming_only", if (incomingOnly) "1" else "0")
+    }
+
+    fun callsIncomingOnly(): Boolean = IncomingCallRules.enabledFromKv(get("calls_incoming_only"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
