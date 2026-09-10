@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.rope.android.NavRules
+import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
