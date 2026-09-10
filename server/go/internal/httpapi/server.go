@@ -678,12 +678,18 @@ func (s *Server) handleSend(ctx context.Context, from *clientConn, raw []byte) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "protocol", Message: "incompatible version"})
 		return
 	}
-	if parsed.Meta.SenderID != from.id {
+	// Bind who sent it to this authenticated socket, not the envelope's copy
+	// of sender_id. A live peer must not relay another device's signed blob.
+	if !strings.EqualFold(parsed.Meta.SenderID, from.id) {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "auth", Message: "sender mismatch"})
 		return
 	}
-	sender, err := s.Store.Device(parsed.Meta.SenderID)
+	sender, err := s.Store.Device(from.id)
 	if err != nil || sender.Revoked {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "auth", Message: "unknown sender"})
+		return
+	}
+	if smem, err := s.Store.Member(sender.MemberID); err != nil || smem.Revoked {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "auth", Message: "unknown sender"})
 		return
 	}
@@ -693,6 +699,10 @@ func (s *Server) handleSend(ctx context.Context, from *clientConn, raw []byte) {
 	}
 	recip, err := s.Store.Device(parsed.Meta.RecipientID)
 	if err != nil || recip.Revoked {
+		_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "unknown recipient"})
+		return
+	}
+	if rmem, err := s.Store.Member(recip.MemberID); err != nil || rmem.Revoked {
 		_ = from.write(ctx, wsOut{Type: "error", Code: "not_found", Message: "unknown recipient"})
 		return
 	}
