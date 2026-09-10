@@ -29,6 +29,7 @@ import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
+import app.rope.android.data.CopySelectionRules
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
@@ -772,10 +773,18 @@ class RopeRepository(private val app: Application) {
     }
 
     fun copyMessage(msg: ChatMessage) {
-        if (!msg.text.isNotBlank() || msg.deleted) return
+        copyMessages(listOf(msg))
+    }
+
+    fun copyMessages(messages: List<ChatMessage>) {
+        val peer = _state.value.peer?.displayName.orEmpty().ifBlank {
+            _state.value.group?.name.orEmpty()
+        }
+        val text = CopySelectionRules.join(messages, peer)
+        if (text.isEmpty()) return
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
-        _state.value = _state.value.copy(notice = "Скопировано")
+        cm.setPrimaryClip(ClipData.newPlainText("rope", text))
+        _state.value = _state.value.copy(notice = CopySelectionRules.NOTICE)
     }
 
     fun togglePinMessage(msg: ChatMessage) {

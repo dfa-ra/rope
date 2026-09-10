@@ -169,6 +169,7 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
+import app.rope.android.data.CopySelectionRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
@@ -740,6 +741,7 @@ fun ChatPane(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
+    onCopySelected: (List<ChatMessage>) -> Unit = {},
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
@@ -841,6 +843,14 @@ fun ChatPane(
                 if (singleSelected != null && ChatActions.canEdit(singleSelected)) {
                     IconButton(onClick = { onEdit(singleSelected); selectedIds = emptySet() }) {
                         Icon(Icons.Outlined.Edit, contentDescription = "Изменить")
+                    }
+                }
+                if (CopySelectionRules.canCopy(selectedMsgs)) {
+                    IconButton(onClick = {
+                        onCopySelected(selectedMsgs)
+                        selectedIds = emptySet()
+                    }) {
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = "Копировать")
                     }
                 }
                 if (selectedMsgs.any { ChatActions.canForward(it) }) {
