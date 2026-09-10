@@ -350,7 +350,15 @@ fun RopeScaffold(
                             onToggleLinkPreviews,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
-                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
+                        Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(
+                            state,
+                            onAddMember,
+                            onRemoveMember,
+                            onLeaveGroup,
+                            onBack = { onBack() },
+                            onOpenImage = onOpenImage,
+                            onEnsureMedia = onEnsureMedia,
+                        )
                         Screen.PeerProfile -> app.rope.android.ui.PeerProfilePane(
                             state,
                             onBack = { onBack() },
@@ -363,8 +371,13 @@ fun RopeScaffold(
         }
     }
     state.viewingImage?.let { img ->
-        val siblings = if (state.screen == Screen.PeerProfile) {
-            app.rope.android.data.PeerProfileRules.photos(state.messages).ifEmpty { listOf(img) }
+        val siblings = if (state.screen == Screen.PeerProfile || state.screen == Screen.GroupInfo) {
+            val shared = if (state.screen == Screen.GroupInfo) {
+                app.rope.android.data.GroupInfoRules.photos(state.messages)
+            } else {
+                app.rope.android.data.PeerProfileRules.photos(state.messages)
+            }
+            shared.ifEmpty { listOf(img) }
         } else {
             app.rope.android.data.AlbumRules.siblings(state.messages, img)
         }

@@ -1,8 +1,14 @@
 package app.rope.android.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,11 +32,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.ChatMessage
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupInfoRules
 import app.rope.android.data.RoleRules
+import app.rope.android.media.ImageCodec
 
 @Composable
 fun NewGroupPane(
@@ -104,6 +118,8 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onBack: () -> Unit,
+    onOpenImage: (ChatMessage) -> Unit = {},
+    onEnsureMedia: (ChatMessage) -> Unit = {},
 ) {
     val g = state.group
     if (g == null) {
@@ -120,6 +136,7 @@ fun GroupInfoPane(
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
+    val photos = GroupInfoRules.photos(state.messages)
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -136,6 +153,30 @@ fun GroupInfoPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+            }
+            if (photos.isNotEmpty()) {
+                item {
+                    Text(
+                        GroupInfoRules.sectionLabel(photos.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.semantics { contentDescription = GroupInfoRules.SECTION },
+                    )
+                }
+                items(
+                    photos.chunked(GroupInfoRules.GRID_COLUMNS),
+                    key = { row -> row.joinToString { it.id } },
+                ) { row ->
+                    Row(Modifier.fillMaxWidth()) {
+                        row.forEach { m ->
+                            Box(Modifier.weight(1f)) {
+                                GroupSharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
+                            }
+                        }
+                        repeat(GroupInfoRules.GRID_COLUMNS - row.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
                     }
                 }
             }
@@ -204,6 +245,40 @@ fun GroupInfoPane(
                     QuietButton("Выйти из группы", { confirmLeave = true }, Modifier.fillMaxWidth())
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun GroupSharedPhotoTile(
+    m: ChatMessage,
+    onEnsure: (ChatMessage) -> Unit,
+    onClick: () -> Unit,
+) {
+    LaunchedEffect(m.id, m.localPath) { onEnsure(m) }
+    val bmp = m.localPath?.let { runCatching { ImageCodec.decodePreview(it) }.getOrNull() }
+    Box(
+        Modifier
+            .aspectRatio(1f)
+            .padding(1.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "Фото" },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Фото",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                "…",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
