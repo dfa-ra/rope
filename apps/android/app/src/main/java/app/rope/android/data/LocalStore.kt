@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun blockedIds(): Set<String> = BlockRules.parse(get(BlockRules.KEY))
+
+    fun saveBlockedIds(ids: Set<String>) {
+        put(BlockRules.KEY, BlockRules.encode(ids))
+    }
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

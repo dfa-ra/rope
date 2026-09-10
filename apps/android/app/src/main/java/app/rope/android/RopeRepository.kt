@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.BlockRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -175,6 +176,7 @@ data class UiState(
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
     val forwarding: ChatMessage? = null,
+    val blockedIds: Set<String> = emptySet(),
     val chatQuery: String = "",
     val messageQuery: String = "",
     val typingName: String? = null,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    blockedIds = store.blockedIds(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -618,6 +621,9 @@ class RopeRepository(private val app: Application) {
     }
 
     fun sendDraft() {
+        val blockedPeer = _state.value.group == null &&
+            BlockRules.isBlocked(_state.value.blockedIds, _state.value.peer?.deviceId)
+        if (blockedPeer) return
         val edit = _state.value.editTarget
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
             val text = _state.value.draftText
@@ -769,6 +775,19 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun toggleBlock(peerId: String) {
+        val id = PeerIds.normalize(peerId)
+        if (!BlockRules.canBlock(id, _state.value.profile?.deviceId)) return
+        val cur = _state.value.blockedIds
+        val nextBlocked = !BlockRules.isBlocked(cur, id)
+        val next = BlockRules.apply(cur, id, nextBlocked)
+        store.saveBlockedIds(next)
+        _state.value = _state.value.copy(
+            blockedIds = next,
+            notice = if (nextBlocked) BlockRules.NOTICE_BLOCKED else BlockRules.NOTICE_UNBLOCKED,
+        )
     }
 
     fun copyMessage(msg: ChatMessage) {
@@ -1278,6 +1297,7 @@ class RopeRepository(private val app: Application) {
         if (_state.value.group != null) return
         val hint = _state.value.peer ?: return
         if (ChatIds.isGroup(hint.deviceId) || ChatIds.isSaved(hint.deviceId)) return
+        if (BlockRules.isBlocked(_state.value.blockedIds, hint.deviceId)) return
         if (!VideoCallRules.showHeader(hint.deviceId, isGroup = false)) return
         val peer = resolveCallPeer(hint.deviceId, hint, fetch = true) ?: return
         callPeerName = peer.displayName.ifBlank { hint.displayName }
@@ -2645,7 +2665,12 @@ class RopeRepository(private val app: Application) {
         val id = identity ?: return
         val meta = uniffi.rope_core.parseEnvelope(env)
         val sender = findSender(meta.senderId) ?: return
+        val blockedDirect = BlockRules.isBlocked(_state.value.blockedIds, sender.deviceId)
         if (!knownEnvelopeType(meta.msgType)) {
+            if (blockedDirect) {
+                ack(meta.messageId)
+                return
+            }
             val unknown = ChatMessage(
                 id = meta.messageId,
                 peerDeviceId = sender.deviceId,
@@ -2664,6 +2689,10 @@ class RopeRepository(private val app: Application) {
         }
         when (meta.msgType) {
             EnvelopeTypes.TEXT -> {
+                if (blockedDirect) {
+                    ack(meta.messageId)
+                    return
+                }
                 val plain = id.decryptMessage(publicIdentityFromBlob(sender.publicIdentity), env)
                 val packed = TextBody.decode(plain.text)
                 val msg = ChatMessage(
@@ -2729,6 +2758,10 @@ class RopeRepository(private val app: Application) {
                 val payload = MediaPayload.parse(String(typed.body))
                 val known = _state.value.groups.map { it.groupId }.toSet()
                 val chatId = ChatRouting.mediaChatId(payload.groupId, sender.deviceId, known)
+                if (BlockRules.dropDirect(_state.value.blockedIds, sender.deviceId, ChatIds.isGroup(chatId))) {
+                    ack(typed.messageId)
+                    return
+                }
                 val routedGroup = JsonIds.optional(payload.groupId)?.takeIf { it in known }
                 val msg = ChatMessage(
                     id = typed.messageId,
@@ -2776,7 +2809,9 @@ class RopeRepository(private val app: Application) {
                     control?.kind == ChatControl.TYPING -> {
                         val known = _state.value.groups.map { it.groupId }
                         ChatControlRules.typingChatId(sender.deviceId, control.targetId, known)?.let { chatId ->
-                            noteTyping(chatId, sender.deviceId, sender.displayName)
+                            if (!BlockRules.dropDirect(_state.value.blockedIds, sender.deviceId, ChatIds.isGroup(chatId))) {
+                                noteTyping(chatId, sender.deviceId, sender.displayName)
+                            }
                         }
                     }
                     control?.kind == ChatControl.PIN -> {
@@ -2814,6 +2849,10 @@ class RopeRepository(private val app: Application) {
                 ack(typed.messageId)
             }
             EnvelopeTypes.CALL -> {
+                if (blockedDirect) {
+                    ack(meta.messageId)
+                    return
+                }
                 val typed = id.decryptTyped(publicIdentityFromBlob(sender.publicIdentity), env)
                 val body = JSONObject(String(typed.body))
                 handleCallEvent(
@@ -2857,6 +2896,7 @@ class RopeRepository(private val app: Application) {
         val event = CallSignal.parseEvent(obj.optString("event")).orEmpty()
         val callId = JsonIds.optional(obj.optString("call_id")).orEmpty()
         if (from.isBlank() || callId.isBlank() || event.isBlank()) return
+        if (BlockRules.isBlocked(_state.value.blockedIds, from)) return
         if (!sealed && !CallSignal.trustsPlainWss(event)) return
         val resolved = resolveCallPeer(from, _state.value.peer)
         val name = resolved?.displayName

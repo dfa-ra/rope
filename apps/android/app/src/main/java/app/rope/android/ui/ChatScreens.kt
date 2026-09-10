@@ -145,6 +145,7 @@ import app.rope.android.UiState
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.ArchiveSwipeRules
+import app.rope.android.data.BlockRules
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatListEmptyRules
 import app.rope.android.data.ChatListPreviewRules
@@ -755,8 +756,11 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onToggleBlock: (String) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
+    val blocked = state.group == null && !saved &&
+        BlockRules.isBlocked(state.blockedIds, state.peer?.deviceId)
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
     val online = state.group?.let { g ->
         g.members.any { it in state.onlineIds && it != state.profile?.deviceId }
@@ -899,7 +903,9 @@ fun ChatPane(
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) onMessageQuery("") }) {
                     Icon(Icons.Outlined.Search, contentDescription = "Поиск в чате")
                 }
-                if (state.peer != null && VideoCallRules.showHeader(state.peer.deviceId, state.group != null)) {
+                if (state.peer != null && !blocked &&
+                    VideoCallRules.showHeader(state.peer.deviceId, state.group != null)
+                ) {
                     IconButton(onClick = onCall) {
                         Icon(Icons.Outlined.Call, contentDescription = "Позвонить")
                     }
@@ -1101,6 +1107,33 @@ fun ChatPane(
             }
         }
         if (!selecting) {
+            if (blocked) {
+                Surface(
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            BlockRules.BARRIER,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val peerId = state.peer?.deviceId
+                        TextButton(
+                            onClick = { if (peerId != null) onToggleBlock(peerId) },
+                            modifier = Modifier.semantics { contentDescription = BlockRules.ACTION_UNBLOCK },
+                        ) {
+                            Text(BlockRules.ACTION_UNBLOCK)
+                        }
+                    }
+                }
+            } else {
             ComposerBar(
                 state = state,
                 onDraft = onDraft,
@@ -1113,6 +1146,7 @@ fun ChatPane(
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
             )
+            }
         }
     }
     menuMessage?.let { target ->

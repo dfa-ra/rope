@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.BlockRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleBlock: (String) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -121,6 +123,39 @@ fun SettingsPane(
                         },
                         modifier = Modifier.semantics { contentDescription = "Предпросмотр ссылок" },
                     )
+                }
+            }
+        }
+        FadeIn(140) {
+            val blocked = state.blockedIds.sorted()
+            SectionCard {
+                Text(BlockRules.SECTION, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    BlockRules.EMPTY,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (blocked.isNotEmpty()) {
+                    blocked.forEach { id ->
+                        val name = BlockRules.label(id, state.devices)
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleBlock(id) }
+                                .semantics { contentDescription = BlockRules.ACTION_UNBLOCK },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(name, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            Text(
+                                BlockRules.ACTION_UNBLOCK,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
         }
