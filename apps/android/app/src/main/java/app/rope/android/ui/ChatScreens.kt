@@ -84,6 +84,8 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -161,6 +163,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.VideoTapRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -3075,16 +3078,41 @@ fun ImageViewer(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val item = album[page]
+            val video = item.kind == MessageKind.VIDEO
+            var playing by remember(item.id) { mutableStateOf(true) }
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(onClick = onClose),
+                    .clickable(onClick = {
+                        if (VideoTapRules.tapCloses(isVideo = video)) onClose()
+                        else playing = !playing
+                    }),
                 contentAlignment = Alignment.Center,
             ) {
-                if (item.kind == MessageKind.VIDEO) {
+                if (video) {
                     val path = item.localPath
                     if (!path.isNullOrBlank()) {
-                        VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
+                        VideoViewerSurface(
+                            path,
+                            playing = playing,
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        )
+                        if (!playing) {
+                            Box(
+                                Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.45f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.PlayArrow,
+                                    contentDescription = VideoTapRules.PLAY,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                            }
+                        }
                     } else {
                         Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }

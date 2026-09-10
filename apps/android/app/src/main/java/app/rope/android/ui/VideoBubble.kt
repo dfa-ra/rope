@@ -174,15 +174,22 @@ fun VideoMessageBubble(
 }
 
 @Composable
-fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
+fun VideoViewerSurface(path: String, playing: Boolean = true, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
             VideoView(ctx).apply {
                 setVideoPath(path)
                 setOnPreparedListener { mp ->
                     mp.isLooping = false
-                    start()
+                    if (playing) start()
                 }
+            }
+        },
+        update = { view ->
+            if (playing) {
+                if (!view.isPlaying) view.start()
+            } else if (view.isPlaying) {
+                view.pause()
             }
         },
         modifier = modifier,
