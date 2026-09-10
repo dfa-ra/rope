@@ -1,9 +1,12 @@
 package app.rope.android
 
 import android.app.Application
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -13,6 +16,7 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.view.SurfaceHolder
 import android.webkit.MimeTypeMap
+import androidx.core.content.ContextCompat
 import app.rope.android.data.AdminSnapshot
 import app.rope.android.data.AlbumRules
 import app.rope.android.data.CallInfo
@@ -49,6 +53,8 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SendLocFix
+import app.rope.android.data.SendLocRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -598,6 +604,61 @@ class RopeRepository(private val app: Application) {
         } else {
             scheduleUnfurl(_state.value.draftText)
         }
+    }
+
+    fun locDenied() {
+        _state.value = _state.value.copy(notice = SendLocRules.noticeDenied())
+    }
+
+    fun sendCurrentLocation() {
+        val fix = lastKnownFix()
+        if (fix == null) {
+            _state.value = _state.value.copy(notice = SendLocRules.noticeMissing())
+            return
+        }
+        sendLocation(fix.lat, fix.lon)
+    }
+
+    fun sendLocation(lat: Double, lon: Double) {
+        val text = SendLocRules.text(lat, lon)
+        if (text == null) {
+            _state.value = _state.value.copy(notice = SendLocRules.noticeMissing())
+            return
+        }
+        if (_state.value.recording) return
+        val reply = _state.value.replyTo
+        val pack = replyPack(reply)
+        _state.value = _state.value.copy(replyTo = null, replySpan = null)
+        persistOpenDraft()
+        val group = _state.value.group
+        val peer = _state.value.peer
+        val saved = SavedMessagesRules.isSaved(openChatId()) || SavedMessagesRules.isSaved(peer?.deviceId)
+        scope.launch {
+            when {
+                group != null -> sendGroupText(group, text, reply, pack)
+                saved -> saveLocalText(text, reply, pack = pack)
+                else -> {
+                    val dest = peer ?: return@launch
+                    sendPeerText(dest, text, pack, null)
+                }
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun lastKnownFix(): SendLocFix? {
+        val fine = ContextCompat.checkSelfPermission(app, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(app, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!SendLocRules.permissionOk(fine, coarse)) return null
+        val lm = app.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+        val fixes = SendLocRules.PROVIDERS.mapNotNull { provider ->
+            runCatching { lm.getLastKnownLocation(provider) }.getOrNull()?.let { loc ->
+                SendLocFix(lat = loc.latitude, lon = loc.longitude, timeMs = loc.time)
+            }
+        }
+        return SendLocRules.pick(fixes)
     }
 
     fun dismissComposerPreview() {

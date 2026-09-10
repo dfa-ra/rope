@@ -127,6 +127,7 @@ fun RopeScaffold(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onAttachLocation: () -> Unit = {},
     onCall: () -> Unit,
     onVideoCall: () -> Unit = {},
     onPlay: (app.rope.android.data.ChatMessage) -> Unit,
@@ -336,6 +337,7 @@ fun RopeScaffold(
                             onVideoNoteFinish = onVideoNoteFinish,
                             onVideoNotePreview = onVideoNotePreview,
                             onVideoNotePreviewGone = onVideoNotePreviewGone,
+                            onAttachLocation = onAttachLocation,
                         )
                         Screen.Invite -> if (RoleRules.canShowInviteQr(state.profile?.role)) {
                             InvitePane(state.inviteUrl.orEmpty(), { onBack() }) { onTab(Screen.Home) }

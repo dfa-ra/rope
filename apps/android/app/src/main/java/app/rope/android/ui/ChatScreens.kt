@@ -85,6 +85,7 @@ import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
@@ -158,6 +159,7 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SendLocRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -755,6 +757,7 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onAttachLocation: () -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -1169,6 +1172,10 @@ fun ChatPane(
             onVideoNote = {
                 showAttach = false
                 onVideoNoteStart()
+            },
+            onLocation = {
+                showAttach = false
+                onAttachLocation()
             },
             onDismiss = { showAttach = false },
         )
@@ -2770,6 +2777,7 @@ private fun AttachSheet(
     onUri: (Uri) -> Unit,
     onUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onUri) },
     onVideoNote: () -> Unit = {},
+    onLocation: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -2880,6 +2888,11 @@ private fun AttachSheet(
                 Icon(Icons.Outlined.Videocam, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
                 Text("Видеосообщение", modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onLocation, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Place, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text(SendLocRules.LABEL, modifier = Modifier.weight(1f))
             }
             Spacer(Modifier.height(16.dp))
         }

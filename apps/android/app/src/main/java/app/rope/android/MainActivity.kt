@@ -21,6 +21,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.rope.android.data.CallMediaStart
+import app.rope.android.data.SendLocRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
 import com.journeyapps.barcodescanner.ScanContract
@@ -119,6 +120,19 @@ class MainActivity : AppCompatActivity() {
 
     private val notifyPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    private val locPerm = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        val fine = granted[Manifest.permission.ACCESS_FINE_LOCATION] == true || hasFineLoc()
+        val coarse = granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true || hasCoarseLoc()
+        val repo = (application as RopeApp).repo
+        if (SendLocRules.permissionOk(fine, coarse)) {
+            repo.sendCurrentLocation()
+        } else {
+            repo.locDenied()
+        }
+    }
+
     private val installSources = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         waitingForInstallPerm = false
         tryInstallPending()
@@ -194,6 +208,7 @@ class MainActivity : AppCompatActivity() {
                     onVideoNoteFinish = repo::finishVideoNote,
                     onVideoNotePreview = repo::bindVideoNotePreview,
                     onVideoNotePreviewGone = repo::unbindVideoNotePreview,
+                    onAttachLocation = { withLoc { repo.sendCurrentLocation() } },
                     onCall = { withMic("call") { repo.startCall() } },
                     onVideoCall = { withCallMedia("video") { repo.startVideoCall() } },
                     onPlay = repo::toggleVoice,
@@ -326,12 +341,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun withLoc(granted: () -> Unit) {
+        if (SendLocRules.permissionOk(hasFineLoc(), hasCoarseLoc())) {
+            granted()
+        } else {
+            locPerm.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+        }
+    }
+
     private fun hasMic(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
     private fun hasCam(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasFineLoc(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasCoarseLoc(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
 
     private fun requestNotifications() {
