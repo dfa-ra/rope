@@ -28,9 +28,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -190,6 +189,7 @@ import app.rope.android.data.ReactionCodec
 import app.rope.android.data.VoiceGesture
 import app.rope.android.media.ImageCodec
 import app.rope.android.media.VideoCodec
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -3064,26 +3064,10 @@ fun ImageViewer(
     val pagerState = rememberPagerState(initialPage = start) { album.size }
     val albumKey = album.joinToString { it.id }
     val scope = rememberCoroutineScope()
-    val scaleState = remember { mutableFloatStateOf(1f) }
-    val offsetXState = remember { mutableFloatStateOf(0f) }
-    val offsetYState = remember { mutableFloatStateOf(0f) }
-    var scale by scaleState
-    var offsetX by offsetXState
-    var offsetY by offsetYState
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
-        val next = PhotoZoomRules.clampScale(scaleState.floatValue * zoomChange)
-        scaleState.floatValue = next
-        val (x, y) = PhotoZoomRules.clampOffset(
-            offsetXState.floatValue + panChange.x,
-            offsetYState.floatValue + panChange.y,
-            next,
-            viewport.width.toFloat(),
-            viewport.height.toFloat(),
-        )
-        offsetXState.floatValue = x
-        offsetYState.floatValue = y
-    }
     LaunchedEffect(pagerState.currentPage, albumKey) {
         scale = 1f
         offsetX = 0f
@@ -3105,37 +3089,75 @@ fun ImageViewer(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val item = album[page]
-            val video = item.kind == MessageKind.VIDEO
+            val live = page == pagerState.currentPage
+            val zoomPhotos = PhotoZoomRules.canZoom(item.kind)
             Box(
                 Modifier
                     .fillMaxSize()
                     .onSizeChanged { viewport = it }
                     .then(
-                        if (video) {
+                        if (!zoomPhotos) {
                             Modifier.clickable(onClick = onClose)
                         } else {
-                            Modifier
-                                .pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onTap = {
-                                            if (!PhotoZoomRules.isZoomed(scaleState.floatValue)) onClose()
-                                        },
-                                        onDoubleTap = {
-                                            val next = PhotoZoomRules.doubleTapScale(scaleState.floatValue)
-                                            scaleState.floatValue = next
-                                            if (!PhotoZoomRules.isZoomed(next)) {
-                                                offsetXState.floatValue = 0f
-                                                offsetYState.floatValue = 0f
-                                            }
-                                        },
+                            Modifier.pointerInput(live, item.id) {
+                                if (!live) return@pointerInput
+                                val slopPx = PhotoZoomRules.TAP_SLOP_DP * density
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(
+                                        requireUnconsumed = false,
+                                        pass = PointerEventPass.Initial,
                                     )
+                                    var maxPointers = 1
+                                    var maxMove = 0f
+                                    var transformed = false
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        val pressed = event.changes.filter { it.pressed }
+                                        maxPointers = maxOf(maxPointers, pressed.size)
+                                        for (change in event.changes) {
+                                            val move = hypot(
+                                                (change.position.x - down.position.x).toDouble(),
+                                                (change.position.y - down.position.y).toDouble(),
+                                            ).toFloat()
+                                            maxMove = maxOf(maxMove, move)
+                                        }
+                                        val zoom = event.calculateZoom()
+                                        val pan = event.calculatePan()
+                                        val consume = PhotoZoomRules.shouldConsume(
+                                            zoomed = PhotoZoomRules.isZoomed(scale),
+                                            pointerCount = pressed.size,
+                                            zoom = zoom,
+                                        )
+                                        if (consume) {
+                                            event.changes.forEach { it.consume() }
+                                            transformed = true
+                                            val nextScale = PhotoZoomRules.clampScale(scale * zoom)
+                                            val (x, y) = PhotoZoomRules.clampOffset(
+                                                offsetX + pan.x,
+                                                offsetY + pan.y,
+                                                nextScale,
+                                                viewport.width.toFloat(),
+                                                viewport.height.toFloat(),
+                                            )
+                                            scale = nextScale
+                                            offsetX = x
+                                            offsetY = y
+                                        }
+                                        if (!event.changes.any { it.pressed }) break
+                                    }
+                                    if (!transformed &&
+                                        PhotoZoomRules.isTap(maxMove, maxPointers, slopPx) &&
+                                        PhotoZoomRules.tapCloses(scale)
+                                    ) {
+                                        onClose()
+                                    }
                                 }
-                                .transformable(state = transformState)
+                            }
                         },
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (video) {
+                if (item.kind == MessageKind.VIDEO) {
                     val path = item.localPath
                     if (!path.isNullOrBlank()) {
                         VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
