@@ -28,6 +28,7 @@ import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.CopySpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
@@ -776,7 +777,12 @@ class RopeRepository(private val app: Application) {
         if (!msg.text.isNotBlank() || msg.deleted) return
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
-        _state.value = _state.value.copy(notice = "Скопировано")
+        _state.value = _state.value.copy(notice = CopySpanRules.NOTICE)
+    }
+
+    fun copySpan(msg: ChatMessage, start: Int, end: Int) {
+        val text = CopySpanRules.clip(msg, start, end) ?: return
+        copyText(text)
     }
 
     fun togglePinMessage(msg: ChatMessage) {

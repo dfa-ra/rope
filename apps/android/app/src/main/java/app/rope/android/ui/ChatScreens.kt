@@ -170,6 +170,7 @@ import app.rope.android.data.ChatSelection
 import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
+import app.rope.android.data.CopySpanRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
@@ -740,6 +741,7 @@ fun ChatPane(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onCopy: (ChatMessage) -> Unit = {},
+    onCopySpan: (ChatMessage, Int, Int) -> Unit = { _, _, _ -> },
     onPinMessage: (ChatMessage) -> Unit = {},
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
@@ -1131,7 +1133,10 @@ fun ChatPane(
                 reactionExpanded = false
             },
             onReply = { onReply(target); menuMessage = null },
-            onCopy = { onCopy(target); menuMessage = null },
+            onCopy = { span ->
+                if (span != null) onCopySpan(target, span.start, span.end) else onCopy(target)
+                menuMessage = null
+            },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
@@ -1833,12 +1838,13 @@ private fun MessageTapOverlay(
     onDismiss: () -> Unit,
     onReact: (String) -> Unit,
     onReply: () -> Unit,
-    onCopy: () -> Unit,
+    onCopy: (QuoteSpan?) -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
+    var copySpan by remember(message.id) { mutableStateOf<QuoteSpan?>(null) }
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
@@ -1869,15 +1875,90 @@ private fun MessageTapOverlay(
                 expanded = expanded,
                 onToggleExpand = onToggleExpand,
             )
+            if (CopySpanRules.canCopy(message)) {
+                CopySpanBody(
+                    sourceText = message.text,
+                    span = copySpan,
+                    onSpan = { copySpan = it },
+                )
+            }
             MessageActionMenu(
                 m = message,
                 pinned = pinned,
                 onReply = onReply,
-                onCopy = onCopy,
+                onCopy = { onCopy(copySpan) },
                 onForward = onForward,
                 onPin = onPin,
                 onDelete = onDelete,
                 onOpen = onOpen,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CopySpanBody(
+    sourceText: String,
+    span: QuoteSpan?,
+    onSpan: (QuoteSpan?) -> Unit,
+) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var anchor by remember { mutableIntStateOf(-1) }
+    val highlight = span?.let { CopySpanRules.clamp(sourceText, it.start, it.end) }
+    val annotated = buildAnnotatedString {
+        append(sourceText)
+        if (highlight != null && highlight.end <= sourceText.length) {
+            addStyle(
+                SpanStyle(background = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+                highlight.start,
+                highlight.end,
+            )
+        }
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(
+                CopySpanRules.HINT,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                annotated,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 12,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layout = it },
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .pointerInput(sourceText) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { anchor = -1 },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                val measured = layout ?: return@detectDragGesturesAfterLongPress
+                                if (measured.layoutInput.text.text != sourceText) {
+                                    return@detectDragGesturesAfterLongPress
+                                }
+                                val now = measured.getOffsetForPosition(change.position)
+                                if (anchor < 0) anchor = now
+                                val start = minOf(anchor, now)
+                                val end = maxOf(anchor, now).coerceAtLeast(start + 1)
+                                onSpan(
+                                    CopySpanRules.clamp(
+                                        sourceText,
+                                        start,
+                                        end.coerceAtMost(sourceText.length),
+                                    ),
+                                )
+                            },
+                        )
+                    },
             )
         }
     }
