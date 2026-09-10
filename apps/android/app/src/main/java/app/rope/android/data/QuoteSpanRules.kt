@@ -63,8 +63,19 @@ object QuoteSpanRules {
 
     fun preview(source: String, span: QuoteSpan?): String = packed(source, span)?.text ?: source
 
-    fun displayPreview(replyPreview: String, quoteText: String): String =
-        quoteText.trim().ifBlank { replyPreview }
+    fun displayPreview(replyPreview: String, quoteText: String): String {
+        val q = oneLine(quoteText)
+        if (q.isNotEmpty()) return q
+        return oneLine(replyPreview)
+    }
+
+    /** CR/LF/NUL in quote chrome must stay one line. */
+    private fun oneLine(raw: String): String {
+        if (raw.indexOf('\u0000') >= 0) return ""
+        return raw.replace(WHITESPACE, " ").trim()
+    }
+
+    private val WHITESPACE = Regex("\\s+")
 
     fun parseOffsets(raw: JSONArray?): QuoteSpan? {
         if (raw == null || raw.length() < 2) return null

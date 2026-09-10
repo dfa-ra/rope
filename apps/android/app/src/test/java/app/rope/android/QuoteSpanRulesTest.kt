@@ -103,6 +103,12 @@ class QuoteSpanRulesTest {
         assertEquals(4, meta.quoteEnd)
         assertEquals("выдел", QuoteSpanRules.displayPreview("полное тело", "выдел"))
         assertEquals("полное тело", QuoteSpanRules.displayPreview("полное тело", "  "))
+        val multiline = QuoteSpanRules.displayPreview("полное тело", "первая\nвторая\r\nтретья")
+        assertEquals("первая вторая третья", multiline)
+        assertFalse(multiline.contains('\n'))
+        assertFalse(multiline.contains('\r'))
+        assertEquals("полное тело", QuoteSpanRules.displayPreview("полное тело", "a\u0000b"))
+        assertEquals("полное тело", QuoteSpanRules.displayPreview("полное\nтело", "  "))
     }
 
     @Test
