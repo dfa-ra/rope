@@ -206,6 +206,7 @@ class MainActivity : AppCompatActivity() {
                     onRemoveMember = repo::removeMemberFromOpenGroup,
                     onLeaveGroup = repo::leaveOpenGroup,
                     onRenameGroup = repo::renameOpenGroup,
+                    onSetSlowMode = repo::setGroupSlowMode,
                     onRevokeMember = repo::revokeMember,
                     onAcceptCall = {
                         val video = (application as RopeApp).repo.state.value.call?.video == true

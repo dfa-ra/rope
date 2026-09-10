@@ -49,6 +49,7 @@ import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SlowModeRules
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -186,6 +187,7 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val slowModeSec: Int = 0,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -238,6 +240,7 @@ class RopeRepository(private val app: Application) {
     private var boundRemote: VideoSink? = null
     private var boundLocal: VideoSink? = null
     private var iceCachedAtMs: Long = 0L
+    private val lastGroupSendMs = HashMap<String, Long>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toneOutgoing: Boolean? = null
 
@@ -628,6 +631,7 @@ class RopeRepository(private val app: Application) {
             applyEdit(edit, text)
             return
         }
+        if (groupSendBlocked()) return
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
             val caption = _state.value.draftText
@@ -772,6 +776,17 @@ class RopeRepository(private val app: Application) {
         refreshConversations()
     }
 
+    fun setGroupSlowMode(seconds: Int) {
+        val g = _state.value.group ?: return
+        val id = ChatIds.group(g.groupId)
+        val next = SlowModeRules.normalize(seconds)
+        val cur = store.chatPrefs(id)
+        if (cur.slowModeSec != next) {
+            store.saveChatPrefs(id, cur.copy(slowModeSec = next))
+        }
+        _state.value = _state.value.copy(slowModeSec = next)
+    }
+
     fun copyMessage(msg: ChatMessage) {
         if (!msg.text.isNotBlank() || msg.deleted) return
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -849,6 +864,7 @@ class RopeRepository(private val app: Application) {
             stageAttachments(listOf(uri))
             return
         }
+        if (groupSendBlocked()) return
         sendAttachments(listOf(uri), forcedMime)
     }
 
@@ -1001,6 +1017,10 @@ class RopeRepository(private val app: Application) {
         val pack = replyPack(_state.value.replyTo)
         val destPeer = _state.value.peer
         val destGroup = _state.value.group
+        if (groupSendBlocked(destGroup)) {
+            take.file.delete()
+            return
+        }
         _state.value = _state.value.copy(replyTo = null, replySpan = null)
         scope.launch {
             try {
@@ -1076,6 +1096,10 @@ class RopeRepository(private val app: Application) {
         val pack = replyPack(_state.value.replyTo)
         val destPeer = _state.value.peer
         val destGroup = _state.value.group
+        if (groupSendBlocked(destGroup)) {
+            take.file.delete()
+            return
+        }
         _state.value = _state.value.copy(replyTo = null, replySpan = null)
         scope.launch {
             try {
@@ -1807,6 +1831,7 @@ class RopeRepository(private val app: Application) {
                     linkPreview = linkPreview,
                 )
                 store.insertMessage(local)
+                recordGroupSend(group.groupId)
                 refreshMessages(chatId)
                 val sent = socket?.send(
                     JSONObject()
@@ -2169,6 +2194,7 @@ class RopeRepository(private val app: Application) {
             pendingAttachments = pending,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
+            slowModeSec = if (group != null) SlowModeRules.normalize(prefs.slowModeSec) else 0,
         )
         publishTyping()
         prefetchMedia(_state.value.messages)
@@ -3575,6 +3601,19 @@ class RopeRepository(private val app: Application) {
 
     private fun busy(v: Boolean) {
         _state.value = _state.value.copy(busy = v, error = null)
+    }
+
+    private fun groupSendBlocked(group: RopeGroup? = _state.value.group): Boolean {
+        val g = group ?: return false
+        val sec = SlowModeRules.normalize(store.chatPrefs(ChatIds.group(g.groupId)).slowModeSec)
+        val wait = SlowModeRules.waitMs(sec, lastGroupSendMs[g.groupId] ?: 0L, System.currentTimeMillis())
+        if (wait <= 0L) return false
+        notice(SlowModeRules.blockedNotice(wait))
+        return true
+    }
+
+    private fun recordGroupSend(groupId: String) {
+        lastGroupSendMs[groupId] = System.currentTimeMillis()
     }
 
     private fun notice(msg: String) {

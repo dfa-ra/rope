@@ -2,6 +2,8 @@ package app.rope.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,12 +29,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.RoleRules
+import app.rope.android.data.SlowModeRules
 
 @Composable
 fun NewGroupPane(
@@ -98,6 +105,7 @@ fun NewGroupPane(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun GroupInfoPane(
     state: UiState,
@@ -105,6 +113,7 @@ fun GroupInfoPane(
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
     onRename: (String) -> Unit = {},
+    onSetSlowMode: (Int) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -156,6 +165,28 @@ fun GroupInfoPane(
                                 enabled = GroupNameRules.parse(renameDraft) != null &&
                                     GroupNameRules.parse(renameDraft) != g.name,
                             ) { Text("Сохранить название") }
+                        }
+                        if (SlowModeRules.canShow(isMember)) {
+                            Text(
+                                SlowModeRules.TITLE,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
+                            Text(
+                                SlowModeRules.HINT,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SlowModeRules.CHIPS.forEach { chip ->
+                                    FilterChip(
+                                        selected = SlowModeRules.normalize(state.slowModeSec) == chip.seconds,
+                                        onClick = { onSetSlowMode(chip.seconds) },
+                                        label = { Text(chip.label) },
+                                        modifier = Modifier.semantics { contentDescription = chip.label },
+                                    )
+                                }
+                            }
                         }
                     }
                 }

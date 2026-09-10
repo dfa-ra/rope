@@ -411,6 +411,7 @@ data class ChatPrefs(
     val draft: String = "",
     val pinnedMessageId: String? = null,
     val archived: Boolean = false,
+    val slowModeSec: Int = 0,
 ) {
     fun toJson(): String = JSONObject()
         .put("pinned", pinned)
@@ -420,6 +421,7 @@ data class ChatPrefs(
         .put("draft", draft)
         .put("pinned_message", pinnedMessageId ?: JSONObject.NULL)
         .put("archived", archived)
+        .put(SlowModeRules.JSON_KEY, SlowModeRules.normalize(slowModeSec))
         .toString()
 
     companion object {
@@ -435,6 +437,7 @@ data class ChatPrefs(
                     draft = o.optString("draft"),
                     pinnedMessageId = JsonIds.optional(o.optString("pinned_message")),
                     archived = o.optBoolean("archived"),
+                    slowModeSec = SlowModeRules.parseStored(o.optInt(SlowModeRules.JSON_KEY)),
                 )
             } catch (_: Exception) {
                 ChatPrefs()
