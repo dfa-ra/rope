@@ -394,10 +394,15 @@ object IceServers {
         return values.map { it.trim() }.filter { allowedUrl(it) }
     }
 
-    /** PeerConnection only accepts STUN/TURN. Drop file/http/data/javascript and anything else. */
+    /**
+     * PeerConnection only accepts STUN/TURN. Drop file/http/data/javascript,
+     * interior whitespace/CRLF (scheme is only the token before the first colon),
+     * and anything else.
+     */
     fun allowedUrl(url: String): Boolean {
         val raw = url.trim()
         if (raw.isEmpty() || raw.equals("null", ignoreCase = true)) return false
+        if (raw.any { it.isWhitespace() || it.isISOControl() }) return false
         val scheme = raw.substringBefore(':', missingDelimiterValue = "").lowercase()
         return scheme == "stun" || scheme == "turn" || scheme == "turns"
     }

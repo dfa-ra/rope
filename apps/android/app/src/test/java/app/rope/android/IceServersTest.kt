@@ -311,4 +311,19 @@ class IceServersTest {
         assertEquals(listOf("turn:vps:3478"), resolved.flatMap { it.urls })
         assertFalse(IceServers.missingTurn(resolved))
     }
+
+    @Test
+    fun allowedUrlRejectsInteriorWhitespaceAndControl() {
+        assertFalse(IceServers.allowedUrl("turn:vps:3478\nhttp://evil"))
+        assertFalse(IceServers.allowedUrl("stun:vps:3478\r\nX: y"))
+        assertFalse(IceServers.allowedUrl("turn:vps:3478 http://evil"))
+        assertFalse(IceServers.allowedUrl("turn:vps:3478\u0000evil"))
+        assertTrue(IceServers.allowedUrl("turns:vps.example:443?transport=tcp"))
+        val mixed = JSONArray()
+            .put("turn:vps:3478")
+            .put("turn:vps:3478\nhttp://evil")
+            .put("stun:vps:3478\r\nX: y")
+        val urls = IceServers.parseArray(mixed).flatMap { it.urls }
+        assertEquals(listOf("turn:vps:3478"), urls)
+    }
 }
