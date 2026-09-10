@@ -256,6 +256,11 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         return true
     }
 
+    fun clearHistory(peerId: String) {
+        if (peerId.isBlank()) return
+        writableDatabase.execSQL("DELETE FROM messages WHERE peer_id = ?", arrayOf(peerId))
+    }
+
     fun messages(peerId: String): List<ChatMessage> {
         val c = readableDatabase.rawQuery(
             """

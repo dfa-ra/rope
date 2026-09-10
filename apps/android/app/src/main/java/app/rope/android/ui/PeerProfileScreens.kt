@@ -23,8 +23,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rope.android.UiState
 import app.rope.android.data.ChatMessage
+import app.rope.android.data.ClearHistoryRules
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.media.ImageCodec
@@ -45,12 +51,15 @@ fun PeerProfilePane(
     onBack: () -> Unit,
     onOpenImage: (ChatMessage) -> Unit = {},
     onEnsureMedia: (ChatMessage) -> Unit = {},
+    onClearHistory: (String) -> Unit = {},
 ) {
     val peer = state.peer
     val title = PeerProfileRules.title(peer?.displayName)
     val online = peer?.online == true
     val subtitle = MessageTime.lastSeenLabel(peer?.lastSeen.orEmpty(), online)
     val photos = PeerProfileRules.photos(state.messages)
+    val canClear = ClearHistoryRules.canClear(peer?.deviceId)
+    var confirmClear by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier
@@ -121,6 +130,24 @@ fun PeerProfilePane(
             } else {
                 items(photos, key = { it.id }) { m ->
                     SharedPhotoTile(m, onEnsureMedia) { onOpenImage(m) }
+                }
+            }
+        }
+        if (canClear) {
+            Column(
+                Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (confirmClear) {
+                    QuietButton(ClearHistoryRules.CONFIRM, {
+                        peer?.deviceId?.let(onClearHistory)
+                        confirmClear = false
+                    }, Modifier.fillMaxWidth())
+                    TextButton(onClick = { confirmClear = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text(ClearHistoryRules.CANCEL)
+                    }
+                } else {
+                    QuietButton(ClearHistoryRules.ACTION, { confirmClear = true }, Modifier.fillMaxWidth())
                 }
             }
         }

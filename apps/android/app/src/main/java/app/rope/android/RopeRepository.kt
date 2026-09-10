@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.ClearHistoryRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -769,6 +770,24 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         store.saveChatPrefs(id, cur.copy(muted = !cur.muted))
         refreshConversations()
+    }
+
+    fun clearHistory(id: String) {
+        if (!ClearHistoryRules.canClear(id)) return
+        store.clearHistory(id)
+        store.saveChatPrefs(id, ClearHistoryRules.afterClear(store.chatPrefs(id)))
+        if (openChatId() == id) {
+            _state.value = _state.value.copy(
+                draftText = "",
+                pinnedMessageId = null,
+                replyTo = null,
+                replySpan = null,
+                editTarget = null,
+            )
+            refreshOpenChat()
+        } else {
+            refreshConversations()
+        }
     }
 
     fun copyMessage(msg: ChatMessage) {

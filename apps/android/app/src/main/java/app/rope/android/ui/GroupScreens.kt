@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.rope.android.RopeShapes
 import app.rope.android.UiState
+import app.rope.android.data.ChatIds
+import app.rope.android.data.ClearHistoryRules
 import app.rope.android.data.GroupChatUx
 import app.rope.android.data.RoleRules
 
@@ -103,6 +105,7 @@ fun GroupInfoPane(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onLeave: () -> Unit = {},
+    onClearHistory: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val g = state.group
@@ -120,6 +123,9 @@ fun GroupInfoPane(
     val canManage = RoleRules.canManageGroupMembers(isMember, me, organizer, state.profile?.role)
     val canLeave = RoleRules.canLeaveGroup(isMember)
     var confirmLeave by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
+    val chatId = ChatIds.group(g.groupId)
+    val canClear = ClearHistoryRules.canClear(chatId)
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier
@@ -194,6 +200,19 @@ fun GroupInfoPane(
             }
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (canClear) {
+                if (confirmClear) {
+                    QuietButton(ClearHistoryRules.CONFIRM, {
+                        onClearHistory(chatId)
+                        confirmClear = false
+                    }, Modifier.fillMaxWidth())
+                    TextButton(onClick = { confirmClear = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text(ClearHistoryRules.CANCEL)
+                    }
+                } else {
+                    QuietButton(ClearHistoryRules.ACTION, { confirmClear = true }, Modifier.fillMaxWidth())
+                }
+            }
             if (canLeave) {
                 if (confirmLeave) {
                     GlowButton("Точно выйти из группы", onLeave, Modifier.fillMaxWidth())
