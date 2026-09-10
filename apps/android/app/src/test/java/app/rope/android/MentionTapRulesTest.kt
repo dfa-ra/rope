@@ -27,6 +27,7 @@ class MentionTapRulesTest {
         assertFalse(MentionTapRules.canOpen(true, ChatIds.group("g-1"), "me"))
         assertEquals("Написать", MentionTapRules.ACTION)
         assertEquals("Нет в справочнике", MentionTapRules.NOTICE_MISSING)
+        assertEquals("MENTION", MentionTapRules.TAG)
     }
 
     @Test
