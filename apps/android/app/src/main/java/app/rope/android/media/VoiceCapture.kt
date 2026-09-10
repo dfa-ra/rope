@@ -194,9 +194,9 @@ class VoicePlayer {
         val p = MediaPlayer()
         p.setDataSource(path)
         p.setOnCompletionListener {
-            val id = loadedId
+            val doneId = loadedId
             stop()
-            endedId = id
+            endedId = doneId
         }
         p.prepare()
         player = p
