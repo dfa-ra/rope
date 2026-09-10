@@ -36,7 +36,15 @@ data class CallSignal(
         val FALLBACK = setOf(RELAY, AUDIO)
         val WIRE = EVENTS + CONTROL + FALLBACK
 
+        /**
+         * WSS / envelope call `event`. Fail closed on CR/LF/NUL before trim
+         * so a newline suffix cannot become a live hangup/ring. Spaces still
+         * trim. [VideoCallRules.wireEventIsHangup] already fail-closes; this
+         * is the live parser. Not WSS Phase B.
+         */
         fun parseEvent(raw: String?): String? {
+            if (raw.isNullOrEmpty()) return null
+            if (!singleLine(raw)) return null
             val v = JsonIds.optional(raw)?.lowercase() ?: return null
             if (v == "bye") return HANGUP
             return if (v in WIRE) v else null
