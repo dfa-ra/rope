@@ -4,7 +4,8 @@ import java.io.File
 
 /**
  * PackageInstaller sessions must read the GitHub APK from app-private
- * `cache/updates/` (same tree FileProvider exposes). Not envelope crypto.
+ * `cache/updates/` (same tree FileProvider exposes). The APK must be a
+ * direct child — nested `updates/sub/` paths fail closed. Not envelope crypto.
  */
 object ApkInstallRules {
     const val UPDATES_DIR = "updates"
@@ -20,8 +21,8 @@ object ApkInstallRules {
         if (AppRelease.parseApkVersion(name) == null) return false
         val root = canonical(updatesDir) ?: return false
         val target = canonical(file) ?: return false
-        val prefix = if (root.endsWith(File.separatorChar)) root else root + File.separator
-        return target.startsWith(prefix)
+        val parent = File(target).parent ?: return false
+        return parent == root
     }
 
     private fun canonical(file: File): String? = try {

@@ -51,4 +51,26 @@ class ApkInstallRulesTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun rejectNestedUpdatesSubdir() {
+        val root = createTempDirectory("rope-apk-nest").toFile()
+        try {
+            val updates = File(root, ApkInstallRules.UPDATES_DIR).apply { mkdirs() }
+            val nested = File(updates, "sub").apply { mkdirs() }
+            val apk = File(nested, "rope-0.1.5.apk")
+            apk.writeBytes(ByteArray(ApkInstallRules.MIN_BYTES.toInt() + 8))
+            assertFalse(ApkInstallRules.allow(apk, updates))
+
+            val deep = File(File(nested, "more").apply { mkdirs() }, "rope-0.1.5.apk")
+            deep.writeBytes(ByteArray(ApkInstallRules.MIN_BYTES.toInt() + 8))
+            assertFalse(ApkInstallRules.allow(deep, updates))
+
+            val direct = File(updates, "rope-0.1.5.apk")
+            direct.writeBytes(ByteArray(ApkInstallRules.MIN_BYTES.toInt() + 8))
+            assertTrue(ApkInstallRules.allow(direct, updates))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 }
