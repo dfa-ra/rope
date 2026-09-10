@@ -180,6 +180,12 @@ fun RopeScaffold(
     onDismissNotice: () -> Unit,
     onBack: () -> Boolean = { false },
     onTab: (Screen) -> Unit = onGo,
+    onUnlockPin: (String) -> Unit = {},
+    onUnlockBiometric: () -> Unit = {},
+    onEnableAppLock: (String) -> Unit = {},
+    onDisableAppLock: (String) -> Unit = {},
+    onToggleAppLockBiometric: () -> Unit = {},
+    onSetAppLockTimeout: (Long) -> Unit = {},
 ) {
     val signedIn = state.profile != null
     val splash = rememberSplashOverlay(state)
@@ -195,6 +201,34 @@ fun RopeScaffold(
         onBack()
     }
     Box {
+    if (state.locked) {
+        BackHandler(enabled = true) { onBack() }
+        app.rope.android.ui.AppLockPane(state, onUnlockPin, onUnlockBiometric)
+        state.call?.let { call ->
+            app.rope.android.ui.CallOverlay(
+                call,
+                state.profile?.iceServersJson.orEmpty(),
+                onAcceptCall,
+                onRejectCall,
+                onHangup,
+                micMuted = state.callMicMuted,
+                speakerOn = state.callSpeakerOn,
+                onToggleMute = onToggleCallMute,
+                onToggleSpeaker = onToggleCallSpeaker,
+                camMuted = state.callCamMuted,
+                banner = state.callNotice,
+                onToggleCamera = onToggleCallCamera,
+                onFlipCamera = onFlipCallCamera,
+                localMirror = state.callLocalMirrored,
+                eglContext = callEgl,
+                rtcReady = state.callRtcReady,
+                onBindRemote = onBindCallRemote,
+                onBindLocal = onBindCallLocal,
+                onUnbindRemote = onUnbindCallRemote,
+                onUnbindLocal = onUnbindCallLocal,
+            )
+        }
+    } else {
     Scaffold(
         topBar = {
             if (InstantUi.showsAppBar(state.screen)) {
@@ -348,6 +382,10 @@ fun RopeScaffold(
                             onToggleNotifications,
                             onCopyText,
                             onToggleLinkPreviews,
+                            onEnableAppLock,
+                            onDisableAppLock,
+                            onToggleAppLockBiometric,
+                            onSetAppLockTimeout,
                         )
                         Screen.NewGroup -> app.rope.android.ui.NewGroupPane(state, onGroupName, onToggleMember, onCreateGroup) { onBack() }
                         Screen.GroupInfo -> app.rope.android.ui.GroupInfoPane(state, onAddMember, onRemoveMember, onLeaveGroup) { onBack() }
@@ -402,6 +440,7 @@ fun RopeScaffold(
     }
     if (splash.visible) {
         RopeSplash(caption = splash.caption, loop = splash.loop, compact = splash.compact)
+    }
     }
     }
 }

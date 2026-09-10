@@ -1,12 +1,14 @@
 package app.rope.android.data
 
 import android.content.Context
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
@@ -35,6 +37,61 @@ class IdentityVault(private val context: Context) {
         return cipher.doFinal(ct)
     }
 
+    fun hmacPin(pin: String): ByteArray {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(getOrCreateHmacKey())
+        return mac.doFinal(pin.toByteArray(Charsets.UTF_8))
+    }
+
+    /** Best-effort user-auth wrap. PIN HMAC still gates RAM even if this no-ops. */
+    fun rotateWrapForLock(validitySeconds: Int) {
+        val plain = runCatching { load() }.getOrNull() ?: return
+        try {
+            val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            ks.deleteEntry(ALIAS)
+            val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+            val builder = KeyGenParameterSpec.Builder(
+                ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .setUserAuthenticationRequired(true)
+                .setInvalidatedByBiometricEnrollment(false)
+            if (Build.VERSION.SDK_INT >= 30) {
+                builder.setUserAuthenticationParameters(
+                    validitySeconds.coerceAtLeast(0),
+                    KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                builder.setUserAuthenticationValidityDurationSeconds(validitySeconds)
+            }
+            gen.init(builder.build())
+            gen.generateKey()
+            save(plain)
+        } catch (_: Exception) {
+            runCatching {
+                val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                ks.deleteEntry(ALIAS)
+            }
+            save(plain)
+        }
+    }
+
+    private fun getOrCreateHmacKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(HMAC_ALIAS, null) as? SecretKey)?.let { return it }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore")
+        gen.init(
+            KeyGenParameterSpec.Builder(HMAC_ALIAS, KeyProperties.PURPOSE_SIGN)
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .build(),
+        )
+        return gen.generateKey()
+    }
+
     private fun getOrCreateKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
@@ -51,6 +108,7 @@ class IdentityVault(private val context: Context) {
 
     companion object {
         private const val ALIAS = "rope-identity-wrap"
+        private const val HMAC_ALIAS = "rope-pin-hmac"
 
         /** On-disk layout: 1-byte IV length, IV, ciphertext. */
         fun pack(iv: ByteArray, ct: ByteArray): ByteArray {

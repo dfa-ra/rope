@@ -14,6 +14,7 @@ enum class BackLayer {
     CancelForward,
     CancelComposer,
     CancelPendingMedia,
+    StayLocked,
     Pop,
     Exit,
 }
@@ -95,6 +96,7 @@ object BackStack {
 
     fun decide(state: UiState, hints: OverlayHints = OverlayHints()): BackLayer = when {
         state.call != null -> BackLayer.DismissCall
+        state.locked -> BackLayer.StayLocked
         state.viewingImage != null -> BackLayer.CloseImage
         composerLive(state.screen) && (state.recording || state.recordingVideoNote) -> BackLayer.CancelRecording
         hints.emojiOpen -> BackLayer.CloseEmoji

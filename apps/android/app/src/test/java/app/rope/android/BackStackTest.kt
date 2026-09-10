@@ -281,6 +281,33 @@ class BackStackTest {
         )
     }
 
+    @Test
+    fun stayLockedUntilUnlock() {
+        val chats = listOf(Screen.Chats)
+        assertEquals(
+            BackLayer.StayLocked,
+            BackStack.decide(UiState(screen = Screen.Chats, backStack = chats, locked = true)),
+        )
+        assertTrue(BackStack.consumesSystemBack(UiState(screen = Screen.Chats, backStack = chats, locked = true)))
+        assertEquals(
+            BackLayer.DismissCall,
+            BackStack.decide(
+                UiState(screen = Screen.Chats, backStack = chats, locked = true, call = ringingCall()),
+            ),
+        )
+        assertEquals(
+            BackLayer.StayLocked,
+            BackStack.decide(
+                UiState(
+                    screen = Screen.Chat,
+                    backStack = listOf(Screen.Chats, Screen.Chat),
+                    locked = true,
+                    viewingImage = photo,
+                ),
+            ),
+        )
+    }
+
     private fun ringingCall() = CallInfo(
         callId = "c1",
         peerDeviceId = "p",

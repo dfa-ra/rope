@@ -45,6 +45,9 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.AppLockRules
+import app.rope.android.data.AppLockState
+import app.rope.android.data.AppLockUi
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -185,6 +188,9 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val locked: Boolean = false,
+    val appLock: AppLockUi = AppLockUi(),
+    val lockError: String? = null,
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -210,6 +216,8 @@ class RopeRepository(private val app: Application) {
     val state: StateFlow<UiState> = _state
 
     private var identity: DeviceIdentity? = null
+    private var lastBackgroundedAt: Long = 0L
+    private var lockJob: Job? = null
     private var api: ServerApi? = null
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
@@ -258,10 +266,23 @@ class RopeRepository(private val app: Application) {
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
                 store.rehomeMisroutedMedia()
-                identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
-                    vault.save(it.toBytes())
+                val lock = store.appLock()
+                _state.value = _state.value.copy(appLock = lock.toUi())
+                if (AppLockRules.gateOnStart(lock.enabled, vault.exists(), lock.hmacHex)) {
+                    identity = null
+                    _state.value = _state.value.copy(
+                        locked = true,
+                        messages = emptyList(),
+                        conversations = emptyList(),
+                        profile = store.profile(),
+                        viewingImage = null,
+                    )
+                } else {
+                    identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
+                        vault.save(it.toBytes())
+                    }
+                    store.profile()?.let { attached(it) }
                 }
-                store.profile()?.let { attached(it) }
                 checkAppUpdate(openStatus = false)
                 if (!pendingLink.isNullOrBlank() && store.profile() == null) {
                     prepareJoin(pendingLink)
@@ -282,6 +303,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun go(screen: Screen, tab: Boolean = false) {
+        if (_state.value.locked) return
         if (screen == Screen.Invite && !RoleRules.canInvite(_state.value.profile?.role)) {
             return
         }
@@ -335,6 +357,7 @@ class RopeRepository(private val app: Application) {
                 cancelPendingMedia()
                 true
             }
+            BackLayer.StayLocked -> true
             BackLayer.Pop -> {
                 persistOpenDraft()
                 val next = BackStack.pop(BackStack.currentStack(s.backStack, s.screen))
@@ -596,6 +619,164 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(composerPreview = null)
         } else {
             scheduleUnfurl(_state.value.draftText)
+        }
+    }
+
+    fun lock() {
+        lockJob?.cancel()
+        identity = null
+        _state.value = _state.value.copy(
+            locked = true,
+            messages = emptyList(),
+            conversations = emptyList(),
+            draftText = "",
+            viewingImage = null,
+            messageQuery = "",
+            chatQuery = "",
+            replyTo = null,
+            replySpan = null,
+            editTarget = null,
+            forwarding = null,
+            pendingAttachments = emptyList(),
+            composerPreview = null,
+            lockError = null,
+            appLock = store.appLock().toUi(),
+        )
+    }
+
+    fun unlockWithPin(pin: String) {
+        val cfg = store.appLock()
+        val now = System.currentTimeMillis()
+        if (AppLockRules.inputBlocked(now, cfg.lockedUntilMs)) {
+            val wait = ((cfg.lockedUntilMs - now) / 1000).coerceAtLeast(1)
+            _state.value = _state.value.copy(lockError = "${AppLockRules.WAIT} $wait с")
+            return
+        }
+        val hmac = runCatching { vault.hmacPin(pin) }.getOrNull()
+        if (hmac == null || !AppLockRules.hmacMatches(cfg.hmacHex, hmac)) {
+            val next = AppLockRules.afterFail(cfg, now)
+            store.saveAppLock(next)
+            val wait = ((next.lockedUntilMs - now) / 1000).coerceAtLeast(0)
+            _state.value = _state.value.copy(
+                appLock = next.toUi(),
+                lockError = if (wait > 0) "${AppLockRules.WRONG}. ${AppLockRules.WAIT} $wait с" else AppLockRules.WRONG,
+            )
+            return
+        }
+        finishUnlock(cfg)
+    }
+
+    fun unlockAfterBiometric() {
+        val cfg = store.appLock()
+        if (!cfg.enabled || !cfg.biometric) return
+        finishUnlock(cfg)
+    }
+
+    fun enableAppLock(pin: String) {
+        if (identity == null || _state.value.locked) return
+        if (!AppLockRules.pinOk(pin)) {
+            _state.value = _state.value.copy(error = "PIN — 4–8 цифр")
+            return
+        }
+        val hmac = runCatching { vault.hmacPin(pin) }.getOrNull() ?: return
+        val timeout = store.appLock().timeoutMs
+        val next = AppLockState(
+            enabled = true,
+            biometric = false,
+            timeoutMs = timeout,
+            hmacHex = AppLockRules.toHex(hmac),
+            pinLen = pin.length,
+        )
+        store.saveAppLock(next)
+        runCatching { vault.rotateWrapForLock((timeout / 1000L).toInt()) }
+        _state.value = _state.value.copy(appLock = next.toUi(), error = null)
+    }
+
+    fun disableAppLock(pin: String) {
+        val cfg = store.appLock()
+        val hmac = runCatching { vault.hmacPin(pin) }.getOrNull()
+        if (hmac == null || !AppLockRules.hmacMatches(cfg.hmacHex, hmac)) {
+            _state.value = _state.value.copy(error = AppLockRules.WRONG)
+            return
+        }
+        val next = AppLockState()
+        store.saveAppLock(next)
+        _state.value = _state.value.copy(appLock = next.toUi(), error = null)
+    }
+
+    fun toggleAppLockBiometric() {
+        val cfg = store.appLock()
+        if (!cfg.enabled) return
+        val next = cfg.copy(biometric = !cfg.biometric)
+        store.saveAppLock(next)
+        _state.value = _state.value.copy(appLock = next.toUi())
+    }
+
+    fun setAppLockTimeout(ms: Long) {
+        val cfg = store.appLock()
+        if (!cfg.enabled) return
+        val next = cfg.copy(timeoutMs = AppLockRules.timeoutMs(ms))
+        store.saveAppLock(next)
+        _state.value = _state.value.copy(appLock = next.toUi())
+    }
+
+    fun onAppBackground() {
+        if (!_state.value.sessionReady) return
+        lastBackgroundedAt = System.currentTimeMillis()
+        lockJob?.cancel()
+        val cfg = store.appLock()
+        if (!cfg.enabled || _state.value.locked) return
+        if (cfg.timeoutMs == 0L) {
+            lock()
+            return
+        }
+        lockJob = scope.launch {
+            delay(cfg.timeoutMs)
+            if (AppLockRules.shouldLockOnStop(
+                    store.appLock().enabled,
+                    store.appLock().timeoutMs,
+                    lastBackgroundedAt,
+                    System.currentTimeMillis(),
+                )
+            ) {
+                lock()
+            }
+        }
+    }
+
+    fun onAppForeground() {
+        if (!_state.value.sessionReady) return
+        lockJob?.cancel()
+        val cfg = store.appLock()
+        if (!cfg.enabled || _state.value.locked) return
+        if (AppLockRules.shouldLockOnStop(cfg.enabled, cfg.timeoutMs, lastBackgroundedAt, System.currentTimeMillis())) {
+            lock()
+        }
+    }
+
+    private fun finishUnlock(cfg: AppLockState) {
+        val bytes = runCatching { vault.load() }.getOrNull()
+        if (bytes == null) {
+            _state.value = _state.value.copy(lockError = "Не удалось открыть ключ")
+            return
+        }
+        identity = DeviceIdentity.fromBytes(bytes)
+        val next = AppLockRules.afterUnlock(cfg)
+        store.saveAppLock(next)
+        _state.value = _state.value.copy(
+            locked = false,
+            appLock = next.toUi(),
+            lockError = null,
+        )
+        val profile = store.profile()
+        if (profile != null) {
+            if (api == null) {
+                attached(profile)
+            } else {
+                api = ServerApi(profile, identity!!)
+                refreshConversations()
+                refreshOpenChat()
+            }
         }
     }
 
@@ -1556,6 +1737,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun restoreFromFile(bytes: ByteArray) {
+        if (_state.value.locked) return
         scope.launch {
             try {
                 applyDeviceBackup(DeviceBackup.open(bytes, vault::unwrap))
@@ -2155,6 +2337,7 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun persistOpenDraft() {
+        if (_state.value.locked) return
         val id = openChatId() ?: return
         val cur = store.chatPrefs(id)
         if (cur.draft == _state.value.draftText) return
@@ -2466,6 +2649,10 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun refreshConversations() {
+        if (_state.value.locked) {
+            _state.value = _state.value.copy(conversations = emptyList(), messages = emptyList())
+            return
+        }
         val devices = _state.value.devices
         val groups = _state.value.groups
         val lastBy = store.conversations().associate { it.first to it.second }
@@ -2641,8 +2828,14 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun handleDeliver(obj: JSONObject) {
+        val id = identity
+        if (id == null) {
+            if (_state.value.locked && !_state.value.notificationsMuted) {
+                notifier.message(AppLockRules.SHADE_TITLE, AppLockRules.SHADE_BODY, "app-lock".hashCode())
+            }
+            return
+        }
         val env = Base64.decode(obj.getString("envelope"), Base64.DEFAULT)
-        val id = identity ?: return
         val meta = uniffi.rope_core.parseEnvelope(env)
         val sender = findSender(meta.senderId) ?: return
         if (!knownEnvelopeType(meta.msgType)) {
@@ -3407,7 +3600,12 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            val locked = _state.value.locked
+            notifier.message(
+                AppLockRules.shadeTitle(locked, title),
+                AppLockRules.shadeBody(locked, body),
+                AlbumRules.notifyId(body, albumId),
+            )
         }
     }
 
@@ -3510,6 +3708,7 @@ class RopeRepository(private val app: Application) {
             .toString()
 
     private fun refreshMessages(peerId: String) {
+        if (_state.value.locked) return
         val openId = when {
             _state.value.group != null -> ChatIds.group(_state.value.group!!.groupId)
             else -> _state.value.peer?.deviceId
@@ -3521,6 +3720,10 @@ class RopeRepository(private val app: Application) {
     }
 
     private fun refreshOpenChat() {
+        if (_state.value.locked) {
+            _state.value = _state.value.copy(messages = emptyList())
+            return
+        }
         val openId = when {
             _state.value.group != null -> ChatIds.group(_state.value.group!!.groupId)
             else -> _state.value.peer?.deviceId

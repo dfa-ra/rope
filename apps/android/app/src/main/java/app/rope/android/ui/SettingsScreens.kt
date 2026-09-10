@@ -14,16 +14,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.AppLockRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +45,10 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onEnableAppLock: (String) -> Unit = {},
+    onDisableAppLock: (String) -> Unit = {},
+    onToggleAppLockBiometric: () -> Unit = {},
+    onSetAppLockTimeout: (Long) -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -72,6 +85,80 @@ fun SettingsPane(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+            }
+        }
+        FadeIn(100) {
+            var pinA by remember { mutableStateOf("") }
+            var pinB by remember { mutableStateOf("") }
+            var pinOff by remember { mutableStateOf("") }
+            val lock = state.appLock
+            SectionCard {
+                Text(AppLockRules.SECTION, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    AppLockRules.hint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!lock.enabled) {
+                    OutlinedTextField(
+                        pinA,
+                        { pinA = it.filter { ch -> ch.isDigit() }.take(AppLockRules.PIN_MAX) },
+                        label = { Text("Новый PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        pinB,
+                        { pinB = it.filter { ch -> ch.isDigit() }.take(AppLockRules.PIN_MAX) },
+                        label = { Text("Ещё раз") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(
+                        onClick = { if (pinA == pinB) onEnableAppLock(pinA) },
+                        enabled = AppLockRules.pinOk(pinA) && pinA == pinB,
+                    ) { Text(AppLockRules.PIN_TITLE) }
+                } else {
+                    Text(AppLockRules.PIN_TITLE, style = MaterialTheme.typography.bodyLarge)
+                    OutlinedTextField(
+                        pinOff,
+                        { pinOff = it.filter { ch -> ch.isDigit() }.take(AppLockRules.PIN_MAX) },
+                        label = { Text("Текущий PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(onClick = { onDisableAppLock(pinOff) }, enabled = AppLockRules.pinOk(pinOff)) {
+                        Text("Выключить")
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(AppLockRules.BIO_TITLE, style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Switch(
+                            checked = lock.biometric,
+                            onCheckedChange = { onToggleAppLockBiometric() },
+                            modifier = Modifier.semantics { contentDescription = AppLockRules.BIO_TITLE },
+                        )
+                    }
+                    Text(AppLockRules.TIMEOUT_TITLE, style = MaterialTheme.typography.bodyLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AppLockRules.timeouts.forEach { (ms, label) ->
+                            FilterChip(
+                                selected = lock.timeoutMs == ms,
+                                onClick = { onSetAppLockTimeout(ms) },
+                                label = { Text(label) },
+                            )
+                        }
                     }
                 }
             }

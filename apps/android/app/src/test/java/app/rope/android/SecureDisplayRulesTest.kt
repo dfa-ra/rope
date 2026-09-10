@@ -13,5 +13,7 @@ class SecureDisplayRulesTest {
         assertFalse(SecureDisplayRules.lockRecents(Screen.Home))
         assertFalse(SecureDisplayRules.lockRecents(Screen.Chat))
         assertFalse(SecureDisplayRules.lockRecents(Screen.Start))
+        assertTrue(SecureDisplayRules.lockRecents(Screen.Chat, appLockEnabled = true))
+        assertFalse(SecureDisplayRules.lockRecents(Screen.Chat, appLockEnabled = false))
     }
 }

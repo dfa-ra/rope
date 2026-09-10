@@ -16,10 +16,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import app.rope.android.data.AppLockRules
 import app.rope.android.data.CallMediaStart
 import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
@@ -138,6 +142,14 @@ class MainActivity : AppCompatActivity() {
                 if (canInstallPackages() && startedInstallFor == null) tryInstallPending()
             }
         })
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                repo.onAppBackground()
+            }
+            override fun onStart(owner: LifecycleOwner) {
+                repo.onAppForeground()
+            }
+        })
         setContent {
             val state by repo.state.collectAsState()
             LaunchedEffect(Unit) { composeReady.set(true) }
@@ -145,8 +157,8 @@ class MainActivity : AppCompatActivity() {
                 startedInstallFor = null
                 if (state.pendingApkPath != null) tryInstallPending()
             }
-            LaunchedEffect(state.screen) {
-                if (SecureDisplayRules.lockRecents(state.screen)) {
+            LaunchedEffect(state.screen, state.appLock.enabled) {
+                if (SecureDisplayRules.lockRecents(state.screen, state.appLock.enabled)) {
                     window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -235,6 +247,12 @@ class MainActivity : AppCompatActivity() {
                     onSetTheme = repo::setTheme,
                     onToggleNotifications = repo::toggleNotificationsMuted,
                     onToggleLinkPreviews = repo::toggleLinkPreviews,
+                    onUnlockPin = repo::unlockWithPin,
+                    onUnlockBiometric = { promptAppLockBiometric() },
+                    onEnableAppLock = repo::enableAppLock,
+                    onDisableAppLock = repo::disableAppLock,
+                    onToggleAppLockBiometric = repo::toggleAppLockBiometric,
+                    onSetAppLockTimeout = repo::setAppLockTimeout,
                     onCopyText = repo::copyText,
                     onReply = repo::startReply,
                     onReplySpan = repo::setReplySpan,
@@ -352,5 +370,28 @@ class MainActivity : AppCompatActivity() {
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
         )
         return false
+    }
+
+    private fun promptAppLockBiometric() {
+        val repo = (application as RopeApp).repo
+        val lock = repo.state.value.appLock
+        if (!lock.enabled || !lock.biometric) return
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    repo.unlockAfterBiometric()
+                }
+            },
+        )
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle(AppLockRules.SECTION)
+                .setSubtitle(AppLockRules.BIO_TITLE)
+                .setNegativeButtonText("PIN")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build(),
+        )
     }
 }

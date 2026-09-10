@@ -6,6 +6,6 @@ package app.rope.android
  * Invite QR stays shareable. Not envelope crypto.
  */
 object SecureDisplayRules {
-    fun lockRecents(screen: Screen): Boolean =
-        screen == Screen.Provision || screen == Screen.Join
+    fun lockRecents(screen: Screen, appLockEnabled: Boolean = false): Boolean =
+        appLockEnabled || screen == Screen.Provision || screen == Screen.Join
 }
