@@ -65,6 +65,7 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.NotifReplyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -240,6 +241,7 @@ class RopeRepository(private val app: Application) {
     private var iceCachedAtMs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toneOutgoing: Boolean? = null
+    private var pendingNotifReply: Pair<String, String>? = null
 
     fun start(pendingLink: String?) {
         if (!sessionStarted.compareAndSet(false, true)) {
@@ -271,6 +273,7 @@ class RopeRepository(private val app: Application) {
                 error(e)
             } finally {
                 _state.value = _state.value.copy(sessionReady = true)
+                tryConsumeNotifReply()
             }
         }
     }
@@ -567,6 +570,67 @@ class RopeRepository(private val app: Application) {
             else -> _state.value = _state.value.copy(
                 error = "Этой группы нет. Голосовые и фото вернулись в личный чат.",
             )
+        }
+    }
+
+    fun sendFromNotification(chatId: String, text: String) {
+        val id = NotifReplyRules.chatId(chatId) ?: return
+        val body = NotifReplyRules.text(text) ?: return
+        if (!NotifReplyRules.allowsReply(id)) return
+        pendingNotifReply = id to body
+        tryConsumeNotifReply()
+    }
+
+    private fun tryConsumeNotifReply() {
+        if (!_state.value.sessionReady) return
+        if (_state.value.profile == null) return
+        val pending = pendingNotifReply ?: return
+        val id = NotifReplyRules.chatId(pending.first) ?: return
+        val body = NotifReplyRules.text(pending.second) ?: return
+        if (!NotifReplyRules.allowsReply(id)) {
+            pendingNotifReply = null
+            return
+        }
+        if (!canSendNotifReply(id)) return
+        pendingNotifReply = null
+        scope.launch { dispatchNotifReply(id, body) }
+    }
+
+    private fun canSendNotifReply(chatId: String): Boolean {
+        val id = NotifReplyRules.chatId(chatId) ?: return false
+        if (SavedMessagesRules.isSaved(id)) return false
+        if (ChatIds.isGroup(id)) {
+            val gid = ChatIds.rawGroupId(id)
+            return _state.value.groups.find { it.groupId == gid } != null || store.group(gid) != null
+        }
+        return resolveNotifReplyPeer(id) != null
+    }
+
+    private fun resolveNotifReplyPeer(chatId: String): DirectoryDevice? {
+        val conv = _state.value.conversations.find { PeerIds.same(it.id, chatId) }
+        val peer = conv?.peer
+            ?: PeerIds.findDevice(_state.value.devices, chatId)
+            ?: conv?.takeIf { !it.isGroup }?.let {
+                DirectoryDevice(it.id, "", it.title, ByteArray(0), "", it.online)
+            }
+        if (peer != null && peer.publicIdentity.isNotEmpty()) return peer
+        return null
+    }
+
+    private suspend fun dispatchNotifReply(chatId: String, text: String) {
+        val id = NotifReplyRules.chatId(chatId) ?: return
+        val body = NotifReplyRules.text(text) ?: return
+        when {
+            SavedMessagesRules.isSaved(id) -> return
+            ChatIds.isGroup(id) -> {
+                val gid = ChatIds.rawGroupId(id)
+                val g = _state.value.groups.find { it.groupId == gid } ?: store.group(gid) ?: return
+                sendGroupText(g, body)
+            }
+            else -> {
+                val dest = resolveNotifReplyPeer(id) ?: return
+                sendPeerText(dest, body, replyPack(null), null)
+            }
         }
     }
 
@@ -2082,6 +2146,7 @@ class RopeRepository(private val app: Application) {
         connectSocket(withIce)
         RopeConnectionService.start(app)
         checkAppUpdate(openStatus = false)
+        tryConsumeNotifReply()
     }
 
     private fun refreshIceServers(profile: ServerProfile): ServerProfile {
@@ -2481,6 +2546,7 @@ class RopeRepository(private val app: Application) {
                 _state.value = _state.value.copy(devices = devices, groups = stored, peer = peer, group = group)
                 refreshConversations()
                 refreshOpenChat()
+                tryConsumeNotifReply()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(offline = true, error = e.message)
             }
@@ -3429,7 +3495,7 @@ class RopeRepository(private val app: Application) {
             refreshConversations()
         }
         if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
-            notifier.message(title, body, AlbumRules.notifyId(body, albumId))
+            notifier.message(title, body, AlbumRules.notifyId(body, albumId), chatId = chatId)
         }
     }
 

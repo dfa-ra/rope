@@ -9,7 +9,10 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.PendingIntentCompat
+import androidx.core.app.RemoteInput
 import app.rope.android.MainActivity
+import app.rope.android.data.NotifReplyRules
 import app.rope.android.data.NotifyRules
 
 class RopeNotifier(private val context: Context) {
@@ -29,21 +32,53 @@ class RopeNotifier(private val context: Context) {
         }
     }
 
-    fun message(title: String, body: String, notifyId: Int = body.hashCode()) {
+    fun message(
+        title: String,
+        body: String,
+        notifyId: Int = body.hashCode(),
+        chatId: String? = null,
+    ) {
         val intent = PendingIntent.getActivity(
             context,
             1,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, MSG)
+        val builder = NotificationCompat.Builder(context, MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(intent)
             .setAutoCancel(true)
-            .build()
-        runCatching { NotificationManagerCompat.from(context).notify(notifyId, n) }
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+        val id = NotifReplyRules.chatId(chatId)
+        if (id != null && NotifReplyRules.allowsReply(id)) {
+            val replyIntent = Intent(context, NotifReplyReceiver::class.java).apply {
+                action = NotifReplyRules.ACTION
+                putExtra(NotifReplyRules.EXTRA_CHAT_ID, id)
+                putExtra(NotifReplyRules.EXTRA_NOTIFY_ID, notifyId)
+            }
+            val replyPi = PendingIntentCompat.getBroadcast(
+                context,
+                NotifReplyRules.requestCode(id),
+                replyIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT,
+                true,
+            )
+            if (replyPi != null) {
+                val remote = RemoteInput.Builder(NotifReplyRules.REMOTE_KEY)
+                    .setLabel(NotifReplyRules.LABEL)
+                    .build()
+                builder.addAction(
+                    NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_menu_send,
+                        NotifReplyRules.LABEL,
+                        replyPi,
+                    ).addRemoteInput(remote).build(),
+                )
+            }
+        }
+        runCatching { NotificationManagerCompat.from(context).notify(notifyId, builder.build()) }
     }
 
     fun incomingCall(name: String) {
