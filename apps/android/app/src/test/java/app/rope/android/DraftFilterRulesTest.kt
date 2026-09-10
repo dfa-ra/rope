@@ -94,7 +94,9 @@ class DraftFilterRulesTest {
     fun archiveRowHiddenAndEmptyCopy() {
         assertTrue(DraftFilterRules.hideArchiveRow(true))
         assertFalse(DraftFilterRules.hideArchiveRow(false))
-        assertFalse(ArchiveRules.rowVisible(1, ChatListMode.ALL, forwarding = false) && DraftFilterRules.hideArchiveRow(true))
+        val archiveWouldShow = ArchiveRules.rowVisible(1, ChatListMode.ALL, forwarding = false) &&
+            !DraftFilterRules.hideArchiveRow(true)
+        assertFalse(archiveWouldShow)
         assertFalse(DraftFilterRules.showFab(true, ChatListMode.ALL, "", forwarding = false))
         assertTrue(DraftFilterRules.showFab(false, ChatListMode.ALL, "", forwarding = false))
         val empty = DraftFilterRules.emptyCopy(true, ChatListMode.ALL, "", forwarding = false, role = "owner")
