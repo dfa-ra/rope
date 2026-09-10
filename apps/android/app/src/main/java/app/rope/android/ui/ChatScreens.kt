@@ -213,7 +213,7 @@ fun ChatsPane(
     Column(Modifier.fillMaxSize()) {
         val forwarding = state.forwarding
         when {
-            forwarding != null -> {
+            forwarding.isNotEmpty() -> {
                 Surface(
                     tonalElevation = 3.dp,
                     shape = RoundedCornerShape(bottomStart = RopeShapes.card, bottomEnd = RopeShapes.card),
@@ -227,7 +227,7 @@ fun ChatsPane(
                         Column(Modifier.weight(1f)) {
                             Text("Переслать в чат", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                forwarding.preview(),
+                                ForwardRules.banner(forwarding),
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -270,7 +270,7 @@ fun ChatsPane(
                 ChatListMode.ALL -> "Поиск"
             },
         )
-        val isForwarding = state.forwarding != null
+        val isForwarding = ForwardRules.active(state.forwarding)
         val archived = ArchiveRules.archivedOf(state.conversations)
         val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
         val rows = ChatListRules.rows(source, state.chatQuery, listMode)
@@ -350,7 +350,7 @@ fun ChatsPane(
                     }
                 }
             }
-            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, state.forwarding != null)) {
+            if (ChatListEmptyRules.showFab(listMode, state.chatQuery, isForwarding)) {
                 FloatingActionButton(
                     onClick = onNewGroup,
                     modifier = Modifier
@@ -735,7 +735,7 @@ fun ChatPane(
     onReplySpan: (QuoteSpan?) -> Unit = {},
     onEdit: (ChatMessage) -> Unit = {},
     onDelete: (ChatMessage) -> Unit = {},
-    onForward: (ChatMessage) -> Unit = {},
+    onForward: (List<ChatMessage>) -> Unit = {},
     onCancelComposer: () -> Unit = {},
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
@@ -845,7 +845,7 @@ fun ChatPane(
                 }
                 if (selectedMsgs.any { ChatActions.canForward(it) }) {
                     IconButton(onClick = {
-                        selectedMsgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                        onForward(ForwardRules.pick(selectedMsgs))
                         selectedIds = emptySet()
                     }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Переслать")
@@ -1057,7 +1057,7 @@ fun ChatPane(
                         selectedIds = emptySet()
                     },
                     onForward = {
-                        selectedMsgs.firstOrNull { ChatActions.canForward(it) }?.let(onForward)
+                        onForward(ForwardRules.pick(selectedMsgs))
                         selectedIds = emptySet()
                     },
                 )
@@ -1132,7 +1132,7 @@ fun ChatPane(
             },
             onReply = { onReply(target); menuMessage = null },
             onCopy = { onCopy(target); menuMessage = null },
-            onForward = { onForward(target); menuMessage = null },
+            onForward = { onForward(listOf(target)); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },

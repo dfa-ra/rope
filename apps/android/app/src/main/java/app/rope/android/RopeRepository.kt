@@ -174,7 +174,7 @@ data class UiState(
     val replyTo: ChatMessage? = null,
     val replySpan: QuoteSpan? = null,
     val editTarget: ChatMessage? = null,
-    val forwarding: ChatMessage? = null,
+    val forwarding: List<ChatMessage> = emptyList(),
     val chatQuery: String = "",
     val messageQuery: String = "",
     val typingName: String? = null,
@@ -552,7 +552,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun openConversation(c: Conversation) {
-        if (_state.value.forwarding != null) {
+        if (ForwardRules.active(_state.value.forwarding)) {
             completeForward(c)
             return
         }
@@ -726,10 +726,15 @@ class RopeRepository(private val app: Application) {
     }
 
     fun startForward(msg: ChatMessage) {
-        if (msg.deleted) return
+        startForward(listOf(msg))
+    }
+
+    fun startForward(msgs: List<ChatMessage>) {
+        val batch = ForwardRules.pick(msgs)
+        if (batch.isEmpty()) return
         val stack = BackStack.listForForward(BackStack.currentStack(_state.value.backStack, _state.value.screen))
         _state.value = _state.value.copy(
-            forwarding = msg,
+            forwarding = batch,
             screen = stack.last(),
             backStack = stack,
             replyTo = null,
@@ -740,7 +745,7 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelForward() {
-        _state.value = _state.value.copy(forwarding = null)
+        _state.value = _state.value.copy(forwarding = emptyList())
     }
 
     fun togglePinChat(id: String) {
@@ -818,22 +823,25 @@ class RopeRepository(private val app: Application) {
     }
 
     fun completeForward(c: Conversation) {
-        val src = _state.value.forwarding ?: return
-        _state.value = _state.value.copy(forwarding = null)
+        val batch = _state.value.forwarding
+        if (batch.isEmpty()) return
+        _state.value = _state.value.copy(forwarding = emptyList())
+        val group = c.group
+        val peer = c.peer
         scope.launch {
             try {
                 when {
                     SavedMessagesRules.isSaved(c.id) -> {
-                        forwardToSaved(src)
+                        batch.forEach(::forwardToSaved)
                         openSaved()
                     }
-                    c.group != null -> {
-                        forwardToGroup(c.group, src)
-                        openGroup(c.group)
+                    group != null -> {
+                        batch.forEach { forwardToGroup(group, it) }
+                        openGroup(group)
                     }
-                    c.peer != null -> {
-                        forwardToPeer(c.peer, src)
-                        openChat(c.peer)
+                    peer != null -> {
+                        batch.forEach { forwardToPeer(peer, it) }
+                        openChat(peer)
                     }
                     else -> notice("некуда переслать")
                 }

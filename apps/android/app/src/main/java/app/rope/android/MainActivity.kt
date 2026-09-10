@@ -240,7 +240,7 @@ class MainActivity : AppCompatActivity() {
                     onReplySpan = repo::setReplySpan,
                     onEdit = repo::startEdit,
                     onDelete = repo::deleteMessage,
-                    onForward = repo::startForward,
+                    onForward = { repo.startForward(it) },
                     onCancelComposer = repo::cancelComposerExtra,
                     onDismissLinkPreview = repo::dismissComposerPreview,
                     onCancelPendingMedia = repo::cancelPendingMedia,

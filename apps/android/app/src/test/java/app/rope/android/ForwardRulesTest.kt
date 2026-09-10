@@ -90,6 +90,25 @@ class ForwardRulesTest {
         assertNull(plain.forwardedFrom)
     }
 
+    @Test
+    fun pickAllForwardableAndBannerCounts() {
+        assertEquals(6, app.rope.android.data.LocalStore.VERSION)
+        val a = msg().copy(id = "a", text = "один")
+        val gone = msg().copy(id = "g", text = "нет", deleted = true)
+        val b = msg().copy(id = "b", text = "два")
+        assertEquals(listOf(a, b), ForwardRules.pick(listOf(a, gone, b)))
+        assertTrue(ForwardRules.pick(listOf(gone)).isEmpty())
+        assertFalse(ForwardRules.active(emptyList()))
+        assertTrue(ForwardRules.active(listOf(a)))
+        assertEquals("один", ForwardRules.banner(listOf(a)))
+        assertEquals("2 сообщения", ForwardRules.banner(listOf(a, b)))
+        assertEquals("1 сообщение", ForwardRules.countLabel(1))
+        assertEquals("3 сообщения", ForwardRules.countLabel(3))
+        assertEquals("5 сообщений", ForwardRules.countLabel(5))
+        assertEquals("11 сообщений", ForwardRules.countLabel(11))
+        assertEquals("21 сообщение", ForwardRules.countLabel(21))
+    }
+
     private fun msg(
         forwardedFrom: String? = null,
         replyToId: String? = null,

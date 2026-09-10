@@ -186,7 +186,7 @@ class BackStackTest {
         )
         assertEquals(
             BackLayer.CancelForward,
-            BackStack.decide(base.copy(screen = Screen.Chats, backStack = listOf(Screen.Chats), forwarding = photo)),
+            BackStack.decide(base.copy(screen = Screen.Chats, backStack = listOf(Screen.Chats), forwarding = listOf(photo))),
         )
         assertEquals(BackLayer.CancelComposer, BackStack.decide(base.copy(replyTo = photo)))
         assertEquals(BackLayer.CancelComposer, BackStack.composerBack(hasReply = true, hasEdit = false, pendingCount = 2))

@@ -102,7 +102,7 @@ object BackStack {
         hints.dialogOpen -> BackLayer.CloseDialog
         state.messageQuery.isNotBlank() -> BackLayer.ClearMessageQuery
         NavRules.backClearsChatQuery(state.screen) && state.chatQuery.isNotBlank() -> BackLayer.ClearChatQuery
-        state.forwarding != null -> BackLayer.CancelForward
+        state.forwarding.isNotEmpty() -> BackLayer.CancelForward
         else -> {
             val composer = if (composerLive(state.screen)) {
                 composerBack(

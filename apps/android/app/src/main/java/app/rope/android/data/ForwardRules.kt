@@ -31,4 +31,27 @@ object ForwardRules {
 
     fun isMasqueradingReply(replyName: String): Boolean =
         replyName.trim().startsWith(LEGACY_PREFIX)
+
+    fun pick(msgs: List<ChatMessage>): List<ChatMessage> =
+        msgs.filter { ChatActions.canForward(it) }
+
+    fun active(msgs: List<ChatMessage>): Boolean = msgs.isNotEmpty()
+
+    fun banner(msgs: List<ChatMessage>): String = when (msgs.size) {
+        0 -> ""
+        1 -> msgs.first().preview()
+        else -> countLabel(msgs.size)
+    }
+
+    fun countLabel(n: Int): String {
+        val abs = n.coerceAtLeast(0)
+        val n10 = abs % 10
+        val n100 = abs % 100
+        val noun = when {
+            n10 == 1 && n100 != 11 -> "сообщение"
+            n10 in 2..4 && n100 !in 12..14 -> "сообщения"
+            else -> "сообщений"
+        }
+        return "$abs $noun"
+    }
 }

@@ -160,7 +160,7 @@ fun RopeScaffold(
     onReplySpan: (app.rope.android.data.QuoteSpan?) -> Unit = {},
     onEdit: (app.rope.android.data.ChatMessage) -> Unit,
     onDelete: (app.rope.android.data.ChatMessage) -> Unit,
-    onForward: (app.rope.android.data.ChatMessage) -> Unit,
+    onForward: (List<app.rope.android.data.ChatMessage>) -> Unit,
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
