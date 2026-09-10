@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.PrivacyCallsRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleRejectIncoming: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -120,6 +122,32 @@ fun SettingsPane(
                             if (checked != state.linkPreviewsEnabled) onToggleLinkPreviews()
                         },
                         modifier = Modifier.semantics { contentDescription = "Предпросмотр ссылок" },
+                    )
+                }
+            }
+        }
+        FadeIn(140) {
+            SectionCard {
+                Text(PrivacyCallsRules.TITLE, style = MaterialTheme.typography.titleMedium)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(PrivacyCallsRules.LABEL, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            PrivacyCallsRules.HINT,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.rejectIncomingCalls,
+                        onCheckedChange = { checked ->
+                            if (checked != state.rejectIncomingCalls) onToggleRejectIncoming()
+                        },
+                        modifier = Modifier.semantics { contentDescription = PrivacyCallsRules.LABEL },
                     )
                 }
             }

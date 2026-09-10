@@ -46,6 +46,7 @@ import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
+import app.rope.android.data.PrivacyCallsRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.GroupNameRules
 import app.rope.android.data.SavedMessagesRules
@@ -168,6 +169,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val rejectIncomingCalls: Boolean = false,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -257,6 +259,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    rejectIncomingCalls = store.rejectIncomingCalls(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -598,6 +601,12 @@ class RopeRepository(private val app: Application) {
         } else {
             scheduleUnfurl(_state.value.draftText)
         }
+    }
+
+    fun toggleRejectIncomingCalls() {
+        val next = !_state.value.rejectIncomingCalls
+        store.saveRejectIncomingCalls(next)
+        _state.value = _state.value.copy(rejectIncomingCalls = next)
     }
 
     fun dismissComposerPreview() {
@@ -2944,14 +2953,17 @@ class RopeRepository(private val app: Application) {
                     audioMode(true)
                 }
                 CallEffect.RingIn -> {
-                    val s = callMachine.state
-                    val chatMuted = store.chatPrefs(s.peerDeviceId).muted
-                    if (CallToneRules.shouldPlayRing(s.phase, s.link, s.mediaUp) &&
-                        CallToneRules.shouldRingIncoming(_state.value.notificationsMuted, chatMuted)
-                    ) {
-                        startTone(false)
+                    val autoReject = PrivacyCallsRules.shouldAutoReject(_state.value.rejectIncomingCalls)
+                    if (!autoReject) {
+                        val s = callMachine.state
+                        val chatMuted = store.chatPrefs(s.peerDeviceId).muted
+                        if (CallToneRules.shouldPlayRing(s.phase, s.link, s.mediaUp) &&
+                            CallToneRules.shouldRingIncoming(_state.value.notificationsMuted, chatMuted)
+                        ) {
+                            startTone(false)
+                        }
+                        audioMode(true)
                     }
-                    audioMode(true)
                 }
                 CallEffect.StopTone -> stopTone()
                 CallEffect.ClearNotify -> notifier.clearCall()
@@ -2961,7 +2973,9 @@ class RopeRepository(private val app: Application) {
                     effect.outgoing,
                 )
                 CallEffect.NotifyIncoming -> {
-                    if (CallToneRules.shouldNotifyIncoming(_state.value.notificationsMuted)) {
+                    if (!PrivacyCallsRules.shouldAutoReject(_state.value.rejectIncomingCalls) &&
+                        CallToneRules.shouldNotifyIncoming(_state.value.notificationsMuted)
+                    ) {
                         notifier.incomingCall(callPeerName)
                     }
                 }
@@ -2977,6 +2991,11 @@ class RopeRepository(private val app: Application) {
                 is CallEffect.Notice -> notice(effect.message)
             }
             if (effect !is CallEffect.TearDown) publishCall()
+        }
+        if (PrivacyCallsRules.shouldAutoReject(_state.value.rejectIncomingCalls) &&
+            callMachine.state.phase == CallPhase.RINGING_IN
+        ) {
+            applyCallEffects(callMachine.localReject())
         }
     }
 
