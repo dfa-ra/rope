@@ -4,8 +4,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +30,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +41,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
+import app.rope.android.data.VoiceHoldRules
 import app.rope.android.data.VoicePlayback
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Telegram-like voice bubble: play/pause, seekable waveform, 1x/1.5x/2x.
@@ -51,6 +58,7 @@ fun VoiceMessageBubble(
     onPlay: (ChatMessage) -> Unit,
     onSeek: (ChatMessage, Long) -> Unit,
     onCycleSpeed: () -> Unit,
+    onHold: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val extra = runCatching { MediaPayload.parse(message.extra) }.getOrNull()
@@ -60,6 +68,8 @@ fun VoiceMessageBubble(
     val animated by animateFloatAsState(fraction, tween(80), label = "voiceFrac")
     val sending = VoicePlayback.isSending(message.outgoing, message.status)
     val downloading = extra != null && message.localPath == null
+    var holding by remember(message.id) { mutableStateOf(false) }
+    val shownSpeed = VoiceHoldRules.speed(holding, playing, speed)
     val bars = remember(message.id, extra?.waveform) {
         VoicePlayback.resolveBars(extra?.waveform.orEmpty(), message.id)
     }
@@ -70,13 +80,37 @@ fun VoiceMessageBubble(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            IconButton(onClick = { onPlay(message) }, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    contentDescription = if (playing) "Пауза" else "Голос",
-                )
-            }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(36.dp)
+                .pointerInput(playing, message.id) {
+                    awaitEachGesture {
+                        awaitFirstDown()
+                        var held = false
+                        try {
+                            val up = withTimeoutOrNull(VoiceHoldRules.HOLD_MS) { waitForUpOrCancellation() }
+                            if (up == null && playing) {
+                                held = true
+                                holding = true
+                                onHold(true)
+                                waitForUpOrCancellation()
+                            } else if (up != null) {
+                                onPlay(message)
+                            }
+                        } finally {
+                            if (held) {
+                                holding = false
+                                onHold(false)
+                            }
+                        }
+                    }
+                },
+        ) {
+            Icon(
+                if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                contentDescription = if (playing) "Пауза" else "Голос",
+            )
             if (sending || downloading) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(34.dp),
@@ -114,7 +148,11 @@ fun VoiceMessageBubble(
                 )
                 if (extra != null && !downloading) {
                     Text(
-                        VoicePlayback.speedLabel(speed),
+                        if (VoiceHoldRules.chipVisible(holding, playing)) {
+                            VoiceHoldRules.LABEL
+                        } else {
+                            VoicePlayback.speedLabel(shownSpeed)
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier

@@ -48,6 +48,7 @@ import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SavedVoiceChip
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.TextBody
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val savedVoice: SavedVoiceChip = SavedVoiceChip.ALL,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    savedVoice = store.savedVoice(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -388,6 +391,12 @@ class RopeRepository(private val app: Application) {
 
     fun setMessageQuery(query: String) {
         _state.value = _state.value.copy(messageQuery = query)
+    }
+
+    fun setSavedVoice(chip: SavedVoiceChip) {
+        if (_state.value.savedVoice == chip) return
+        store.saveSavedVoice(chip)
+        _state.value = _state.value.copy(savedVoice = chip)
     }
 
     fun setGroupName(name: String) {
@@ -1139,6 +1148,11 @@ class RopeRepository(private val app: Application) {
 
     fun cycleVoiceSpeed() {
         voicePlayer.cycleSpeed()
+        publishVoiceProgress()
+    }
+
+    fun holdVoice(holding: Boolean) {
+        voicePlayer.setHolding(holding)
         publishVoiceProgress()
     }
 

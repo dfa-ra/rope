@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -158,6 +161,8 @@ import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
+import app.rope.android.data.SavedVoiceChip
+import app.rope.android.data.SavedVoiceRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
@@ -744,6 +749,7 @@ fun ChatPane(
     onJump: (String?) -> Unit = {},
     onOpenImage: (ChatMessage) -> Unit = {},
     onMessageQuery: (String) -> Unit = {},
+    onSetSavedVoice: (SavedVoiceChip) -> Unit = {},
     onConsumedScroll: () -> Unit = {},
     onAttachGallery: () -> Unit = onAttach,
     onAttachFile: () -> Unit = onAttach,
@@ -751,6 +757,7 @@ fun ChatPane(
     onAttachUris: (List<Uri>) -> Unit = { uris -> uris.forEach(onAttachUri) },
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onHoldVoice: (Boolean) -> Unit = {},
     onVideoNoteStart: () -> Unit = {},
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
@@ -774,8 +781,11 @@ fun ChatPane(
             .filter { it.isNotEmpty() }
             .distinct()
     }
-    val visible = remember(state.messages, state.messageQuery) {
-        state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
+    val showSavedVoice = SavedVoiceRules.shows(state.peer?.deviceId, state.group != null)
+    val voiceChip = if (showSavedVoice) state.savedVoice else SavedVoiceChip.ALL
+    val visible = remember(state.messages, state.messageQuery, voiceChip, showSavedVoice) {
+        val scoped = if (showSavedVoice) SavedVoiceRules.apply(state.messages, voiceChip) else state.messages
+        scoped.filter { MessageSearch.matches(it, state.messageQuery) }
     }
     val todayKey = DateSeparatorRules.dayKey(System.currentTimeMillis())
     val threadItems = remember(visible, todayKey, state.unreadAnchorId, state.messageQuery) {
@@ -909,6 +919,25 @@ fun ChatPane(
                 }
             }
         }
+        if (showSavedVoice && !selecting) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SavedVoiceRules.chips().forEach { chip ->
+                    FilterChip(
+                        selected = voiceChip == chip,
+                        onClick = { onSetSavedVoice(chip) },
+                        label = { Text(SavedVoiceRules.label(chip)) },
+                        modifier = Modifier.semantics {
+                            contentDescription = SavedVoiceRules.label(chip)
+                        },
+                    )
+                }
+            }
+        }
         if (showSearch && !selecting) {
             TextField(
                 value = state.messageQuery,
@@ -948,7 +977,11 @@ fun ChatPane(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (visible.isEmpty()) {
-                val empty = ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                val empty = if (showSavedVoice) {
+                    SavedVoiceRules.emptyCopy(voiceChip, state.messageQuery)
+                } else {
+                    ThreadEmptyRules.copy(state.messageQuery, saved = saved)
+                }
                 RopeEmptyState(
                     title = empty.title,
                     body = empty.body,
@@ -1006,6 +1039,7 @@ fun ChatPane(
                                     onSwipeReply = { onReply(m) },
                                     onSeekVoice = onSeekVoice,
                                     onCycleVoiceSpeed = onCycleVoiceSpeed,
+                                    onHoldVoice = onHoldVoice,
                                 )
                             }
                             is ChatThreadItem.Album -> {
@@ -1373,6 +1407,7 @@ private fun MessageBubble(
     onSwipeReply: () -> Unit = {},
     onSeekVoice: (ChatMessage, Long) -> Unit = { _, _ -> },
     onCycleVoiceSpeed: () -> Unit = {},
+    onHoldVoice: (Boolean) -> Unit = {},
 ) {
     val mine = m.outgoing
     val inGroup = state.group != null
@@ -1551,6 +1586,7 @@ private fun MessageBubble(
                                 onPlay = onPlay,
                                 onSeek = onSeekVoice,
                                 onCycleSpeed = onCycleVoiceSpeed,
+                                onHold = onHoldVoice,
                             )
                             MessageKind.VIDEO_NOTE -> VideoNoteBubble(m, onEnsureMedia)
                             MessageKind.FILE -> FileBubble(m)
