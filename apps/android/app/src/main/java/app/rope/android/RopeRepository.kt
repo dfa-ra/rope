@@ -3406,7 +3406,8 @@ class RopeRepository(private val app: Application) {
             store.saveChatPrefs(chatId, cur.copy(unread = cur.unread + 1))
             refreshConversations()
         }
-        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted)) {
+        val mentioned = NotifyRules.mentionsMe(body, NotifyRules.selfMentionNames(_state.value.profile?.displayName))
+        if (NotifyRules.shouldAlert(chatOpen, appForeground, cur.muted, _state.value.notificationsMuted, mentioned)) {
             notifier.message(title, body, AlbumRules.notifyId(body, albumId))
         }
     }

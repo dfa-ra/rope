@@ -171,6 +171,7 @@ import app.rope.android.data.ComposerHintCopy
 import app.rope.android.data.ComposerHintRules
 import app.rope.android.data.ComposerRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.NotifyRules
 import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
@@ -615,7 +616,7 @@ internal fun ConversationRow(
                         if (c.muted) {
                             Icon(
                                 Icons.Outlined.NotificationsOff,
-                                contentDescription = "Без звука",
+                                contentDescription = NotifyRules.MUTED_A11Y,
                                 modifier = Modifier
                                     .padding(start = 4.dp, end = 6.dp)
                                     .size(14.dp),

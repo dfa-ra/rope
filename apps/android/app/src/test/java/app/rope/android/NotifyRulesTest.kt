@@ -3,6 +3,8 @@ package app.rope.android
 import app.rope.android.data.ChatActions
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.ChatSelection
+import app.rope.android.data.GroupChatUx
+import app.rope.android.data.LocalStore
 import app.rope.android.data.MessageKind
 import app.rope.android.data.MessageStatus
 import app.rope.android.data.NotifyRules
@@ -13,11 +15,43 @@ import org.junit.Test
 
 class NotifyRulesTest {
     @Test
-    fun mutedNeverAlerts() {
+    fun mutedWithoutMentionNeverAlerts() {
         assertFalse(NotifyRules.shouldAlert(chatOpen = false, appForeground = false, muted = true))
         assertFalse(NotifyRules.shouldAlert(chatOpen = true, appForeground = true, muted = true))
         assertFalse(NotifyRules.shouldAlert(chatOpen = true, appForeground = false, muted = true))
         assertFalse(NotifyRules.shouldAlert(chatOpen = false, appForeground = false, muted = false, globalMuted = true))
+    }
+
+    @Test
+    fun mutedChatAlertsOnMention() {
+        assertTrue(NotifyRules.shouldAlert(chatOpen = false, appForeground = false, muted = true, mentioned = true))
+        assertTrue(NotifyRules.shouldAlert(chatOpen = true, appForeground = false, muted = true, mentioned = true))
+        assertFalse(NotifyRules.shouldAlert(chatOpen = true, appForeground = true, muted = true, mentioned = true))
+        assertFalse(
+            NotifyRules.shouldAlert(
+                chatOpen = false,
+                appForeground = false,
+                muted = true,
+                globalMuted = true,
+                mentioned = true,
+            ),
+        )
+        assertEquals("Только упоминания", NotifyRules.MUTED_A11Y)
+    }
+
+    @Test
+    fun mentionsMeUsesAtNameSpans() {
+        val names = NotifyRules.selfMentionNames("Анна")
+        assertEquals(listOf("Анна", GroupChatUx.YOU), names)
+        assertTrue(NotifyRules.mentionsMe("смотри @Анна", names))
+        assertTrue(NotifyRules.mentionsMe("эй @Вы", names))
+        assertFalse(NotifyRules.mentionsMe("смотри Анна", names))
+        assertFalse(NotifyRules.mentionsMe("", names))
+    }
+
+    @Test
+    fun noSchemaBump() {
+        assertEquals(6, LocalStore.VERSION)
     }
 
     @Test
