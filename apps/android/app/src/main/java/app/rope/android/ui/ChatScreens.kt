@@ -154,6 +154,7 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.MentionAllRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -769,10 +770,10 @@ fun ChatPane(
         else -> MessageTime.lastSeenLabel(state.peer?.lastSeen.orEmpty(), online)
     }
     val mentionNames = remember(state.group, state.devices, state.profile?.displayName) {
-        (state.devices.map { it.displayName } + listOfNotNull(state.profile?.displayName, GroupChatUx.YOU))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
+        MentionAllRules.names(
+            state.devices.map { it.displayName } + listOfNotNull(state.profile?.displayName, GroupChatUx.YOU),
+            isGroup = state.group != null,
+        )
     }
     val visible = remember(state.messages, state.messageQuery) {
         state.messages.filter { MessageSearch.matches(it, state.messageQuery) }
