@@ -949,8 +949,18 @@ func NewHub() *Hub { return &Hub{clients: map[string]*clientConn{}} }
 
 func (h *Hub) Add(id string, c *clientConn) {
 	h.mu.Lock()
+	old := h.clients[id]
 	h.clients[id] = c
 	h.mu.Unlock()
+	// Close asynchronously. websocket.Conn.Close waits for the peer to
+	// read the close frame; doing it here would stall the replacement
+	// handshake (mailbox_done never lands while the new handler blocks).
+	if old != nil && old != c && old.c != nil {
+		prev := old.c
+		go func() {
+			_ = prev.Close(websocket.StatusPolicyViolation, "replaced")
+		}()
+	}
 }
 
 func (h *Hub) Drop(id string) {
