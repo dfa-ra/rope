@@ -66,6 +66,7 @@ import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
+import app.rope.android.data.NightSchedRules
 import app.rope.android.data.IceServers
 import app.rope.android.data.UserFacing
 import app.rope.android.data.VideoNoteRules
@@ -165,6 +166,7 @@ data class UiState(
     val groupNameDraft: String = "",
     val pickedMembers: Set<String> = emptySet(),
     val theme: ThemeMode = ThemeMode.DARK,
+    val autoNight: Boolean = false,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
@@ -214,6 +216,7 @@ class RopeRepository(private val app: Application) {
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var recordJob: Job? = null
+    private var nightJob: Job? = null
     private var unfurlJob: Job? = null
     @Volatile private var unfurlResult: PackedLinkPreview? = null
     private var voiceProgressJob: Job? = null
@@ -252,8 +255,11 @@ class RopeRepository(private val app: Application) {
                 val night = app.resources.configuration.uiMode and
                     android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
+                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                val autoNight = store.autoNight()
                 _state.value = _state.value.copy(
-                    theme = store.themeMode(night),
+                    theme = NightSchedRules.displayed(autoNight, hour, store.themeMode(night)),
+                    autoNight = autoNight,
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
                 )
@@ -270,6 +276,7 @@ class RopeRepository(private val app: Application) {
                 error(e)
             } finally {
                 _state.value = _state.value.copy(sessionReady = true)
+                tickNightSchedule()
             }
         }
     }
@@ -575,9 +582,37 @@ class RopeRepository(private val app: Application) {
     }
 
     fun setTheme(mode: ThemeMode) {
-        if (_state.value.theme == mode) return
         store.saveTheme(mode)
-        _state.value = _state.value.copy(theme = mode)
+        if (_state.value.autoNight) store.saveAutoNight(false)
+        _state.value = _state.value.copy(theme = mode, autoNight = false)
+    }
+
+    fun toggleAutoNight() {
+        val next = !_state.value.autoNight
+        store.saveAutoNight(next)
+        val night = app.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        _state.value = _state.value.copy(
+            autoNight = next,
+            theme = NightSchedRules.displayed(next, hour, store.themeMode(night)),
+        )
+    }
+
+    private fun tickNightSchedule() {
+        nightJob?.cancel()
+        nightJob = scope.launch {
+            while (true) {
+                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                val cur = _state.value
+                if (cur.autoNight) {
+                    val want = NightSchedRules.scheduledTheme(hour)
+                    if (cur.theme != want) _state.value = cur.copy(theme = want)
+                }
+                delay(30_000)
+            }
+        }
     }
 
     fun toggleNotificationsMuted() {

@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.rope.android.BuildConfig
 import app.rope.android.UiState
+import app.rope.android.data.NightSchedRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.SettingsRules
 import app.rope.android.data.ThemeMode
@@ -36,6 +37,7 @@ fun SettingsPane(
     onToggleNotifications: () -> Unit,
     onCopy: (String) -> Unit,
     onToggleLinkPreviews: () -> Unit = {},
+    onToggleAutoNight: () -> Unit = {},
 ) {
     val me = state.profile?.displayName.orEmpty()
     val profile = state.profile
@@ -136,12 +138,36 @@ fun SettingsPane(
                     FilterChip(
                         selected = state.theme == ThemeMode.DARK,
                         onClick = { onSetTheme(ThemeMode.DARK) },
+                        enabled = !state.autoNight,
                         label = { Text("Тёмная") },
                     )
                     FilterChip(
                         selected = state.theme == ThemeMode.LIGHT,
                         onClick = { onSetTheme(ThemeMode.LIGHT) },
+                        enabled = !state.autoNight,
                         label = { Text("Светлая") },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(NightSchedRules.TITLE, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            NightSchedRules.hint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.autoNight,
+                        onCheckedChange = { checked ->
+                            if (checked != state.autoNight) onToggleAutoNight()
+                        },
+                        modifier = Modifier.semantics { contentDescription = NightSchedRules.TITLE },
                     )
                 }
             }
