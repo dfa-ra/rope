@@ -175,6 +175,8 @@ import app.rope.android.data.MessageSearch
 import app.rope.android.data.MessageTime
 import app.rope.android.data.QuoteSpan
 import app.rope.android.data.QuoteSpanRules
+import app.rope.android.ChatHomePin
+import app.rope.android.data.ChatHomeRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
@@ -271,6 +273,8 @@ fun ChatsPane(
             },
         )
         val isForwarding = state.forwarding != null
+        val context = LocalContext.current
+        val showHome = ChatHomeRules.show(isForwarding)
         val archived = ArchiveRules.archivedOf(state.conversations)
         val source = ArchiveRules.sourceForList(state.conversations, listMode, isForwarding)
         val rows = ChatListRules.rows(source, state.chatQuery, listMode)
@@ -313,6 +317,7 @@ fun ChatsPane(
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                    onAddHome = if (showHome) ({ ChatHomePin.request(context, c) }) else null,
                                 )
                             }
                         }
@@ -335,6 +340,7 @@ fun ChatsPane(
                                 query = state.chatQuery,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                onAddHome = if (showHome) ({ ChatHomePin.request(context, c) }) else null,
                             )
                         }
                     }
@@ -548,6 +554,7 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    onAddHome: (() -> Unit)? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -687,25 +694,29 @@ internal fun ConversationRow(
             }
         }
         if (menu) {
-            Row(
-                Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (onUnarchive != null) {
-                    TextButton(onClick = { onUnarchive(); menu = false }) {
-                        Text(ArchiveRules.UNARCHIVE)
+            Column(Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onUnarchive != null) {
+                        TextButton(onClick = { onUnarchive(); menu = false }) {
+                            Text(ArchiveRules.UNARCHIVE)
+                        }
+                    } else if (ArchiveRules.canPin(c)) {
+                        TextButton(onClick = { onPin(); menu = false }) {
+                            Text(if (c.pinned) "Открепить" else "Закрепить")
+                        }
                     }
-                } else if (ArchiveRules.canPin(c)) {
-                    TextButton(onClick = { onPin(); menu = false }) {
-                        Text(if (c.pinned) "Открепить" else "Закрепить")
+                    TextButton(onClick = { onMute(); menu = false }) {
+                        Text(if (c.muted) "Включить звук" else "Без звука")
+                    }
+                    if (onArchive != null && ArchiveRules.canArchive(c.id)) {
+                        TextButton(onClick = { onArchive(); menu = false }) {
+                            Text(ArchiveRules.ARCHIVE)
+                        }
                     }
                 }
-                TextButton(onClick = { onMute(); menu = false }) {
-                    Text(if (c.muted) "Включить звук" else "Без звука")
-                }
-                if (onArchive != null && ArchiveRules.canArchive(c.id)) {
-                    TextButton(onClick = { onArchive(); menu = false }) {
-                        Text(ArchiveRules.ARCHIVE)
+                if (onAddHome != null && ChatHomeRules.canPin(c.id)) {
+                    TextButton(onClick = { onAddHome(); menu = false }) {
+                        Text(ChatHomeRules.LABEL)
                     }
                 }
             }

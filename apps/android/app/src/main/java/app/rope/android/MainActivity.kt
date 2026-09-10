@@ -21,6 +21,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.rope.android.data.CallMediaStart
+import app.rope.android.data.ChatHomeRules
 import app.rope.android.data.VideoCallRules
 import app.rope.android.update.ApkInstaller
 import com.journeyapps.barcodescanner.ScanContract
@@ -131,6 +132,7 @@ class MainActivity : AppCompatActivity() {
         splash.setKeepOnScreenCondition { !composeReady.get() }
         val repo = (application as RopeApp).repo
         repo.start(intent?.data?.toString())
+        consumeHomeShortcut(intent)
         requestNotifications()
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
@@ -268,6 +270,16 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        consumeHomeShortcut(intent)
+    }
+
+    private fun consumeHomeShortcut(intent: Intent?) {
+        val id = ChatHomeRules.consume(
+            intent?.action,
+            intent?.getStringExtra(ChatHomeRules.EXTRA_CHAT_ID),
+        ) ?: return
+        intent?.removeExtra(ChatHomeRules.EXTRA_CHAT_ID)
+        (application as RopeApp).repo.openFromHomeShortcut(id)
     }
 
     private fun tryInstallPending() {

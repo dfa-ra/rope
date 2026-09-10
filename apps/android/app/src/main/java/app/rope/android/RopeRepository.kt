@@ -26,6 +26,7 @@ import app.rope.android.data.CallSignal
 import app.rope.android.data.CallToneRules
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
+import app.rope.android.data.ChatHomeRules
 import app.rope.android.data.ChatIds
 import app.rope.android.data.ChatMessage
 import app.rope.android.data.Conversation
@@ -239,6 +240,7 @@ class RopeRepository(private val app: Application) {
     private var iceCachedAtMs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toneOutgoing: Boolean? = null
+    @Volatile private var pendingHomeChatId: String? = null
 
     fun start(pendingLink: String?) {
         if (!sessionStarted.compareAndSet(false, true)) {
@@ -549,6 +551,26 @@ class RopeRepository(private val app: Application) {
     fun openSaved() {
         persistOpenDraft()
         enterChat(SavedMessagesRules.ID, SavedMessagesRules.stubPeer(), null)
+    }
+
+    fun openFromHomeShortcut(raw: String?) {
+        val id = ChatHomeRules.sanitizeId(raw) ?: return
+        pendingHomeChatId = id
+        tryOpenPendingHome(giveUpIfMissing = false)
+    }
+
+    private fun tryOpenPendingHome(giveUpIfMissing: Boolean) {
+        val id = pendingHomeChatId ?: return
+        if (_state.value.profile == null) return
+        if (_state.value.forwarding != null) return
+        if (_state.value.conversations.isEmpty()) refreshConversations()
+        val c = _state.value.conversations.find { ChatHomeRules.matches(it.id, id) }
+        if (c != null) {
+            pendingHomeChatId = null
+            openConversation(c)
+            return
+        }
+        if (giveUpIfMissing) pendingHomeChatId = null
     }
 
     fun openConversation(c: Conversation) {
@@ -2458,9 +2480,12 @@ class RopeRepository(private val app: Application) {
                 }
                 _state.value = _state.value.copy(devices = devices, groups = stored, peer = peer, group = group)
                 refreshConversations()
+                tryOpenPendingHome(giveUpIfMissing = true)
                 refreshOpenChat()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(offline = true, error = e.message)
+                refreshConversations()
+                tryOpenPendingHome(giveUpIfMissing = true)
             }
         }
     }
@@ -2558,6 +2583,7 @@ class RopeRepository(private val app: Application) {
         _state.value = _state.value.copy(
             conversations = (listOf(saved) + dms + gs + leftover).sortedWith { a, b -> ChatListRules.compare(a, b) },
         )
+        tryOpenPendingHome(giveUpIfMissing = false)
     }
 
     private fun connectSocket(profile: ServerProfile) {
