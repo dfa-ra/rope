@@ -1,5 +1,7 @@
 package app.rope.android.ui
 
+import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -39,12 +41,13 @@ import app.rope.android.data.ChatMessage
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MessageTime
 import app.rope.android.data.PhotoLayout
+import app.rope.android.data.VideoSpeedRules
 import app.rope.android.media.VideoCodec
 
 /**
  * Telegram-like in-thread video: poster + duration + play in the bubble.
  * Tap/long-press on the bubble still opens the 0.3.2 menu; the play control
- * starts the in-thread player.
+ * starts the in-thread player. 1x/1.5x/2x matches voice notes.
  */
 @Composable
 fun VideoMessageBubble(
@@ -60,12 +63,17 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    var speed by remember(m.id) { mutableStateOf(VideoSpeedRules.clamp(1f)) }
+    val player = remember(m.id) { arrayOfNulls<MediaPlayer>(1) }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
         PhotoLayout.Box(PhotoLayout.MAX_WIDTH_DP, PhotoLayout.MAX_WIDTH_DP * 9f / 16f)
     }
     val meta = MessageTime.meta(m.status, m.outgoing, m.timestampMs, edited = m.edited)
+    LaunchedEffect(speed, playing) {
+        player[0]?.let { applyVideoSpeed(it, speed) }
+    }
     Box(
         modifier = Modifier
             .width(box.widthDp.dp)
@@ -81,7 +89,14 @@ fun VideoMessageBubble(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        setOnCompletionListener { playing = false }
+                        setOnPreparedListener { mp ->
+                            player[0] = mp
+                            applyVideoSpeed(mp, speed)
+                        }
+                        setOnCompletionListener {
+                            playing = false
+                            player[0] = null
+                        }
                     }
                 },
                 update = { view ->
@@ -96,7 +111,10 @@ fun VideoMessageBubble(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(m.id) {
-                onDispose { playing = false }
+                onDispose {
+                    playing = false
+                    player[0] = null
+                }
             }
         } else if (poster != null) {
             Image(
@@ -135,6 +153,20 @@ fun VideoMessageBubble(
             ) {
                 Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
             }
+        }
+        if (!path.isNullOrBlank()) {
+            Text(
+                VideoSpeedRules.label(speed),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable { speed = VideoSpeedRules.next(speed) }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
         }
         Text(
             if (duration > 0L) MediaPayload.formatDuration(duration) else "видео",
@@ -175,16 +207,49 @@ fun VideoMessageBubble(
 
 @Composable
 fun VideoViewerSurface(path: String, modifier: Modifier = Modifier) {
-    AndroidView(
-        factory = { ctx ->
-            VideoView(ctx).apply {
-                setVideoPath(path)
-                setOnPreparedListener { mp ->
-                    mp.isLooping = false
-                    start()
+    var speed by remember(path) { mutableStateOf(VideoSpeedRules.clamp(1f)) }
+    val player = remember(path) { arrayOfNulls<MediaPlayer>(1) }
+    LaunchedEffect(speed) {
+        player[0]?.let { applyVideoSpeed(it, speed) }
+    }
+    Box(modifier) {
+        AndroidView(
+            factory = { ctx ->
+                VideoView(ctx).apply {
+                    setVideoPath(path)
+                    setOnPreparedListener { mp ->
+                        player[0] = mp
+                        mp.isLooping = false
+                        applyVideoSpeed(mp, speed)
+                        start()
+                    }
                 }
-            }
-        },
-        modifier = modifier,
-    )
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+        Text(
+            VideoSpeedRules.label(speed),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable { speed = VideoSpeedRules.next(speed) }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+private fun applyVideoSpeed(player: MediaPlayer, speed: Float) {
+    try {
+        val params = try {
+            player.playbackParams
+        } catch (_: Exception) {
+            PlaybackParams()
+        }
+        player.playbackParams = params.setSpeed(VideoSpeedRules.clamp(speed))
+    } catch (_: Exception) {
+    }
 }
