@@ -82,7 +82,7 @@ object VideoCallRules {
      * Do not map it to ICE failed / WSS fallback / hangup.
      */
     fun ignorePcClosed(iceName: String): Boolean =
-        iceName.trim().equals("CLOSED", ignoreCase = true)
+        iceField(iceName)?.equals("CLOSED", ignoreCase = true) == true
 
     /**
      * After DTLS is up, FAILED / DISCONNECTED / CHECKING / CONNECTING are path
@@ -90,7 +90,7 @@ object VideoCallRules {
      * They must not hang up the remote or reset the in-call UI back to ringing.
      */
     fun iceBlipKeepsCall(iceName: String, mediaWasUp: Boolean): Boolean {
-        val name = iceName.trim().uppercase()
+        val name = iceField(iceName)?.uppercase() ?: return false
         if (name == "DISCONNECTED" || name == "CLOSED") return true
         if (!mediaWasUp) return false
         return name == "FAILED" || name == "CHECKING" || name == "CONNECTING" || name == "NEW"
@@ -112,7 +112,7 @@ object VideoCallRules {
 
     /** WSS audio fallback only when ICE never connected. Never a user hangup. */
     fun iceFailedFallsBackToWss(iceName: String, mediaWasUp: Boolean): Boolean =
-        !mediaWasUp && iceName.trim().equals("FAILED", ignoreCase = true)
+        !mediaWasUp && iceField(iceName)?.equals("FAILED", ignoreCase = true) == true
 
     fun wireEventIsHangup(event: String): Boolean {
         if (!CallSignal.singleLine(event)) return false
@@ -121,8 +121,8 @@ object VideoCallRules {
     }
 
     /**
-     * TURN username / credential / TLS SNI hostname. CR/LF/NUL must not
-     * collapse onto a live field after trim.
+     * TURN username / credential / TLS SNI hostname, and PeerConnection ICE
+     * state names. CR/LF/NUL must not collapse onto a live field after trim.
      */
     fun iceField(raw: String?): String? {
         if (raw.isNullOrEmpty()) return null

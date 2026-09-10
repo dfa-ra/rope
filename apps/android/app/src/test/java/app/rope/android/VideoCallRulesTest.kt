@@ -404,6 +404,22 @@ class VideoCallRulesTest {
         assertNull(VideoCallRules.iceField("vps.example\r\nX: y"))
     }
 
+    @Test
+    fun iceStateNamesRejectControlBeforeTrim() {
+        assertTrue(VideoCallRules.ignorePcClosed("CLOSED"))
+        assertTrue(VideoCallRules.ignorePcClosed(" closed "))
+        assertFalse(VideoCallRules.ignorePcClosed("\nCLOSED"))
+        assertFalse(VideoCallRules.ignorePcClosed("CLOSED\r"))
+        assertFalse(VideoCallRules.ignorePcClosed("CLOSED\u0000"))
+        assertTrue(VideoCallRules.iceBlipKeepsCall(" FAILED ", mediaWasUp = true))
+        assertFalse(VideoCallRules.iceBlipKeepsCall("\nFAILED", mediaWasUp = true))
+        assertFalse(VideoCallRules.iceBlipKeepsCall("FAILED\n", mediaWasUp = true))
+        assertTrue(VideoCallRules.iceFailedFallsBackToWss(" FAILED ", mediaWasUp = false))
+        assertFalse(VideoCallRules.iceFailedFallsBackToWss("\nFAILED", mediaWasUp = false))
+        assertFalse(VideoCallRules.iceFailedFallsBackToWss("FAILED\r", mediaWasUp = false))
+        assertFalse(VideoCallRules.iceFailedFallsBackToWss("FAILED\u0000", mediaWasUp = false))
+    }
+
     /**
      * Compact VP8+opus offer similar to Unified Plan. Real device SDP is larger
      * (ICE, fingerprint, more fmtp) but still typically 2–6 KiB — under 16 KiB.
