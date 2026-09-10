@@ -236,6 +236,18 @@ Organizer or server owner (and already a member). 1–40 Unicode runes. CR/LF/NU
 
 Soft-removes the member and bumps epoch. Removed devices no longer see the group.
 
+### `PATCH /v1/groups/{id}/description`
+
+Authenticated member. Organizer (`created_by`) or server owner sets the group description (0–120 runes). CR/LF/NUL rejected before trim. Empty string clears. Distinct from the group name. `403` if not a member or not organizer/owner.
+
+```json
+{ "description": "deck notes" }
+```
+
+```json
+{ "group_id": "uuid", "name": "crew", "epoch": 1, "members": [], "created_by": "hex", "description": "deck notes" }
+```
+
 ### `POST /v1/admin/revoke-member` (owner)
 
 ```json

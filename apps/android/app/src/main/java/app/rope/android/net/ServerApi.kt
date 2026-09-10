@@ -1,6 +1,7 @@
 package app.rope.android.net
 
 import app.rope.android.data.DirectoryDevice
+import app.rope.android.data.GroupDescRules
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
 import okhttp3.MediaType.Companion.toMediaType
@@ -150,6 +151,11 @@ class ServerApi(
         return parseGroup(authed("POST", "/v1/groups/$groupId/remove", body))
     }
 
+    fun patchGroupDescription(groupId: String, description: String): RopeGroup {
+        val body = JSONObject().put("description", description).toString().toByteArray()
+        return parseGroup(authed("PATCH", "/v1/groups/$groupId/description", body))
+    }
+
     fun bootstrap(host: String, port: Int, useTls: Boolean, fingerprint: String, token: String, displayName: String): JSONObject {
         val body = JSONObject()
             .put("token", token)
@@ -196,6 +202,7 @@ class ServerApi(
             epoch = obj.optInt("epoch"),
             members = ids,
             createdBy = obj.optString("created_by").ifBlank { obj.optString("createdBy") },
+            description = GroupDescRules.parse(obj.optString("description")).orEmpty(),
         )
     }
 

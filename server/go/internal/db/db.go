@@ -113,7 +113,11 @@ CREATE TABLE IF NOT EXISTS group_members (
   PRIMARY KEY (group_id, device_id)
 );
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = s.SQL.Exec(`ALTER TABLE chat_groups ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
+	return nil
 }
 
 func (s *Store) EnsureMeta(serverID, version string, protocol uint16) error {
@@ -618,10 +622,11 @@ func (s *Store) ObjectCount() (int, error) {
 }
 
 type Group struct {
-	ID        string
-	Name      string
-	CreatedBy string
-	Epoch     uint32
+	ID          string
+	Name        string
+	CreatedBy   string
+	Epoch       uint32
+	Description string
 }
 
 func (s *Store) InsertGroup(id, name, createdBy string, epoch uint32) error {
@@ -639,14 +644,15 @@ func (s *Store) UpdateGroupName(id, name string) error {
 
 func (s *Store) Group(id string) (Group, error) {
 	var g Group
-	err := s.SQL.QueryRow(`SELECT group_id, name, created_by, epoch FROM chat_groups WHERE group_id = ?`, id).
-		Scan(&g.ID, &g.Name, &g.CreatedBy, &g.Epoch)
+	err := s.SQL.QueryRow(
+		`SELECT group_id, name, created_by, epoch, COALESCE(description, '') FROM chat_groups WHERE group_id = ?`, id,
+	).Scan(&g.ID, &g.Name, &g.CreatedBy, &g.Epoch, &g.Description)
 	return g, err
 }
 
 func (s *Store) ListGroupsForDevice(deviceID string) ([]Group, error) {
 	rows, err := s.SQL.Query(
-		`SELECT g.group_id, g.name, g.created_by, g.epoch FROM chat_groups g
+		`SELECT g.group_id, g.name, g.created_by, g.epoch, COALESCE(g.description, '') FROM chat_groups g
 		 JOIN group_members m ON m.group_id = g.group_id
 		 WHERE m.device_id = ? AND m.removed_at IS NULL`, deviceID,
 	)
@@ -657,7 +663,7 @@ func (s *Store) ListGroupsForDevice(deviceID string) ([]Group, error) {
 	var out []Group
 	for rows.Next() {
 		var g Group
-		if err := rows.Scan(&g.ID, &g.Name, &g.CreatedBy, &g.Epoch); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.CreatedBy, &g.Epoch, &g.Description); err != nil {
 			return nil, err
 		}
 		out = append(out, g)
@@ -716,6 +722,11 @@ func (s *Store) IsGroupMember(groupID, deviceID string) (bool, error) {
 		groupID, deviceID,
 	).Scan(&n)
 	return n > 0, err
+}
+
+func (s *Store) UpdateGroupDescription(groupID, desc string) error {
+	_, err := s.SQL.Exec(`UPDATE chat_groups SET description = ? WHERE group_id = ?`, desc, groupID)
+	return err
 }
 
 func (s *Store) GroupCount() (int, error) {

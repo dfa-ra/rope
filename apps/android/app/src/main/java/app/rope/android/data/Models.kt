@@ -87,6 +87,7 @@ data class RopeGroup(
     val epoch: Int,
     val members: List<String>,
     val createdBy: String = "",
+    val description: String = "",
 )
 
 data class Conversation(

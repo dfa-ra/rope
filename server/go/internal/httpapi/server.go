@@ -86,6 +86,7 @@ func (s *Server) Router() http.Handler {
 	r.Patch("/v1/groups/{id}", s.withAuth(s.renameGroup))
 	r.Post("/v1/groups/{id}/members", s.withAuth(s.groupAdd))
 	r.Post("/v1/groups/{id}/remove", s.withAuth(s.groupRemove))
+	r.Patch("/v1/groups/{id}/description", s.withAuth(s.patchGroupDesc))
 	r.Get("/v1/ws", s.ws)
 	return r
 }

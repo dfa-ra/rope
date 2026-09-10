@@ -33,6 +33,7 @@ import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.EnvelopeTypes
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.GroupChatUx
+import app.rope.android.data.GroupDescRules
 import app.rope.android.data.GroupTextPayload
 import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
@@ -1265,6 +1266,29 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun patchOpenGroupDesc(raw: String) {
+        val g = _state.value.group ?: return
+        val me = _state.value.profile?.deviceId
+        val organizer = GroupChatUx.organizerId(g)
+        if (!GroupDescRules.canEdit(me != null && me in g.members, me, organizer, _state.value.profile?.role)) return
+        val desc = GroupDescRules.parse(raw) ?: run {
+            notice("Описание: до 120 знаков, без переноса")
+            return
+        }
+        scope.launch {
+            try {
+                val updated = api?.patchGroupDescription(g.groupId, desc)?.copy(createdBy = g.createdBy)
+                    ?: return@launch
+                store.upsertGroup(updated)
+                val groups = _state.value.groups.map { if (it.groupId == updated.groupId) updated else it }
+                _state.value = _state.value.copy(group = updated, groups = groups)
+                refreshDirectory()
+            } catch (e: Exception) {
+                error(e)
+            }
+        }
+    }
+
     fun leaveOpenGroup() {
         val g = _state.value.group ?: return
         val me = _state.value.profile?.deviceId ?: return
@@ -2465,13 +2489,23 @@ class RopeRepository(private val app: Application) {
                 val devices = api?.directory().orEmpty()
                     .filter { it.deviceId != identity?.deviceId() }
                     .map { it.copy(online = it.online || it.deviceId in online) }
-                val groups = try {
+                val fromApi = try {
                     api?.listGroups().orEmpty()
                 } catch (_: Exception) {
-                    store.groups()
+                    null
                 }
+                val groups = fromApi ?: store.groups()
                 store.saveGroups(groups)
-                val stored = store.groups()
+                val stored = store.groups().let { rows ->
+                    if (fromApi != null) {
+                        val descById = fromApi.associate { it.groupId to it.description }
+                        rows.map { it.copy(description = descById[it.groupId].orEmpty()) }
+                    } else {
+                        val live = (_state.value.groups + listOfNotNull(_state.value.group))
+                            .associate { it.groupId to it.description }
+                        rows.map { it.copy(description = live[it.groupId].orEmpty()) }
+                    }
+                }
                 store.rehomeMisroutedMedia()
                 val peer = _state.value.peer?.let { cur -> devices.find { it.deviceId == cur.deviceId } ?: cur }
                 val group = _state.value.group?.let { cur ->

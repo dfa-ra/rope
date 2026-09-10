@@ -35,16 +35,17 @@ func (s *Server) listGroups(w http.ResponseWriter, _ *http.Request, a authed, _ 
 		return
 	}
 	type gJSON struct {
-		GroupID   string   `json:"group_id"`
-		Name      string   `json:"name"`
-		Epoch     uint32   `json:"epoch"`
-		Members   []string `json:"members"`
-		CreatedBy string   `json:"created_by"`
+		GroupID     string   `json:"group_id"`
+		Name        string   `json:"name"`
+		Epoch       uint32   `json:"epoch"`
+		Members     []string `json:"members"`
+		CreatedBy   string   `json:"created_by"`
+		Description string   `json:"description"`
 	}
 	out := []gJSON{}
 	for _, g := range groups {
 		members, _ := s.Store.GroupMembers(g.ID)
-		out = append(out, gJSON{g.ID, g.Name, g.Epoch, members, g.CreatedBy})
+		out = append(out, gJSON{g.ID, g.Name, g.Epoch, members, g.CreatedBy, g.Description})
 	}
 	writeJSON(w, 200, map[string]any{"groups": out})
 }
@@ -146,10 +147,11 @@ func (s *Server) writeGroup(w http.ResponseWriter, id string) {
 		members = []string{}
 	}
 	writeJSON(w, 200, map[string]any{
-		"group_id":   g.ID,
-		"name":       g.Name,
-		"epoch":      g.Epoch,
-		"members":    members,
-		"created_by": g.CreatedBy,
+		"group_id":    g.ID,
+		"name":        g.Name,
+		"epoch":       g.Epoch,
+		"members":     members,
+		"created_by":  g.CreatedBy,
+		"description": g.Description,
 	})
 }
