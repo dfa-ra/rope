@@ -3,7 +3,11 @@ package app.rope.android
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -43,6 +47,7 @@ import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
 import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
+import app.rope.android.data.SaveGalleryRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
 import app.rope.android.data.RevokeRules
@@ -776,6 +781,55 @@ class RopeRepository(private val app: Application) {
         val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("rope", msg.text))
         _state.value = _state.value.copy(notice = "Скопировано")
+    }
+
+    fun saveToGallery(msg: ChatMessage) {
+        val media = File(app.filesDir, SaveGalleryRules.MEDIA_DIR)
+        val file = SaveGalleryRules.saveFile(msg, media) ?: return
+        val mime = SaveGalleryRules.mimeFor(msg, file)
+        val name = SaveGalleryRules.displayName(file)
+        val video = SaveGalleryRules.isVideo(msg)
+        try {
+            writeGallery(file, name, mime, video)
+            _state.value = _state.value.copy(notice = SaveGalleryRules.NOTICE)
+        } catch (e: Exception) {
+            error(e)
+        }
+    }
+
+    private fun writeGallery(file: File, name: String, mime: String, video: Boolean) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val collection = if (video) {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            val resolver = app.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, SaveGalleryRules.relativePath(video))
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(collection, values) ?: error("не удалось сохранить в галерею")
+            try {
+                resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+                    ?: error("не удалось записать в галерею")
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                throw e
+            }
+            return
+        }
+        val dir = Environment.getExternalStoragePublicDirectory(
+            if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES,
+        )
+        val rope = File(dir, "Rope")
+        rope.mkdirs()
+        File(rope, name).writeBytes(file.readBytes())
     }
 
     fun togglePinMessage(msg: ChatMessage) {
