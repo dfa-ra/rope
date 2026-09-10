@@ -2,6 +2,8 @@ package app.rope.android.ui
 
 import android.content.Intent
 import android.Manifest
+import android.content.res.Configuration
+import android.app.Activity
 import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
@@ -86,6 +88,7 @@ import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -102,6 +105,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -123,6 +127,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -161,6 +166,7 @@ import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
 import app.rope.android.data.ThreadEmptyRules
 import app.rope.android.data.VideoCallRules
+import app.rope.android.data.VideoLandRules
 import app.rope.android.data.UnreadBadgeKind
 import app.rope.android.data.UnreadBadgeRules
 import app.rope.android.data.UnreadFab
@@ -3058,6 +3064,18 @@ fun ImageViewer(
     val pagerState = rememberPagerState(initialPage = start) { album.size }
     val albumKey = album.joinToString { it.id }
     val scope = rememberCoroutineScope()
+    val activity = LocalContext.current as? Activity
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val current = album.getOrNull(pagerState.currentPage) ?: msg
+    val currentVideo = current.kind == MessageKind.VIDEO && !current.localPath.isNullOrBlank()
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.requestedOrientation = VideoLandRules.ORIENT_UNLOCKED
+        }
+    }
+    LaunchedEffect(currentVideo) {
+        if (!currentVideo) activity?.requestedOrientation = VideoLandRules.ORIENT_UNLOCKED
+    }
     LaunchedEffect(pagerState.currentPage, albumKey) {
         album.getOrNull(pagerState.currentPage)?.let { current ->
             onEnsure(current)
@@ -3084,7 +3102,11 @@ fun ImageViewer(
                 if (item.kind == MessageKind.VIDEO) {
                     val path = item.localPath
                     if (!path.isNullOrBlank()) {
-                        VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
+                        val fill = VideoLandRules.fillBleed(landscape, isVideo = true)
+                        VideoViewerSurface(
+                            path,
+                            if (fill) Modifier.fillMaxSize() else Modifier.fillMaxWidth().padding(12.dp),
+                        )
                     } else {
                         Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }
@@ -3161,6 +3183,22 @@ fun ImageViewer(
                 .padding(8.dp),
         ) {
             Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White)
+        }
+        if (VideoLandRules.showsRotate(isVideo = currentVideo, pathReady = true)) {
+            IconButton(
+                onClick = {
+                    activity?.requestedOrientation = VideoLandRules.activityOrientation(!landscape)
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 56.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.ScreenRotation,
+                    contentDescription = VideoLandRules.contentDescription(landscape),
+                    tint = Color.White,
+                )
+            }
         }
     }
 }
