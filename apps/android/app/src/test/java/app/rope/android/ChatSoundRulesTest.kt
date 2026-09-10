@@ -39,7 +39,7 @@ class ChatSoundRulesTest {
         assertFalse(ChatSoundRules.suppressChannel(ChatSoundRules.DEFAULT))
         assertEquals(ChatSoundRules.TONE_PING, ChatSoundRules.tone(ChatSoundRules.PING))
         assertEquals("нота", ChatSoundRules.label(ChatSoundRules.NOTE))
-        assertEquals("по умолчанию", ChatSoundRules.label(null))
+        assertEquals("по умолчанию", ChatSoundRules.label(""))
         assertTrue(ChatSoundRules.showsPicker(saved = false))
         assertFalse(ChatSoundRules.showsPicker(saved = true))
         assertEquals(ChatSoundRules.TITLE, "Звук уведомлений")
