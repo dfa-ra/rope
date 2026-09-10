@@ -3,6 +3,7 @@ package app.rope.android.net
 import app.rope.android.data.DirectoryDevice
 import app.rope.android.data.RopeGroup
 import app.rope.android.data.ServerProfile
+import app.rope.android.data.WireIds
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -101,7 +102,8 @@ class ServerApi(
     }
 
     fun downloadObject(objectId: String): Pair<ByteArray, String> {
-        val path = "/v1/objects/$objectId"
+        val id = WireIds.parse(objectId) ?: error("bad object id")
+        val path = "/v1/objects/$id"
         val header = sendAuthHeader("GET", path, ByteArray(0))
         val req = Request.Builder()
             .url(baseHttp + path)

@@ -117,20 +117,20 @@ data class MediaPayload(
             val quote = QuoteSpanRules.read(o)
             return MediaPayload(
                 kind = o.optString("kind"),
-                objectId = o.optString("object_id"),
+                objectId = WireIds.parse(o.optString("object_id")).orEmpty(),
                 sha256 = o.optString("sha256"),
                 keyB64 = o.optString("key_b64"),
                 mime = o.optString("mime"),
                 name = o.optString("name"),
                 size = o.optLong("size"),
                 durationMs = o.optLong("duration_ms"),
-                groupId = JsonIds.optional(o.optString("group_id")),
-                albumId = JsonIds.optional(o.optString("album_id")),
+                groupId = WireIds.parse(o.optString("group_id")),
+                albumId = WireIds.parse(o.optString("album_id")),
                 albumIndex = o.optInt("album_index", 0).coerceAtLeast(0),
                 albumCount = o.optInt("album_count", 1).let { if (it <= 0) 1 else it },
                 forwardedFrom = JsonIds.optional(o.optString("ff")),
                 caption = JsonIds.optional(o.optString("caption")),
-                replyTo = JsonIds.optional(o.optString("r")),
+                replyTo = WireIds.parse(o.optString("r")),
                 replyPreview = o.optString("rp"),
                 replyName = o.optString("rn"),
                 quoteText = quote?.text.orEmpty(),
@@ -188,10 +188,10 @@ data class GroupTextPayload(
             val o = JSONObject(raw)
             val quote = QuoteSpanRules.read(o)
             return GroupTextPayload(
-                groupId = o.optString("g"),
+                groupId = WireIds.parse(o.optString("g")).orEmpty(),
                 text = o.optString("t"),
                 epoch = o.optInt("e"),
-                replyTo = JsonIds.optional(o.optString("r")),
+                replyTo = WireIds.parse(o.optString("r")),
                 replyPreview = o.optString("rp"),
                 replyName = o.optString("rn"),
                 forwardedFrom = JsonIds.optional(o.optString("ff")),

@@ -3,6 +3,7 @@ package app.rope.android.media
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import app.rope.android.data.VideoRules
+import app.rope.android.data.WireIds
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -28,7 +29,10 @@ object ImageCodec {
     }
 
     fun fileName(objectId: String, mime: String, name: String): String {
-        val id = objectId.filter { it.isLetterOrDigit() || it == '-' }.ifBlank { "obj" }
+        val parsed = WireIds.parse(objectId)
+        val id = parsed?.filter { it.isLetterOrDigit() || it == '-' }.orEmpty().ifBlank {
+            if (parsed == null) "rejected" else "obj"
+        }
         return "$id.${extensionFor(mime, name)}"
     }
 
