@@ -4,6 +4,10 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
@@ -24,6 +28,7 @@ import app.rope.android.data.CallEffect
 import app.rope.android.data.CallMachine
 import app.rope.android.data.CallSignal
 import app.rope.android.data.CallToneRules
+import app.rope.android.data.RaiseSpeakRules
 import app.rope.android.data.IceServerSpec
 import app.rope.android.data.ChatControlRules
 import app.rope.android.data.ChatIds
@@ -237,6 +242,17 @@ class RopeRepository(private val app: Application) {
     private var boundRemote: VideoSink? = null
     private var boundLocal: VideoSink? = null
     private var iceCachedAtMs: Long = 0L
+    private var proximityRegistered = false
+    private var proximityNear = false
+    private val proximityListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            val max = event.sensor.maximumRange
+            val distance = event.values.firstOrNull() ?: max
+            onProximity(RaiseSpeakRules.isNear(distance, max))
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toneOutgoing: Boolean? = null
 
@@ -1321,7 +1337,7 @@ class RopeRepository(private val app: Application) {
     fun toggleCallSpeaker() {
         val next = !_state.value.callSpeakerOn
         _state.value = _state.value.copy(callSpeakerOn = next)
-        CallAudio.setSpeaker(app, next)
+        applyRaiseSpeakRoute()
     }
 
     fun toggleCallCamera() {
@@ -2963,6 +2979,7 @@ class RopeRepository(private val app: Application) {
         if (info != null) {
             _state.value = _state.value.copy(call = info)
         }
+        syncProximitySensor()
     }
 
     private fun dispatchCall(callId: String, peerId: String, event: String, payload: String): Boolean {
@@ -3361,6 +3378,7 @@ class RopeRepository(private val app: Application) {
             callNotice = null,
             callRtcReady = false,
         )
+        syncProximitySensor()
     }
 
     private fun startTone(outgoing: Boolean) {
@@ -3395,6 +3413,40 @@ class RopeRepository(private val app: Application) {
 
     private fun audioMode(on: Boolean) {
         CallAudio.apply(app, on)
+        if (on) applyRaiseSpeakRoute()
+    }
+
+    private fun onProximity(near: Boolean) {
+        if (proximityNear == near) return
+        proximityNear = near
+        applyRaiseSpeakRoute()
+    }
+
+    private fun applyRaiseSpeakRoute() {
+        val listening = RaiseSpeakRules.listen(_state.value.call)
+        if (!listening && !proximityNear) return
+        val speaker = RaiseSpeakRules.speakerOn(
+            userSpeakerOn = _state.value.callSpeakerOn,
+            proximityNear = proximityNear,
+            listening = listening,
+        )
+        CallAudio.setSpeaker(app, speaker)
+    }
+
+    private fun syncProximitySensor() {
+        val want = RaiseSpeakRules.listen(_state.value.call)
+        val sm = app.getSystemService(SensorManager::class.java)
+        if (want && !proximityRegistered) {
+            val sensor = sm?.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+            if (sensor != null) {
+                sm.registerListener(proximityListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+                proximityRegistered = true
+            }
+        } else if (!want && proximityRegistered) {
+            sm?.unregisterListener(proximityListener)
+            proximityRegistered = false
+            proximityNear = false
+        }
     }
 
     private fun notifyIfHidden(title: String, body: String, chatId: String, albumId: String? = null) {
