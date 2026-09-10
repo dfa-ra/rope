@@ -11,6 +11,9 @@ func Normalize(raw string) string {
 }
 
 func Valid(raw string) bool {
+	if strings.ContainsAny(raw, "\r\n\x00") {
+		return false
+	}
 	s := Normalize(raw)
 	n := utf8.RuneCountInString(s)
 	if n < 2 || n > 24 {

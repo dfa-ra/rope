@@ -9,7 +9,7 @@ func TestValid(t *testing.T) {
 			t.Fatalf("expected valid: %q", s)
 		}
 	}
-	bad := []string{"", "a", "has space", "bad!", stringsOf(25)}
+	bad := []string{"", "a", "has space", "bad!", stringsOf(25), "ann\n", "ann\r", "ann\x00"}
 	for _, s := range bad {
 		if Valid(s) {
 			t.Fatalf("expected invalid: %q", s)

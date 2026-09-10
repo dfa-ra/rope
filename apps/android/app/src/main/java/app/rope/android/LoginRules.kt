@@ -4,6 +4,9 @@ object LoginRules {
     fun normalize(raw: String): String = raw.trim()
 
     fun isValid(raw: String): Boolean {
+        if (raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0) {
+            return false
+        }
         val s = normalize(raw)
         if (s.length !in 2..24) return false
         return s.all { it.isLetterOrDigit() || it == '_' || it == '-' || it == '.' }

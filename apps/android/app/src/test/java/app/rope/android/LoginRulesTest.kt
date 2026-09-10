@@ -20,5 +20,9 @@ class LoginRulesTest {
         assertFalse(LoginRules.isValid("has space"))
         assertFalse(LoginRules.isValid("bad!"))
         assertFalse(LoginRules.isValid("a".repeat(25)))
+        assertFalse(LoginRules.isValid("ann\n"))
+        assertFalse(LoginRules.isValid("ann\r"))
+        assertFalse(LoginRules.isValid("ann\u0000"))
+        assertTrue(LoginRules.isValid("  ann  "))
     }
 }
