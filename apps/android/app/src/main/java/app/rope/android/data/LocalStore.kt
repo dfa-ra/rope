@@ -175,13 +175,13 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 merged.timestampMs,
                 merged.envelope,
                 merged.kind.name,
-                merged.extra,
+                sealField(merged.extra),
                 merged.groupId,
                 merged.localPath,
                 merged.senderId,
                 merged.senderName,
                 ReactionCodec.toJson(merged.reactions),
-                MessageMeta.of(merged).toJson(),
+                sealField(MessageMeta.of(merged).toJson()),
             ),
         )
     }
@@ -229,7 +229,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val nextPreview = if (keep) msg.linkPreview else null
         writableDatabase.execSQL(
             "UPDATE messages SET body_enc = ?, meta = ? WHERE id = ?",
-            arrayOf(encrypt(text), MessageMeta.of(msg.copy(text = text, edited = true, linkPreview = nextPreview)).toJson(), id),
+            arrayOf(encrypt(text), sealField(MessageMeta.of(msg.copy(text = text, edited = true, linkPreview = nextPreview)).toJson()), id),
         )
         return true
     }
@@ -239,7 +239,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val lp = msg.linkPreview?.copy(localPath = path) ?: return
         writableDatabase.execSQL(
             "UPDATE messages SET meta = ? WHERE id = ?",
-            arrayOf(MessageMeta.of(msg.copy(linkPreview = lp)).toJson(), id),
+            arrayOf(sealField(MessageMeta.of(msg.copy(linkPreview = lp)).toJson()), id),
         )
     }
 
@@ -249,7 +249,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             "UPDATE messages SET body_enc = ?, extra = '', local_path = NULL, meta = ? WHERE id = ?",
             arrayOf(
                 encrypt(""),
-                MessageMeta.of(msg.copy(deleted = true, text = "", extra = "")).toJson(),
+                sealField(MessageMeta.of(msg.copy(deleted = true, text = "", extra = "")).toJson()),
                 id,
             ),
         )
@@ -388,6 +388,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun notificationsMuted(): Boolean = get("notifications_muted") == "1"
 
+    fun saveAppLock(prefs: AppLockPrefs) {
+        put("app_lock", prefs.toJson())
+    }
+
+    fun appLock(): AppLockPrefs = AppLockPrefs.parse(get("app_lock"))
+
     fun saveLinkPreviews(enabled: Boolean) {
         put("link_previews", if (enabled) "1" else "0")
     }
@@ -445,7 +451,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
                 val id = it.getString(0)
                 val peerId = it.getString(1)
                 val outgoing = it.getInt(2) == 1
-                val extra = it.getString(4).orEmpty()
+                val extra = openField(it.getString(4))
                 val storedGroup = JsonIds.optional(if (it.isNull(5)) null else it.getString(5))
                 val senderId = it.getString(6).orEmpty()
                 val extraGroup = runCatching { JsonIds.optional(MediaPayload.parse(extra).groupId) }.getOrNull()
@@ -482,7 +488,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     private fun row(c: android.database.Cursor): ChatMessage {
         val kind = runCatching { MessageKind.valueOf(c.getString(7)) }.getOrDefault(MessageKind.TEXT)
-        val meta = if (c.columnCount > 14 && !c.isNull(14)) MessageMeta.parse(c.getString(14)) else MessageMeta()
+        val meta = if (c.columnCount > 14 && !c.isNull(14)) MessageMeta.parse(openField(c.getString(14))) else MessageMeta()
         val text = if (meta.deleted) "" else decrypt(c.getBlob(3))
         return ChatMessage(
             id = c.getString(0),
@@ -493,7 +499,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
             timestampMs = c.getLong(5),
             envelope = if (c.isNull(6)) null else c.getBlob(6),
             kind = kind,
-            extra = c.getString(8).orEmpty(),
+            extra = openField(c.getString(8)),
             groupId = if (c.isNull(9)) null else c.getString(9),
             localPath = if (c.isNull(10)) null else c.getString(10),
             senderId = c.getString(11).orEmpty(),
@@ -520,6 +526,10 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         val c = readableDatabase.rawQuery("SELECT v FROM kv WHERE k = ?", arrayOf(k))
         c.use { return if (it.moveToFirst()) it.getString(0) else null }
     }
+
+    private fun sealField(plain: String): String = MessageAtRest.seal(plain) { encryptBytes(it) }
+
+    private fun openField(stored: String?): String = MessageAtRest.open(stored) { decryptBytes(it) }
 
     private fun encrypt(text: String): ByteArray = encryptBytes(text.toByteArray())
 

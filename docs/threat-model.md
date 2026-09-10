@@ -37,6 +37,7 @@
 - Bootstrap rate limits key on `RemoteAddr`, not `X-Forwarded-For`.
 - The GitHub token in local kv is wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
 - Cached TURN HMAC credentials in local profile kv are wrapped with Android Keystore AES-GCM (at-rest wrap, not envelope crypto).
+- Local message `extra` (object keys) and `meta` TEXT columns are Keystore-wrapped (at-rest wrap, not envelope crypto). Leftover plaintext rows still open.
 - PeerConnection ICE URLs are allowlisted to `stun:`, `turn:`, and `turns:` schemes.
 
 ## Non-guarantees (honest limitations)
