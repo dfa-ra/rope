@@ -314,6 +314,7 @@ fun ChatsPane(
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                    photoPath = if (c.isGroup) GroupPhotoRules.lookup(state.groupPhotos, c.id) else null,
                                 )
                             }
                         }
@@ -336,6 +337,7 @@ fun ChatsPane(
                                 query = state.chatQuery,
                                 onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                 onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                photoPath = if (c.isGroup) GroupPhotoRules.lookup(state.groupPhotos, c.id) else null,
                             )
                         }
                     }
@@ -549,6 +551,7 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    photoPath: String? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -597,7 +600,7 @@ internal fun ConversationRow(
                 c.isGroup,
                 c.online,
                 saved = SavedMessagesRules.isSaved(c),
-                photoPath = if (c.isGroup) GroupPhotoRules.lookup(state.groupPhotos, c.id) else null,
+                photoPath = photoPath,
             )
             Column(Modifier.weight(1f)) {
                 Row(
