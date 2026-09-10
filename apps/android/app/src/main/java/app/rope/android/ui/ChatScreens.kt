@@ -156,6 +156,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.ViewerDelRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
@@ -3052,6 +3053,7 @@ fun ImageViewer(
     onClose: () -> Unit,
     onShow: (ChatMessage) -> Unit = {},
     onEnsure: (ChatMessage) -> Unit = {},
+    onDelete: (ChatMessage) -> Unit = {},
 ) {
     val album = siblings.ifEmpty { listOf(msg) }
     val start = album.indexOfFirst { it.id == msg.id }.coerceAtLeast(0)
@@ -3152,6 +3154,21 @@ fun ImageViewer(
                         }
                     }
                 }
+            }
+        }
+        val current = ViewerDelRules.current(album, pagerState.currentPage, msg)
+        if (ViewerDelRules.canDelete(current)) {
+            IconButton(
+                onClick = { onDelete(current) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Delete,
+                    contentDescription = ViewerDelRules.ACTION,
+                    tint = Color.White,
+                )
             }
         }
         IconButton(
