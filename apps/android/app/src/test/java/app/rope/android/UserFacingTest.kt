@@ -44,4 +44,12 @@ class UserFacingTest {
         assertFalse(UserFacing.of(Exception("org.webrtc.IceCandidate")).contains("org.webrtc"))
         assertTrue(UserFacing.of("Скопировано") == "Скопировано")
     }
+
+    @Test
+    fun crlfAndNulCollapseToGenericBeforeTrim() {
+        assertEquals(UserFacing.GENERIC, UserFacing.of("ok\nbad"))
+        assertEquals(UserFacing.GENERIC, UserFacing.of("Название\rгруппы"))
+        assertEquals(UserFacing.GENERIC, UserFacing.of("ok\u0000bad"))
+        assertEquals(UserFacing.GENERIC, UserFacing.of("Скопировано\n"))
+    }
 }

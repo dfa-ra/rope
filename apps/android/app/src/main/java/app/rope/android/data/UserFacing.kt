@@ -11,6 +11,9 @@ object UserFacing {
     fun of(error: Throwable?): String = of(error?.message ?: error?.toString())
 
     fun of(raw: String?): String {
+        if (raw != null && (raw.indexOf('\n') >= 0 || raw.indexOf('\r') >= 0 || raw.indexOf('\u0000') >= 0)) {
+            return GENERIC
+        }
         val t = raw?.trim().orEmpty()
         if (t.isEmpty()) return GENERIC
         if (t == LOGIN || t == FILE_TOO_BIG || t == NO_NETWORK || t == NO_PATH || t == GENERIC) return t
