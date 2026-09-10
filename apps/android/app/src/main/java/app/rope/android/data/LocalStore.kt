@@ -423,6 +423,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
         put("chat_prefs", o.toString())
     }
 
+    fun pinRanks(): Map<String, Int> = PinOrderRules.parse(get(PinOrderRules.KV))
+
+    fun savePinRanks(ranks: Map<String, Int>) {
+        put(PinOrderRules.KV, PinOrderRules.toJson(ranks))
+    }
+
     fun themeMode(defaultDark: Boolean): ThemeMode {
         return when (get("theme")?.lowercase()) {
             "light" -> ThemeMode.LIGHT

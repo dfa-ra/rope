@@ -135,6 +135,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -156,6 +158,7 @@ import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
+import app.rope.android.data.PinOrderRules
 import app.rope.android.data.QueryHighlight
 import app.rope.android.data.SavedMessagesRules
 import app.rope.android.data.SwipeToReplyRules
@@ -208,6 +211,7 @@ fun ChatsPane(
     onArchiveChat: (String) -> Unit = {},
     onUnarchiveChat: (String) -> Unit = {},
     onOpenArchive: () -> Unit = {},
+    onMovePin: (String, Int) -> Unit = { _, _ -> },
     listMode: ChatListMode = ChatListMode.ALL,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -276,6 +280,12 @@ fun ChatsPane(
         val rows = ChatListRules.rows(source, state.chatQuery, listMode)
         val pinnedRows = ChatListRules.pinnedBlock(rows, state.chatQuery)
         val otherRows = ChatListRules.unpinnedBlock(rows, state.chatQuery)
+        val pinnedIds = pinnedRows.map { it.id }
+        val showReorder = PinOrderRules.visible(
+            pinnedRows.size,
+            isForwarding,
+            ChatListRules.searching(state.chatQuery),
+        )
         val showArchiveRow = ArchiveRules.rowVisible(archived.size, listMode, isForwarding)
         val inArchive = listMode == ChatListMode.ARCHIVE
         val empty = ChatListEmptyRules.copy(
@@ -313,6 +323,16 @@ fun ChatsPane(
                                     query = state.chatQuery,
                                     onArchive = if (inArchive || isForwarding) null else ({ onArchiveChat(c.id) }),
                                     onUnarchive = if (inArchive) ({ onUnarchiveChat(c.id) }) else null,
+                                    onMoveUp = if (showReorder && PinOrderRules.canMoveUp(pinnedIds, c.id)) {
+                                        { onMovePin(c.id, -1) }
+                                    } else {
+                                        null
+                                    },
+                                    onMoveDown = if (showReorder && PinOrderRules.canMoveDown(pinnedIds, c.id)) {
+                                        { onMovePin(c.id, 1) }
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         }
@@ -548,6 +568,8 @@ internal fun ConversationRow(
     query: String = "",
     onArchive: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
 ) {
     var menu by remember(c.id) { mutableStateOf(false) }
     BackHandler(enabled = menu) { menu = false }
@@ -698,6 +720,22 @@ internal fun ConversationRow(
                 } else if (ArchiveRules.canPin(c)) {
                     TextButton(onClick = { onPin(); menu = false }) {
                         Text(if (c.pinned) "Открепить" else "Закрепить")
+                    }
+                }
+                if (onMoveUp != null) {
+                    TextButton(
+                        onClick = { onMoveUp(); menu = false },
+                        modifier = Modifier.semantics { contentDescription = PinOrderRules.MOVE_UP },
+                    ) {
+                        Text(PinOrderRules.MOVE_UP)
+                    }
+                }
+                if (onMoveDown != null) {
+                    TextButton(
+                        onClick = { onMoveDown(); menu = false },
+                        modifier = Modifier.semantics { contentDescription = PinOrderRules.MOVE_DOWN },
+                    ) {
+                        Text(PinOrderRules.MOVE_DOWN)
                     }
                 }
                 TextButton(onClick = { onMute(); menu = false }) {

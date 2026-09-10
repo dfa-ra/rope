@@ -523,12 +523,16 @@ object ChatListRules {
             if (rank != 0) return rank
             return (b.last?.timestampMs ?: 0L).compareTo(a.last?.timestampMs ?: 0L)
         }
-        val aSavedPin = if (SavedMessagesRules.isSaved(a.id) && a.pinned) 1 else 0
-        val bSavedPin = if (SavedMessagesRules.isSaved(b.id) && b.pinned) 1 else 0
-        val savedPin = bSavedPin.compareTo(aSavedPin)
-        if (savedPin != 0) return savedPin
         val pin = b.pinned.compareTo(a.pinned)
         if (pin != 0) return pin
+        if (a.pinned && b.pinned) {
+            val pinRank = a.pinRank.compareTo(b.pinRank)
+            if (pinRank != 0) return pinRank
+            val aSavedPin = if (SavedMessagesRules.isSaved(a.id)) 1 else 0
+            val bSavedPin = if (SavedMessagesRules.isSaved(b.id)) 1 else 0
+            val savedPin = bSavedPin.compareTo(aSavedPin)
+            if (savedPin != 0) return savedPin
+        }
         return (b.last?.timestampMs ?: 0L).compareTo(a.last?.timestampMs ?: 0L)
     }
 

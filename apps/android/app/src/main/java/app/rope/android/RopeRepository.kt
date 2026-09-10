@@ -45,6 +45,7 @@ import app.rope.android.data.ChatListPreviewRules
 import app.rope.android.data.ChatListRules
 import app.rope.android.data.ChatPrefs
 import app.rope.android.data.ArchiveRules
+import app.rope.android.data.PinOrderRules
 import app.rope.android.data.RevokeRules
 import app.rope.android.data.RoleRules
 import app.rope.android.data.SavedMessagesRules
@@ -746,7 +747,29 @@ class RopeRepository(private val app: Application) {
     fun togglePinChat(id: String) {
         val cur = store.chatPrefs(id)
         if (!ArchiveRules.canPin(cur)) return
-        store.saveChatPrefs(id, cur.copy(pinned = !cur.pinned))
+        val nextPinned = !cur.pinned
+        store.saveChatPrefs(id, cur.copy(pinned = nextPinned))
+        val ranks = store.pinRanks()
+        val next = if (nextPinned) PinOrderRules.afterPin(ranks, id) else PinOrderRules.afterUnpin(ranks, id)
+        if (next != ranks) store.savePinRanks(next)
+        refreshConversations()
+    }
+
+    fun movePinnedChat(id: String, delta: Int) {
+        if (delta == 0 || id.isBlank()) return
+        val pinned = ChatListRules.pinnedBlock(_state.value.conversations, "")
+        val ids = pinned.map { it.id }
+        if (!PinOrderRules.visible(
+                ids.size,
+                forwarding = _state.value.forwarding != null,
+                searching = ChatListRules.searching(_state.value.chatQuery),
+            )
+        ) {
+            return
+        }
+        val nextIds = PinOrderRules.move(ids, id, delta)
+        if (nextIds == ids) return
+        store.savePinRanks(PinOrderRules.ranksOf(nextIds))
         refreshConversations()
     }
 
@@ -755,6 +778,9 @@ class RopeRepository(private val app: Application) {
         val cur = store.chatPrefs(id)
         if (cur.archived) return
         store.saveChatPrefs(id, ArchiveRules.archivePrefs(cur))
+        val ranks = store.pinRanks()
+        val next = PinOrderRules.afterUnpin(ranks, id)
+        if (next != ranks) store.savePinRanks(next)
         refreshConversations()
     }
 
@@ -2470,6 +2496,7 @@ class RopeRepository(private val app: Application) {
         val groups = _state.value.groups
         val lastBy = store.conversations().associate { it.first to it.second }
         val prefs = store.allChatPrefs()
+        val ranks = store.pinRanks()
         val dms = devices.map { d ->
             val last = lastBy[d.deviceId]
             val p = prefs[d.deviceId] ?: ChatPrefs()
@@ -2491,6 +2518,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                pinRank = PinOrderRules.rankOf(d.deviceId, ranks),
             )
         }
         val gs = groups.map { g ->
@@ -2515,6 +2543,7 @@ class RopeRepository(private val app: Application) {
                 muted = p.muted,
                 unread = p.unread,
                 archived = p.archived,
+                pinRank = PinOrderRules.rankOf(id, ranks),
             )
         }
         val leftover = lastBy.keys
@@ -2544,6 +2573,7 @@ class RopeRepository(private val app: Application) {
                     muted = p.muted,
                     unread = p.unread,
                     archived = p.archived,
+                    pinRank = PinOrderRules.rankOf(id, ranks),
                 )
             }
         val savedPrefs = SavedMessagesRules.defaultPrefs(prefs[SavedMessagesRules.ID])
@@ -2554,6 +2584,7 @@ class RopeRepository(private val app: Application) {
             lastBy[SavedMessagesRules.ID],
             savedPrefs,
             identity?.deviceId().orEmpty(),
+            PinOrderRules.rankOf(SavedMessagesRules.ID, ranks),
         )
         _state.value = _state.value.copy(
             conversations = (listOf(saved) + dms + gs + leftover).sortedWith { a, b -> ChatListRules.compare(a, b) },

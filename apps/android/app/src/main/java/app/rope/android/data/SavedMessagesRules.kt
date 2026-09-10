@@ -38,6 +38,7 @@ object SavedMessagesRules {
         last: ChatMessage?,
         prefs: ChatPrefs,
         myDeviceId: String,
+        pinRank: Int = PinOrderRules.UNRANKED,
     ): Conversation {
         val subtitle = ChatListPreviewRules.copy(
             last = last,
@@ -58,6 +59,7 @@ object SavedMessagesRules {
             muted = prefs.muted,
             unread = 0,
             archived = prefs.archived,
+            pinRank = pinRank,
         )
     }
 }
