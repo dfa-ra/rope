@@ -154,6 +154,7 @@ import app.rope.android.data.ChatThreadItem
 import app.rope.android.data.DateSeparatorRules
 import app.rope.android.data.ForwardRules
 import app.rope.android.data.LinkPreviewRules
+import app.rope.android.data.PhoneTapRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerProfileRules
 import app.rope.android.data.QueryHighlight
@@ -1665,10 +1666,12 @@ private fun MentionText(
 ) {
     val spans = remember(text, names) { GroupChatUx.mentionSpans(text, names) }
     val links = remember(text) { LinkPreviewRules.spans(text) }
+    val occupied = remember(links) { links.map { it.start until it.endExclusive } }
+    val phones = remember(text, occupied) { PhoneTapRules.spans(text, occupied) }
     val style = if (styleLarge) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
-    if (spans.isEmpty() && links.isEmpty()) {
+    if (spans.isEmpty() && links.isEmpty() && phones.isEmpty()) {
         Text(text, style = style)
         return
     }
@@ -1689,13 +1692,26 @@ private fun MentionText(
             )
             addStringAnnotation("URL", link.url, link.start, link.endExclusive)
         }
+        phones.forEach { phone ->
+            addStyle(
+                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                phone.start,
+                phone.endExclusive,
+            )
+            addStringAnnotation("TEL", phone.tel, phone.start, phone.endExclusive)
+        }
     }
     ClickableText(
         text = annotated,
         style = style.copy(color = LocalContentColor.current),
         onClick = { offset ->
+            val tel = annotated.getStringAnnotations("TEL", offset, offset).firstOrNull()?.item
             val url = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
-            if (url != null) openHttps(context, url) else onPlainTap()
+            when {
+                tel != null -> openTel(context, tel)
+                url != null -> openHttps(context, url)
+                else -> onPlainTap()
+            }
         },
     )
 }
@@ -1794,6 +1810,14 @@ private fun openHttps(context: Context, url: String) {
     if (!url.startsWith("https://", ignoreCase = true)) return
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+}
+
+private fun openTel(context: Context, tel: String) {
+    if (!tel.startsWith("tel:")) return
+    if (tel.indexOf('\n') >= 0 || tel.indexOf('\r') >= 0 || tel.indexOf('\u0000') >= 0) return
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(tel)))
     }
 }
 
