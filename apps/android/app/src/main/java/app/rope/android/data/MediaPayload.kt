@@ -25,6 +25,7 @@ data class MediaPayload(
     val quoteStart: Int = -1,
     val quoteEnd: Int = -1,
     val waveform: List<Int> = emptyList(),
+    val spoiler: Boolean = false,
 ) {
     fun withReply(
         replyTo: String?,
@@ -79,6 +80,7 @@ data class MediaPayload(
                 waveform.take(VoicePlayback.BARS).forEach { arr.put(it.coerceIn(0, 31)) }
                 put("wf", arr)
             }
+            if (spoiler) put("spoiler", true)
         }
         .toString()
 
@@ -137,6 +139,7 @@ data class MediaPayload(
                 quoteStart = quote?.start ?: -1,
                 quoteEnd = quote?.end ?: -1,
                 waveform = readWaveform(o.optJSONArray("wf")),
+                spoiler = o.optBoolean("spoiler", false),
             )
         }
 

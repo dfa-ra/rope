@@ -164,6 +164,8 @@ fun RopeScaffold(
     onCancelComposer: () -> Unit,
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
+    onTogglePendingSpoiler: () -> Unit = {},
+    onRevealSpoiler: (String) -> Unit = {},
     onCancelForward: () -> Unit,
     onChatQuery: (String) -> Unit,
     onMessageQuery: (String) -> Unit,
@@ -319,6 +321,8 @@ fun RopeScaffold(
                             onCancelComposer = onCancelComposer,
                             onDismissLinkPreview = onDismissLinkPreview,
                             onCancelPendingMedia = onCancelPendingMedia,
+                            onTogglePendingSpoiler = onTogglePendingSpoiler,
+                            onRevealSpoiler = onRevealSpoiler,
                             onCopy = onCopy,
                             onPinMessage = onPinMessage,
                             onJump = onJump,
@@ -374,6 +378,8 @@ fun RopeScaffold(
             onClose = onCloseImage,
             onShow = onOpenImage,
             onEnsure = onEnsureMedia,
+            revealedSpoilers = state.revealedSpoilers,
+            onRevealSpoiler = onRevealSpoiler,
         )
     }
     state.call?.let { call ->

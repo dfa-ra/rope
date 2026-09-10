@@ -87,8 +87,10 @@ import androidx.compose.material.icons.outlined.OpenInFull
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -178,6 +180,7 @@ import app.rope.android.data.QuoteSpanRules
 import app.rope.android.data.Conversation
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.MediaSpoilerRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.PhotoLayout
 import app.rope.android.data.ReactionCodec
@@ -755,6 +758,8 @@ fun ChatPane(
     onVideoNoteFinish: (Boolean) -> Unit = {},
     onVideoNotePreview: (android.view.SurfaceHolder, Int) -> Unit = { _, _ -> },
     onVideoNotePreviewGone: () -> Unit = {},
+    onTogglePendingSpoiler: () -> Unit = {},
+    onRevealSpoiler: (String) -> Unit = {},
 ) {
     val saved = SavedMessagesRules.isSaved(state.peer?.deviceId) && state.group == null
     val title = if (saved) SavedMessagesRules.TITLE else state.group?.name ?: state.peer?.displayName ?: "Чат"
@@ -999,8 +1004,12 @@ fun ChatPane(
                                     },
                                     onTap = {
                                         if (!m.deleted) {
-                                            menuMessage = m
-                                            reactionExpanded = false
+                                            if (MediaSpoilerRules.hidden(m, state.revealedSpoilers)) {
+                                                onRevealSpoiler(m.id)
+                                            } else {
+                                                menuMessage = m
+                                                reactionExpanded = false
+                                            }
                                         }
                                     },
                                     onSwipeReply = { onReply(m) },
@@ -1018,6 +1027,7 @@ fun ChatPane(
                                     onEnsureMedia = onEnsureMedia,
                                     onJump = onJump,
                                     onOpenImage = onOpenImage,
+                                    onRevealSpoiler = onRevealSpoiler,
                                     onReact = onReact,
                                     highlighted = members.any { it.id == flashId },
                                     clusterFirst = GroupChatUx.firstInCluster(visible, index),
@@ -1112,6 +1122,7 @@ fun ChatPane(
                 onDismissLinkPreview = onDismissLinkPreview,
                 onCancelPendingMedia = onCancelPendingMedia,
                 onReplySpan = onReplySpan,
+                onTogglePendingSpoiler = onTogglePendingSpoiler,
             )
         }
     }
@@ -1490,9 +1501,19 @@ private fun MessageBubble(
                             onJump = onJump,
                         )
                         if (m.kind == MessageKind.VIDEO) {
-                            VideoMessageBubble(m, onEnsureMedia, overlayMeta = true)
+                            VideoMessageBubble(
+                                m,
+                                onEnsureMedia,
+                                overlayMeta = true,
+                                hidden = MediaSpoilerRules.hidden(m, state.revealedSpoilers),
+                            )
                         } else {
-                            ImageBubble(m, onEnsureMedia, overlayMeta = true)
+                            ImageBubble(
+                                m,
+                                onEnsureMedia,
+                                overlayMeta = true,
+                                hidden = MediaSpoilerRules.hidden(m, state.revealedSpoilers),
+                            )
                         }
                         MediaCaptionLine(MediaSendRules.captionOf(m))
                     }
@@ -1998,6 +2019,7 @@ private fun AlbumBubble(
     onEnsureMedia: (ChatMessage) -> Unit,
     onJump: (String?) -> Unit,
     onOpenImage: (ChatMessage) -> Unit,
+    onRevealSpoiler: (String) -> Unit = {},
     onReact: (ChatMessage, String) -> Unit,
     highlighted: Boolean,
     clusterFirst: Boolean,
@@ -2056,10 +2078,12 @@ private fun AlbumBubble(
                     tile = tile,
                     overlayMeta = i == members.lastIndex && meta.isNotBlank(),
                     meta = meta,
+                    hidden = MediaSpoilerRules.hidden(m, state.revealedSpoilers),
                     onEnsure = onEnsureMedia,
                     onClick = {
                         when {
                             selecting -> onToggleSelect()
+                            MediaSpoilerRules.hidden(m, state.revealedSpoilers) -> onRevealSpoiler(m.id)
                             else -> onOpenImage(m)
                         }
                     },
@@ -2094,6 +2118,7 @@ private fun MosaicTile(
     tile: PhotoLayout.Tile,
     overlayMeta: Boolean,
     meta: String,
+    hidden: Boolean = false,
     onEnsure: (ChatMessage) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -2117,8 +2142,9 @@ private fun MosaicTile(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = if (video) "Видео" else "Фото",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().mediaSpoilerBlur(hidden),
             )
+            MediaSpoilerScrim(hidden)
         } else {
             Text(
                 "…",
@@ -2127,7 +2153,7 @@ private fun MosaicTile(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        if (video) {
+        if (video && !hidden) {
             Text(
                 extra?.durationMs?.takeIf { it > 0 }?.let { MediaPayload.formatDuration(it) } ?: "видео",
                 style = MaterialTheme.typography.labelSmall,
@@ -2140,7 +2166,7 @@ private fun MosaicTile(
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
-        if (overlayMeta) {
+        if (overlayMeta && !hidden) {
             Text(
                 meta,
                 style = MaterialTheme.typography.labelSmall,
@@ -2161,6 +2187,7 @@ private fun ImageBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
+    hidden: Boolean = false,
 ) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
@@ -2179,9 +2206,10 @@ private fun ImageBubble(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = "Фото",
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().mediaSpoilerBlur(hidden),
             )
-            if (overlayMeta && meta.isNotBlank()) {
+            MediaSpoilerScrim(hidden)
+            if (overlayMeta && meta.isNotBlank() && !hidden) {
                 Text(
                     meta,
                     style = MaterialTheme.typography.labelSmall,
@@ -2225,6 +2253,7 @@ private fun FileBubble(m: ChatMessage) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposerBar(
     state: UiState,
@@ -2237,6 +2266,7 @@ private fun ComposerBar(
     onDismissLinkPreview: () -> Unit = {},
     onCancelPendingMedia: () -> Unit = {},
     onReplySpan: (QuoteSpan?) -> Unit = {},
+    onTogglePendingSpoiler: () -> Unit = {},
 ) {
     var recordingLocked by remember { mutableStateOf(false) }
     var slideHint by remember { mutableStateOf(VoiceGesture.HOLD) }
@@ -2321,6 +2351,21 @@ private fun ComposerBar(
                     copy = MediaSendRules.hint(state.pendingAttachments.size, videos),
                     onCancel = onCancelPendingMedia,
                 )
+                val spoilerOk = MediaSpoilerRules.pendingEligible(
+                    state.pendingAttachments.map { context.contentResolver.getType(it).orEmpty() },
+                    state.pendingAttachments.map { it.lastPathSegment.orEmpty() },
+                )
+                if (spoilerOk) {
+                    FilterChip(
+                        selected = state.pendingSpoiler,
+                        onClick = onTogglePendingSpoiler,
+                        label = { Text(MediaSpoilerRules.LABEL) },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.VisibilityOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    )
+                }
             }
             state.composerPreview?.takeIf { state.editTarget == null && !state.recording && !state.recordingVideoNote }?.let { preview ->
                 ComposerLinkPreview(
@@ -3052,6 +3097,8 @@ fun ImageViewer(
     onClose: () -> Unit,
     onShow: (ChatMessage) -> Unit = {},
     onEnsure: (ChatMessage) -> Unit = {},
+    revealedSpoilers: Set<String> = emptySet(),
+    onRevealSpoiler: (String) -> Unit = {},
 ) {
     val album = siblings.ifEmpty { listOf(msg) }
     val start = album.indexOfFirst { it.id == msg.id }.coerceAtLeast(0)
@@ -3075,16 +3122,33 @@ fun ImageViewer(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val item = album[page]
+            val hidden = MediaSpoilerRules.hidden(item, revealedSpoilers)
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(onClick = onClose),
+                    .clickable(onClick = {
+                        if (hidden) onRevealSpoiler(item.id) else onClose()
+                    }),
                 contentAlignment = Alignment.Center,
             ) {
                 if (item.kind == MessageKind.VIDEO) {
                     val path = item.localPath
-                    if (!path.isNullOrBlank()) {
+                    if (!path.isNullOrBlank() && !hidden) {
                         VideoViewerSurface(path, Modifier.fillMaxWidth().padding(12.dp))
+                    } else if (hidden) {
+                        val poster = path?.let { app.rope.android.media.VideoCodec.poster(it) }
+                        if (poster != null) {
+                            Image(
+                                bitmap = poster.asImageBitmap(),
+                                contentDescription = MediaSpoilerRules.LABEL,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                                    .clip(RoundedCornerShape(RopeShapes.media))
+                                    .mediaSpoilerBlur(true),
+                            )
+                        }
+                        MediaSpoilerScrim(true)
                     } else {
                         Text("Видео ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }
@@ -3093,12 +3157,14 @@ fun ImageViewer(
                     if (bmp != null) {
                         Image(
                             bitmap = bmp.asImageBitmap(),
-                            contentDescription = "Фото",
+                            contentDescription = if (hidden) MediaSpoilerRules.LABEL else "Фото",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(12.dp)
-                                .clip(RoundedCornerShape(RopeShapes.media)),
+                                .clip(RoundedCornerShape(RopeShapes.media))
+                                .mediaSpoilerBlur(hidden),
                         )
+                        MediaSpoilerScrim(hidden)
                     } else {
                         Text("Фото ещё качается", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                     }

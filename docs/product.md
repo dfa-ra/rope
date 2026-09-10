@@ -115,6 +115,7 @@ Engineering success: `cargo test` (Rust), `go test ./...` (relay), `./gradlew te
 - **0.3.49 security:** `FLAG_SECURE` on Provision and Join so recents/screenshots cannot capture SSH passwords, PEMs, GitHub PATs, or a live invite token. Invite QR stays shareable. Not envelope crypto.
 - **0.3.50:** local Telegram-like chat archive on the chat list; object download failures are a uniform 404; invite TTL is capped at 24 hours; JSON API responses send `Cache-Control: no-store`; guest directory listings omit revoked members. Also: bootstrap does not echo invite/setup token status; group add/remove others is organizer/owner; WSS handshake failures do not echo reasons; incoming-call peer name is hidden on the lockscreen. Not envelope crypto.
 - **0.3.51 security:** LocalStore `decryptBytes` and IdentityVault wrap require a 12-byte AES-GCM IV; `SecretKv.unwrap` returns null on a corrupt wrap; GitHub APK asset names reject CR/LF; APKs install only from `cache/updates`. Not envelope crypto.
+- **0.3.51 UI:** composer «Скрыть» blurs outgoing photos/videos until tap-to-reveal. Flag is extra JSON `spoiler`. Not text `||secret||`. Not envelope crypto.
 - Device identity and envelope crypto in Rust (UniFFI); Kotlin never implements crypto
 - Go relay: REST + WSS mailbox, members/devices, invites, objects, groups, call signaling as in this tree
 - Self-signed TLS + client fingerprint pin; debug `--allow-http` only for local/emulator

@@ -51,6 +51,7 @@ fun VideoMessageBubble(
     m: ChatMessage,
     onEnsure: (ChatMessage) -> Unit,
     overlayMeta: Boolean = false,
+    hidden: Boolean = false,
 ) {
     LaunchedEffect(m.id, m.localPath) {
         onEnsure(m)
@@ -60,6 +61,9 @@ fun VideoMessageBubble(
     val path = m.localPath
     val poster = remember(path) { path?.let { VideoCodec.poster(it) } }
     var playing by remember(m.id) { mutableStateOf(false) }
+    LaunchedEffect(hidden) {
+        if (hidden) playing = false
+    }
     val box = if (poster != null) {
         PhotoLayout.box(poster.width, poster.height)
     } else {
@@ -73,7 +77,7 @@ fun VideoMessageBubble(
             .clip(RoundedCornerShape(RopeShapes.media))
             .background(Color.Black),
     ) {
-        if (playing && !path.isNullOrBlank()) {
+        if (playing && !path.isNullOrBlank() && !hidden) {
             AndroidView(
                 factory = { ctx ->
                     VideoView(ctx).apply {
@@ -103,72 +107,75 @@ fun VideoMessageBubble(
                 bitmap = poster.asImageBitmap(),
                 contentDescription = "Видео",
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().mediaSpoilerBlur(hidden),
             )
         }
-        if (!playing) {
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(enabled = !path.isNullOrBlank()) { playing = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Outlined.PlayArrow,
-                    contentDescription = "Смотреть",
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp),
-                )
+        MediaSpoilerScrim(hidden)
+        if (!hidden) {
+            if (!playing) {
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable(enabled = !path.isNullOrBlank()) { playing = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Outlined.PlayArrow,
+                        contentDescription = "Смотреть",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            } else {
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .clickable { playing = false },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
+                }
             }
-        } else {
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .clickable { playing = false },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Outlined.Pause, contentDescription = "Пауза", tint = Color.White)
-            }
-        }
-        Text(
-            if (duration > 0L) MediaPayload.formatDuration(duration) else "видео",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(6.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.45f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        )
-        if (overlayMeta && meta.isNotBlank()) {
             Text(
-                meta,
+                if (duration > 0L) MediaPayload.formatDuration(duration) else "видео",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White,
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .align(Alignment.BottomStart)
                     .padding(6.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black.copy(alpha = 0.45f))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
-        }
-        if (path.isNullOrBlank()) {
-            Text(
-                "Видео · загружается…",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp),
-            )
+            if (overlayMeta && meta.isNotBlank()) {
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            if (path.isNullOrBlank()) {
+                Text(
+                    "Видео · загружается…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp),
+                )
+            }
         }
     }
 }

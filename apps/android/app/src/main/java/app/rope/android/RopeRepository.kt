@@ -38,6 +38,7 @@ import app.rope.android.data.IdentityVault
 import app.rope.android.data.LocalStore
 import app.rope.android.data.MediaPayload
 import app.rope.android.data.MediaSendRules
+import app.rope.android.data.MediaSpoilerRules
 import app.rope.android.data.MessageKind
 import app.rope.android.data.ReactionPayload
 import app.rope.android.data.ChatControl
@@ -185,6 +186,8 @@ data class UiState(
     val unreadAnchorId: String? = null,
     val sessionReady: Boolean = false,
     val pendingAttachments: List<Uri> = emptyList(),
+    val pendingSpoiler: Boolean = false,
+    val revealedSpoilers: Set<String> = emptySet(),
 )
 
 enum class Screen { Start, Provision, Join, Home, Chats, Chat, Groups, Calls, People, Invite, Status, Settings, NewGroup, GroupInfo, PeerProfile, Archive }
@@ -633,16 +636,18 @@ class RopeRepository(private val app: Application) {
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
             val destGroup = _state.value.group
+            val spoiler = _state.value.pendingSpoiler
             _state.value = _state.value.copy(
                 draftText = "",
                 pendingAttachments = emptyList(),
+                pendingSpoiler = false,
                 replyTo = null,
                 replySpan = null,
                 composerPreview = null,
                 composerPreviewDismissedUrl = null,
             )
             persistOpenDraft()
-            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
+            sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup, spoiler = spoiler)
             return
         }
         val text = _state.value.draftText
@@ -702,6 +707,7 @@ class RopeRepository(private val app: Application) {
             replySpan = null,
             draftText = msg.text,
             pendingAttachments = emptyList(),
+            pendingSpoiler = false,
         )
     }
 
@@ -714,7 +720,18 @@ class RopeRepository(private val app: Application) {
     }
 
     fun cancelPendingMedia() {
-        _state.value = _state.value.copy(pendingAttachments = emptyList())
+        _state.value = _state.value.copy(pendingAttachments = emptyList(), pendingSpoiler = false)
+    }
+
+    fun togglePendingSpoiler() {
+        if (_state.value.pendingAttachments.isEmpty()) return
+        _state.value = _state.value.copy(pendingSpoiler = !_state.value.pendingSpoiler)
+    }
+
+    fun revealSpoiler(id: String) {
+        _state.value = _state.value.copy(
+            revealedSpoilers = MediaSpoilerRules.reveal(_state.value.revealedSpoilers, id),
+        )
     }
 
     fun deleteMessage(msg: ChatMessage) {
@@ -865,6 +882,7 @@ class RopeRepository(private val app: Application) {
         pack: ReplyPack = ReplyPack(),
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
+        spoiler: Boolean = false,
     ) {
         val resolved = if (pack.id != null) pack else replyPack(_state.value.replyTo)
         if (pack.id == null && resolved.id != null) {
@@ -894,6 +912,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        spoiler = spoiler,
                     )
                 }
                 rest.forEach { item ->
@@ -906,6 +925,7 @@ class RopeRepository(private val app: Application) {
                         pack = resolved,
                         destPeer = destPeer,
                         destGroup = destGroup,
+                        spoiler = spoiler,
                     )
                 }
             } catch (e: Exception) {
@@ -1590,6 +1610,7 @@ class RopeRepository(private val app: Application) {
         destPeer: DirectoryDevice? = _state.value.peer,
         destGroup: RopeGroup? = _state.value.group,
         waveform: List<Int> = emptyList(),
+        spoiler: Boolean = false,
     ) {
         val id = identity ?: return
         val group = destGroup
@@ -1616,6 +1637,7 @@ class RopeRepository(private val app: Application) {
             albumCount = if (grouped) albumCount else 1,
             caption = cap,
             waveform = waveform,
+            spoiler = MediaSpoilerRules.pack(kind, spoiler),
         ).withReply(
             pack.id,
             pack.preview,
@@ -2126,11 +2148,13 @@ class RopeRepository(private val app: Application) {
         val prefs = store.chatPrefs(chatId)
         val messages = store.messages(chatId)
         val anchorId = UnreadSeparatorRules.firstUnreadId(messages, prefs.unread, prefs.lastReadMs)
-        val pending = if (MediaSendRules.keepPendingOnEnter(openChatId(), chatId)) {
+        val keepPending = MediaSendRules.keepPendingOnEnter(openChatId(), chatId)
+        val pending = if (keepPending) {
             _state.value.pendingAttachments
         } else {
             emptyList()
         }
+        val pendingSpoiler = keepPending && _state.value.pendingSpoiler
         store.saveChatPrefs(chatId, prefs.copy(unread = 0, lastReadMs = System.currentTimeMillis()))
         _state.value = applyNav(Screen.Chat, NavMode.Push).copy(
             peer = peer,
@@ -2145,6 +2169,7 @@ class RopeRepository(private val app: Application) {
             unreadAnchorId = anchorId,
             scrollToMessageId = anchorId,
             pendingAttachments = pending,
+            pendingSpoiler = pendingSpoiler,
             composerPreview = null,
             composerPreviewDismissedUrl = null,
         )
