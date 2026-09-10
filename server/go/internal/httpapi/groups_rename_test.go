@@ -9,6 +9,18 @@ import (
 	"unicode/utf8"
 )
 
+func TestGroupRenameRejectsCrlfBeforeTrim(t *testing.T) {
+	if _, ok := validGroupName("crew\n"); ok {
+		t.Fatal("newline must fail before trim")
+	}
+	if _, ok := validGroupName("crew\r"); ok {
+		t.Fatal("cr")
+	}
+	if n, ok := validGroupName(" crew "); !ok || n != "crew" {
+		t.Fatalf("plain trim %q %v", n, ok)
+	}
+}
+
 func TestValidGroupName(t *testing.T) {
 	name, ok := validGroupName(" crew ")
 	if !ok || name != "crew" {
