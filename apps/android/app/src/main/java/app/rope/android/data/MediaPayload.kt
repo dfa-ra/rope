@@ -384,6 +384,8 @@ object TextBody {
 }
 
 object ChatActions {
+    const val SELECT = "Выбрать"
+
     fun canReply(msg: ChatMessage): Boolean = !msg.deleted
 
     fun canForward(msg: ChatMessage): Boolean = !msg.deleted
@@ -398,6 +400,8 @@ object ChatActions {
     fun canCopy(msg: ChatMessage): Boolean = !msg.deleted && msg.text.isNotBlank()
 
     fun canPin(msg: ChatMessage): Boolean = !msg.deleted
+
+    fun canSelect(msg: ChatMessage): Boolean = !msg.deleted
 
     fun canOpen(msg: ChatMessage): Boolean =
         !msg.deleted && (msg.kind == MessageKind.IMAGE || msg.kind == MessageKind.VIDEO)

@@ -72,6 +72,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -1134,6 +1135,13 @@ fun ChatPane(
             onCopy = { onCopy(target); menuMessage = null },
             onForward = { onForward(target); menuMessage = null },
             onPin = { onPinMessage(target); menuMessage = null },
+            onSelect = {
+                if (ChatActions.canSelect(target)) {
+                    selectedIds = selectedIds + target.id
+                }
+                menuMessage = null
+                reactionExpanded = false
+            },
             onDelete = { onDelete(target); menuMessage = null },
             onOpen = { onOpenImage(target); menuMessage = null },
         )
@@ -1836,6 +1844,7 @@ private fun MessageTapOverlay(
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
+    onSelect: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1876,6 +1885,7 @@ private fun MessageTapOverlay(
                 onCopy = onCopy,
                 onForward = onForward,
                 onPin = onPin,
+                onSelect = onSelect,
                 onDelete = onDelete,
                 onOpen = onOpen,
             )
@@ -1891,6 +1901,7 @@ private fun MessageActionMenu(
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onPin: () -> Unit,
+    onSelect: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -1917,6 +1928,9 @@ private fun MessageActionMenu(
                     if (pinned) "Открепить" else "Закрепить",
                     onPin,
                 )
+            }
+            if (ChatActions.canSelect(m)) {
+                MessageMenuRow(Icons.Outlined.CheckBox, ChatActions.SELECT, onSelect)
             }
             if (ChatActions.canDelete(m)) {
                 MessageMenuRow(Icons.Outlined.Delete, "Удалить", onDelete)
