@@ -64,6 +64,7 @@ import app.rope.android.data.ChatRouting
 import app.rope.android.data.JsonIds
 import app.rope.android.data.LinkPreviewRules
 import app.rope.android.data.NotifyRules
+import app.rope.android.data.EmojiReplaceRules
 import app.rope.android.data.PackedLinkPreview
 import app.rope.android.data.PeerIds
 import app.rope.android.data.IceServers
@@ -167,6 +168,7 @@ data class UiState(
     val theme: ThemeMode = ThemeMode.DARK,
     val notificationsMuted: Boolean = false,
     val linkPreviewsEnabled: Boolean = true,
+    val emojiReplace: Boolean = true,
     val composerPreview: PackedLinkPreview? = null,
     val composerPreviewDismissedUrl: String? = null,
     val appUpdateAvailable: Boolean = false,
@@ -256,6 +258,7 @@ class RopeRepository(private val app: Application) {
                     theme = store.themeMode(night),
                     notificationsMuted = store.notificationsMuted(),
                     linkPreviewsEnabled = store.linkPreviewsEnabled(),
+                    emojiReplace = store.emojiReplace(),
                 )
                 store.rehomeMisroutedMedia()
                 identity = if (vault.exists()) DeviceIdentity.fromBytes(vault.load()) else DeviceIdentity.generate().also {
@@ -599,6 +602,12 @@ class RopeRepository(private val app: Application) {
         }
     }
 
+    fun toggleEmojiReplace() {
+        val next = !_state.value.emojiReplace
+        store.saveEmojiReplace(next)
+        _state.value = _state.value.copy(emojiReplace = next)
+    }
+
     fun dismissComposerPreview() {
         val url = _state.value.composerPreview?.url
             ?: LinkPreviewRules.firstHttps(_state.value.draftText)
@@ -620,7 +629,7 @@ class RopeRepository(private val app: Application) {
     fun sendDraft() {
         val edit = _state.value.editTarget
         if (edit != null && MediaSendRules.preferEditOverPending(true) && !_state.value.recording) {
-            val text = _state.value.draftText
+            val text = outgoingCopy(_state.value.draftText)
             if (text.isBlank()) return
             _state.value = _state.value.copy(draftText = "", editTarget = null, replyTo = null, replySpan = null, composerPreview = null, composerPreviewDismissedUrl = null)
             persistOpenDraft()
@@ -629,7 +638,7 @@ class RopeRepository(private val app: Application) {
         }
         val pending = _state.value.pendingAttachments
         if (pending.isNotEmpty() && !_state.value.recording) {
-            val caption = _state.value.draftText
+            val caption = outgoingCopy(_state.value.draftText)
             val pack = replyPack(_state.value.replyTo)
             val destPeer = _state.value.peer
             val destGroup = _state.value.group
@@ -645,7 +654,7 @@ class RopeRepository(private val app: Application) {
             sendAttachments(pending, caption = caption, pack = pack, destPeer = destPeer, destGroup = destGroup)
             return
         }
-        val text = _state.value.draftText
+        val text = outgoingCopy(_state.value.draftText)
         if (text.isBlank() || _state.value.recording) return
         val reply = _state.value.replyTo
         val pack = replyPack(reply)
@@ -2204,6 +2213,9 @@ class RopeRepository(private val app: Application) {
             _state.value = _state.value.copy(typingName = next)
         }
     }
+
+    private fun outgoingCopy(raw: String): String =
+        EmojiReplaceRules.apply(raw, _state.value.emojiReplace)
 
     private fun applyEdit(msg: ChatMessage, text: String) {
         store.editMessage(msg.id, text)

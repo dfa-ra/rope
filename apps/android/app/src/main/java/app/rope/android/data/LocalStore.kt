@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveEmojiReplace(enabled: Boolean) {
+        put(EmojiReplaceRules.KEY, if (enabled) "1" else "0")
+    }
+
+    fun emojiReplace(): Boolean = EmojiReplaceRules.enabledFromKv(get(EmojiReplaceRules.KEY))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {
