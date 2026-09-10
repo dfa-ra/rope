@@ -394,6 +394,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "rope-local.db", 
 
     fun linkPreviewsEnabled(): Boolean = get("link_previews") != "0"
 
+    fun saveCallsMissedOnly(missedOnly: Boolean) {
+        put("calls_missed_only", if (missedOnly) "1" else "0")
+    }
+
+    fun callsMissedOnly(): Boolean = MissedCallRules.enabledFromKv(get("calls_missed_only"))
+
     fun allChatPrefs(): Map<String, ChatPrefs> {
         val raw = get("chat_prefs") ?: return emptyMap()
         return try {

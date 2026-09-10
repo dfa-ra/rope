@@ -33,6 +33,8 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.VideocamOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,6 +51,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rope.android.NavRules
@@ -63,28 +67,53 @@ import app.rope.android.data.CallLinkState
 import app.rope.android.data.CallMedia
 import app.rope.android.data.CallPhase
 import app.rope.android.data.Conversation
+import app.rope.android.data.MissedCallRules
 import kotlinx.coroutines.delay
 import org.webrtc.EglBase
 import org.webrtc.VideoSink
 import app.rope.android.data.VideoCallRules
 import app.rope.android.media.CallVideoRenderer
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallsPane(
     state: UiState,
     onOpen: (Conversation) -> Unit,
     onInvite: () -> Unit,
+    onSetMissedFilter: (Boolean) -> Unit = {},
 ) {
-    val recent = NavRules.callsOf(state.conversations)
+    val missedOnly = state.callsMissedOnly
+    val recent = MissedCallRules.recent(state.conversations, missedOnly)
     val people = NavRules.peopleOf(state.devices, state.profile?.deviceId)
+    val showPeople = MissedCallRules.showPeople(missedOnly) && people.isNotEmpty()
     Column(Modifier.fillMaxSize()) {
-        if (recent.isEmpty() && people.isEmpty()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = !missedOnly,
+                onClick = { onSetMissedFilter(false) },
+                label = { Text(MissedCallRules.CHIP_ALL) },
+                modifier = Modifier.semantics { contentDescription = MissedCallRules.CHIP_ALL },
+            )
+            FilterChip(
+                selected = missedOnly,
+                onClick = { onSetMissedFilter(true) },
+                label = { Text(MissedCallRules.CHIP_MISSED) },
+                modifier = Modifier.semantics { contentDescription = MissedCallRules.CHIP_MISSED },
+            )
+        }
+        if (recent.isEmpty() && !showPeople) {
             val role = state.profile?.role
             RopeEmptyState(
-                title = "Звонков ещё не было",
-                body = RoleRules.callsEmptyBody(role),
-                actionLabel = RoleRules.peopleInviteAction(role),
-                onAction = if (RoleRules.canInvite(role)) onInvite else null,
+                title = MissedCallRules.emptyTitle(missedOnly),
+                body = MissedCallRules.emptyBody(missedOnly, role),
+                modifier = Modifier.weight(1f),
+                actionLabel = MissedCallRules.emptyAction(missedOnly, role),
+                onAction = if (!missedOnly && RoleRules.canInvite(role)) onInvite else null,
             )
         } else {
             LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -102,7 +131,7 @@ fun CallsPane(
                         }
                     }
                 }
-                if (people.isNotEmpty()) {
+                if (showPeople) {
                     item {
                         Text(
                             "Можно позвонить",
